@@ -3,7 +3,6 @@ name: Build
 on:
   push:
     tags: ['v*']
-    branches: [master]
   pull_request:
     branches: [master]
 
@@ -35,8 +34,7 @@ jobs:
           cache: false
       
       - name: Download modules
-        run: |
-          go mod download || true
+        run: go mod download || true
       
       - name: Build
         env:
@@ -44,21 +42,33 @@ jobs:
         run: |
           ext=""
           if [ "${{ matrix.os }}" = "windows-latest" ]; then ext=".exe"; fi
-          name="gurl-${{ matrix.os }}-${{ matrix.arch }}${ext}"
+          name="gurl-${{ matrix.arch }}${ext}"
           go build -ldflags="-s -w -X main.version=${VERSION}" -o "$name" ./cmd/gurl
+          echo "$name" > artifact_name.txt
       
       - name: Checksum
         run: |
-          name=$(ls gurl-* | head -1)
+          name=$(cat artifact_name.txt)
           sha256sum "$name" > SHA256SUMS
-          cat SHA256SUMS
       
-      - name: Upload Release
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            gurl-*
-            SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ github.workspace }}/$(cat artifact_name.txt)
+          asset_name: $(cat artifact_name.txt)
+          asset_content_type: application/octet-stream
+      
+      - name: Upload Checksum
+        uses: actions/upload-release-asset@v1
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ github.workspace }}/SHA256SUMS
+          asset_name: SHA256SUMS
+          asset_content_type: text/plain
