@@ -159,12 +159,8 @@ func (o *OpenAPIImporter) convertToRequests(spec *OpenAPISpec) []*types.SavedReq
 	for path, pathItem := range spec.Paths {
 		operations := o.getOperations(&pathItem)
 
-		for _, op := range operations {
-			if op == nil {
-				continue
-			}
-
-			req := o.operationToRequest(spec, path, op, tagMap)
+		for _, opWithMethod := range operations {
+			req := o.operationToRequest(spec, path, opWithMethod, tagMap)
 			requests = append(requests, req)
 		}
 	}
@@ -172,39 +168,40 @@ func (o *OpenAPIImporter) convertToRequests(spec *OpenAPISpec) []*types.SavedReq
 	return requests
 }
 
-// getOperations returns all operations from a PathItem
-func (o *OpenAPIImporter) getOperations(pi *PathItem) []*Operation {
-	var ops []*Operation
+// getOperations returns all operations from a PathItem with their HTTP methods
+func (o *OpenAPIImporter) getOperations(pi *PathItem) []OpWithMethod {
+	var ops []OpWithMethod
 	if pi.Get != nil {
-		ops = append(ops, pi.Get)
+		ops = append(ops, OpWithMethod{Method: "GET", Op: pi.Get})
 	}
 	if pi.Post != nil {
-		ops = append(ops, pi.Post)
+		ops = append(ops, OpWithMethod{Method: "POST", Op: pi.Post})
 	}
 	if pi.Put != nil {
-		ops = append(ops, pi.Put)
+		ops = append(ops, OpWithMethod{Method: "PUT", Op: pi.Put})
 	}
 	if pi.Delete != nil {
-		ops = append(ops, pi.Delete)
+		ops = append(ops, OpWithMethod{Method: "DELETE", Op: pi.Delete})
 	}
 	if pi.Patch != nil {
-		ops = append(ops, pi.Patch)
+		ops = append(ops, OpWithMethod{Method: "PATCH", Op: pi.Patch})
 	}
 	if pi.Options != nil {
-		ops = append(ops, pi.Options)
+		ops = append(ops, OpWithMethod{Method: "OPTIONS", Op: pi.Options})
 	}
 	if pi.Head != nil {
-		ops = append(ops, pi.Head)
+		ops = append(ops, OpWithMethod{Method: "HEAD", Op: pi.Head})
 	}
 	if pi.Trace != nil {
-		ops = append(ops, pi.Trace)
+		ops = append(ops, OpWithMethod{Method: "TRACE", Op: pi.Trace})
 	}
 	return ops
 }
 
 // operationToRequest converts an OpenAPI operation to a SavedRequest
-func (o *OpenAPIImporter) operationToRequest(spec *OpenAPISpec, path string, op *Operation, tagMap map[string]string) *types.SavedRequest {
-	method := o.getMethod(op)
+func (o *OpenAPIImporter) operationToRequest(spec *OpenAPISpec, path string, opWithMethod OpWithMethod, tagMap map[string]string) *types.SavedRequest {
+	op := opWithMethod.Op
+	method := opWithMethod.Method
 	name := o.getName(op, path, method)
 	url := o.buildURL(spec, path)
 
@@ -253,7 +250,7 @@ func (o *OpenAPIImporter) operationToRequest(spec *OpenAPISpec, path string, op 
 	return &types.SavedRequest{
 		Name:        name,
 		URL:         url,
-		Method:      method,
+		Method:      opWithMethod.Method,
 		Headers:     headers,
 		Body:        body,
 		Tags:        tags,

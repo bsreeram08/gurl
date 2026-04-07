@@ -13,18 +13,23 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	// Initialize database
 	db, err := storage.NewLMDB()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to create database: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create database: %w", err)
 	}
+	defer db.Close() // Will run even on os.Exit
 
 	if err := db.Open(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to open database: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to open database: %w", err)
 	}
-	defer db.Close()
 
 	app := &cli.Command{
 		Name:    "gurl",
@@ -61,8 +66,5 @@ Quick Start:
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := app.Run(ctx, os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	return app.Run(ctx, os.Args)
 }

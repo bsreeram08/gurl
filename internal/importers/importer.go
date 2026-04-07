@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/sreeram/gurl/pkg/types"
 )
@@ -49,6 +50,12 @@ func Import(path string) ([]*types.SavedRequest, error) {
 	return importer.Parse(path)
 }
 
+// OpWithMethod pairs an HTTP method with its operation
+type OpWithMethod struct {
+	Method string
+	Op     *Operation
+}
+
 // AutoDetectImport discovers the appropriate importer based on file content/path
 func AutoDetectImport(path string) ([]*types.SavedRequest, error) {
 	ext := filepath.Ext(path)
@@ -56,16 +63,19 @@ func AutoDetectImport(path string) ([]*types.SavedRequest, error) {
 		return nil, fmt.Errorf("no file extension found")
 	}
 
-	// Try each registered importer
-	for _, im := range importers {
-		for _, registeredExt := range im.Extensions() {
-			if registeredExt == ext {
-				return im.Parse(path)
-			}
-		}
+	// Normalize extension
+	ext = strings.ToLower(ext)
+	if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
 	}
 
-	return nil, fmt.Errorf("unsupported file format: %s", ext)
+	// Deterministic lookup - importers map is keyed by extension
+	im := importers[ext]
+	if im == nil {
+		return nil, fmt.Errorf("unsupported file format: %s", ext)
+	}
+
+	return im.Parse(path)
 }
 
 // FormatFromExtension returns the format name for an extension

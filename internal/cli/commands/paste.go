@@ -28,37 +28,41 @@ func PasteCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("request not found: %s", name)
 			}
 
-			// Build curl command string
-			curlCmd := fmt.Sprintf("curl -X %s", req.Method)
+			// Build curl command using array form to prevent shell injection
+			curlCmd := []string{"curl", "-X", req.Method}
 
 			for _, header := range req.Headers {
-				curlCmd += fmt.Sprintf(" -H '%s: %s'", header.Key, header.Value)
+				curlCmd = append(curlCmd, "-H", fmt.Sprintf("%s: %s", header.Key, header.Value))
 			}
 
 			if req.Body != "" {
-				curlCmd += fmt.Sprintf(" -d '%s'", req.Body)
+				curlCmd = append(curlCmd, "-d", req.Body)
 			}
 
-			curlCmd += fmt.Sprintf(" '%s'", req.URL)
+			curlCmd = append(curlCmd, req.URL)
+
+			// Join for display (safe - no shell execution)
+			displayCmd := strings.Join(curlCmd, " ")
 
 			// Try to copy to clipboard using pbcopy (macOS) or xclip (Linux)
-			var cmd *exec.Cmd
+			var copyCmd *exec.Cmd
 			switch {
 			case isCommandAvailable("pbcopy"):
-				cmd = exec.Command("pbcopy")
+				copyCmd = exec.Command("pbcopy")
 			case isCommandAvailable("xclip"):
-				cmd = exec.Command("xclip", "-selection", "clipboard")
+				copyCmd = exec.Command("xclip", "-selection", "clipboard")
 			case isCommandAvailable("wl-copy"):
-				cmd = exec.Command("wl-copy")
+				copyCmd = exec.Command("wl-copy")
 			default:
 				// Fallback: just print the command
 				fmt.Println("Clipboard tools not available. Curl command:")
-				fmt.Println(curlCmd)
+				fmt.Println(displayCmd)
 				return nil
 			}
 
-			cmd.Stdin = strings.NewReader(curlCmd)
-			if err := cmd.Run(); err != nil {
+			// Use array form - no shell=True
+			copyCmd.Stdin = strings.NewReader(displayCmd)
+			if err := copyCmd.Run(); err != nil {
 				return fmt.Errorf("failed to copy to clipboard: %w", err)
 			}
 

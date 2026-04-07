@@ -83,7 +83,7 @@ func (db *LMDB) Close() error {
 	return nil
 }
 
-// SaveRequest saves a request to the database
+// SaveRequest saves a request to the database atomically
 func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
 	if req.ID == "" {
 		req.ID = uuid.New().String()
@@ -94,30 +94,65 @@ func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	// Use atomic batch write for all index updates
+	batch := new(leveldb.Batch)
+
 	// Save the request
 	key := fmt.Sprintf("request:%s", req.ID)
-	if err := db.db.Put([]byte(key), data, nil); err != nil {
-		return fmt.Errorf("failed to save request: %w", err)
-	}
+	batch.Put([]byte(key), data)
 
 	// Update name index
 	nameKey := fmt.Sprintf("idx:name:%s", req.Name)
-	if err := db.db.Put([]byte(nameKey), []byte(req.ID), nil); err != nil {
-		return fmt.Errorf("failed to update name index: %w", err)
-	}
+	batch.Put([]byte(nameKey), []byte(req.ID))
 
-	// Update collection index if set
+	// Add to collection index if set
 	if req.Collection != "" {
 		colKey := fmt.Sprintf("idx:collection:%s", req.Collection)
-		db.addToIndex(colKey, req.ID)
+		db.addToIndexBatch(batch, colKey, req.ID)
 	}
 
-	// Update tag indices
+	// Add to tag indices
 	for _, tag := range req.Tags {
 		tagKey := fmt.Sprintf("idx:tag:%s", tag)
-		db.addToIndex(tagKey, req.ID)
+		db.addToIndexBatch(batch, tagKey, req.ID)
 	}
 
+	// Atomic write
+	if err := db.db.Write(batch, nil); err != nil {
+		return fmt.Errorf("failed to save request atomically: %w", err)
+	}
+
+	return nil
+}
+
+// addToIndexBatch adds a request ID to an index using a batch
+func (db *LMDB) addToIndexBatch(batch *leveldb.Batch, indexKey string, requestID string) error {
+	indexData, err := db.db.Get([]byte(indexKey), nil)
+	if err != nil && err != leveldb.ErrNotFound {
+		return fmt.Errorf("failed to read index: %w", err)
+	}
+
+	var ids []string
+	if err == nil {
+		if err := json.Unmarshal(indexData, &ids); err != nil {
+			return fmt.Errorf("failed to unmarshal index: %w", err)
+		}
+	}
+
+	// Check if already in index
+	for _, id := range ids {
+		if id == requestID {
+			return nil
+		}
+	}
+
+	ids = append(ids, requestID)
+	newData, err := json.Marshal(ids)
+	if err != nil {
+		return fmt.Errorf("failed to marshal index: %w", err)
+	}
+
+	batch.Put([]byte(indexKey), newData)
 	return nil
 }
 
