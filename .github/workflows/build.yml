@@ -42,12 +42,14 @@ jobs:
         run: |
           ext=""
           if [ "${{ matrix.os }}" = "windows-latest" ]; then ext=".exe"; fi
-          name="gurl-${{ matrix.os }}-${{ matrix.arch }}${ext}"
+          os_name=$([[ "${{ matrix.os }}" == "macos-latest" ]] && echo "darwin" || echo "${{ matrix.os }}")
+          name="gurl-${os_name}-${{ matrix.arch }}${ext}"
           go build -ldflags="-s -w -X main.version=${VERSION} -X github.com/sreeram/gurl/internal/cli/commands.CurrentVersion=${VERSION}" -o "$name" ./cmd/gurl
 
       - name: Checksum
         run: |
-          name="gurl-${{ matrix.os }}-${{ matrix.arch }}"
+          os_name=$([[ "${{ matrix.os }}" == "macos-latest" ]] && echo "darwin" || echo "${{ matrix.os }}")
+          name="gurl-${os_name}-${{ matrix.arch }}"
           sha256sum "$name" > SHA256SUMS
           tar -czf "${name}.tar.gz" "$name"
 
@@ -56,8 +58,7 @@ jobs:
         with:
           name: gurl-${{ matrix.os }}-${{ matrix.arch }}
           path: |
-            gurl-${{ matrix.os }}-${{ matrix.arch }}
-            gurl-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+            gurl-*
             SHA256SUMS
           if-no-files-found: error
 
