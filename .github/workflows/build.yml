@@ -59,6 +59,7 @@ jobs:
             gurl-${{ matrix.os }}-${{ matrix.arch }}
             gurl-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
             SHA256SUMS
+          if-no-files-found: error
 
   release:
     needs: build
@@ -69,7 +70,7 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: .
           pattern: gurl-*
           merge-multiple: true
 
