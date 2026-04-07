@@ -3,106 +3,153 @@ package curl
 import (
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 
+	"github.com/kballard/go-shellquote"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
-var (
-	// Flag patterns for curl command parsing
-	flagPatterns = map[string]*regexp.Regexp{
-		"method":     regexp.MustCompile(`(?i)-X|--request\s+(\S+)`),
-		"header":     regexp.MustCompile(`(?i)-H|--header\s+['"]([^'"]+)['"]`),
-		"data":       regexp.MustCompile(`(?i)-d|--data|--data-raw\s+['"]([^'"]+)['"]`),
-		"url":        regexp.MustCompile(`(?:^|\s)(https?://\S+)`),
+func expandANSICQuotes(s string) string {
+	if strings.HasPrefix(s, "$'") && strings.HasSuffix(s, "'") {
+		s = s[2 : len(s)-1]
+	} else if strings.HasPrefix(s, "$") {
+		s = s[1:]
+	} else {
+		return s
 	}
-)
 
-// ParseCurl parses a curl command string into a structured ParsedCurl
+	var result strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			switch s[i+1] {
+			case 'n':
+				result.WriteByte('\n')
+				i++
+			case 't':
+				result.WriteByte('\t')
+				i++
+			case 'r':
+				result.WriteByte('\r')
+				i++
+			case '\\':
+				result.WriteByte('\\')
+				i++
+			case '\'':
+				result.WriteByte('\'')
+				i++
+			case '"':
+				result.WriteByte('"')
+				i++
+			default:
+				result.WriteByte(s[i])
+			}
+		} else {
+			result.WriteByte(s[i])
+		}
+	}
+	return result.String()
+}
+
 func ParseCurl(cmd string) (*types.ParsedCurl, error) {
-	// Normalize whitespace
-	cmd = strings.Join(strings.Fields(cmd), " ")
+	tokens, err := shellquote.Split(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse curl command: %w", err)
+	}
 
 	result := &types.ParsedCurl{
 		Headers: make(map[string]string),
 		Method:  "GET",
 	}
 
-	// Parse method (-X or --request)
-	if matches := flagPatterns["method"].FindAllStringSubmatch(cmd, -1); len(matches) > 0 {
-		// Get the last method definition
-		lastMatch := matches[len(matches)-1]
-		if len(lastMatch) >= 2 {
-			result.Method = strings.ToUpper(lastMatch[1])
-		} else if len(lastMatch) >= 1 {
-			result.Method = strings.ToUpper(lastMatch[1])
-		}
+	i := 0
+	if len(tokens) > 0 && tokens[0] == "curl" {
+		i = 1
 	}
 
-	// Parse headers (-H or --header)
-	headerPattern := regexp.MustCompile(`(?i)-H\s+['"]([^'"]+)['"]`)
-	for _, match := range headerPattern.FindAllStringSubmatch(cmd, -1) {
-		if len(match) >= 2 {
-			header := match[1]
-			if idx := strings.Index(header, ":"); idx != -1 {
-				key := strings.TrimSpace(header[:idx])
-				value := strings.TrimSpace(header[idx+1:])
-				result.Headers[key] = value
+	for i < len(tokens) {
+		token := tokens[i]
+
+		switch {
+		case token == "-X" || token == "--request":
+			if i+1 < len(tokens) {
+				i++
+				result.Method = strings.ToUpper(tokens[i])
 			}
-		}
-	}
 
-	// Also check for --header without quotes
-	headerPattern2 := regexp.MustCompile(`(?i)--header\s+(\S+)`)
-	for _, match := range headerPattern2.FindAllStringSubmatch(cmd, -1) {
-		if len(match) >= 2 {
-			header := match[1]
-			if idx := strings.Index(header, ":"); idx != -1 {
-				key := strings.TrimSpace(header[:idx])
-				value := strings.TrimSpace(header[idx+1:])
-				result.Headers[key] = value
+		case token == "-H" || token == "--header":
+			if i+1 < len(tokens) {
+				i++
+				if idx := strings.Index(tokens[i], ":"); idx != -1 {
+					key := strings.TrimSpace(tokens[i][:idx])
+					value := strings.TrimSpace(tokens[i][idx+1:])
+					result.Headers[key] = value
+				}
 			}
-		}
-	}
 
-	// Parse body (-d, --data, --data-raw)
-	dataPattern := regexp.MustCompile(`(?i)-d\s+['"]([^'"]+)['"]`)
-	for _, match := range dataPattern.FindAllStringSubmatch(cmd, -1) {
-		if len(match) >= 2 {
-			result.Body = match[1]
-			// If body is present and method is default GET, switch to POST
+		case token == "-d" || token == "--data" || token == "--data-raw" || token == "--data-urlencode":
+			if i+1 < len(tokens) {
+				i++
+				val := tokens[i]
+				if strings.HasPrefix(val, "$") {
+					val = expandANSICQuotes(val)
+				}
+				result.Body = val
+				if result.Method == "GET" {
+					result.Method = "POST"
+				}
+			}
+
+		case token == "-F":
 			if result.Method == "GET" {
 				result.Method = "POST"
 			}
-			break // Use first body data
-		}
-	}
-
-	// Also check for --data without quotes
-	dataPattern2 := regexp.MustCompile(`(?i)--data\s+['"]([^'"]+)['"]`)
-	for _, match := range dataPattern2.FindAllStringSubmatch(cmd, -1) {
-		if len(match) >= 2 {
-			result.Body = match[1]
-			if result.Method == "GET" {
-				result.Method = "POST"
+			if i+1 < len(tokens) {
+				i++
 			}
-			break
+
+		case token == "-u" || token == "--user":
+			if i+1 < len(tokens) {
+				i++
+			}
+
+		case token == "-b" || token == "--cookie":
+			if i+1 < len(tokens) {
+				i++
+			}
+		case token == "-c" || token == "--cookie-jar":
+			if i+1 < len(tokens) {
+				i++
+			}
+
+		case token == "--max-redirs":
+			if i+1 < len(tokens) {
+				i++
+			}
+		case token == "--connect-timeout":
+			if i+1 < len(tokens) {
+				i++
+			}
+
+		case token == "--compressed":
+		case token == "-L" || token == "--location":
+		case token == "-k" || token == "--insecure":
+
+		case strings.HasPrefix(token, "http://") || strings.HasPrefix(token, "https://"):
+			result.URL = token
+
+		case !strings.HasPrefix(token, "-") && !strings.Contains(token, "=") && token != "":
+			if strings.Contains(token, ".") || strings.HasPrefix(token, "localhost") {
+				result.URL = token
+			}
 		}
+
+		i++
 	}
 
-	// Parse URL
-	urlPattern := regexp.MustCompile(`(?:^|\s)(https?://\S+)`)
-	if matches := urlPattern.FindAllStringSubmatch(cmd, -1); len(matches) > 0 {
-		result.URL = matches[len(matches)-1][1] // Take last URL found
-	}
-
-	// Validate URL
 	if result.URL == "" {
 		return nil, fmt.Errorf("no URL found in curl command")
 	}
 
-	// Normalize URL
 	result.URL = NormalizeURL(result.URL)
 
 	return result, nil
@@ -115,15 +162,25 @@ func NormalizeURL(rawURL string) string {
 		return rawURL
 	}
 
-	// Remove trailing slash from path
+	shouldTrimSlash := false
 	if parsed.Path != "" && strings.HasSuffix(parsed.Path, "/") {
+		if len(parsed.Path) > 1 {
+			shouldTrimSlash = true
+		} else if parsed.Fragment == "" {
+			shouldTrimSlash = true
+		}
+	}
+
+	if shouldTrimSlash {
 		parsed.Path = strings.TrimSuffix(parsed.Path, "/")
 	}
 
-	// Reconstruct URL
 	result := parsed.Scheme + "://" + parsed.Host + parsed.Path
 	if parsed.RawQuery != "" {
 		result += "?" + parsed.RawQuery
+	}
+	if parsed.Fragment != "" {
+		result += "#" + parsed.Fragment
 	}
 
 	return result
