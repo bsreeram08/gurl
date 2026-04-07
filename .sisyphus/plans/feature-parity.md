@@ -2256,7 +2256,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
 
 ### Wave 5: Response Handling + Dynamic Values + GraphQL (Tasks 34-41)
 
-- [ ] 34. Pretty Print JSON/XML/HTML Responses
+- [x] 34. Pretty Print JSON/XML/HTML Responses
 
   **What to do**:
   - **RED**: Write tests in `internal/formatter/formatter_test.go`:
@@ -2361,7 +2361,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/formatter/formatter.go`, `internal/formatter/formatter_test.go`, `internal/formatter/theme.go`
   - Pre-commit: `go test ./internal/formatter/... -count=1`
 
-- [ ] 35. JSONPath and XPath Response Filtering
+- [x] 35. JSONPath and XPath Response Filtering
 
   **What to do**:
   - **RED**: Write tests in `internal/formatter/filter_test.go`:
@@ -2459,7 +2459,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/formatter/filter.go`, `internal/formatter/filter_test.go`, `go.mod`, `go.sum`
   - Pre-commit: `go test ./internal/formatter/... -count=1`
 
-- [ ] 36. Response Body Diff
+- [x] 36. Response Body Diff
 
   **What to do**:
   - **RED**: Write tests in `internal/formatter/diff_test.go`:
@@ -2544,7 +2544,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/formatter/diff.go`, `internal/formatter/diff_test.go`, `internal/cli/commands/diff.go`, `go.mod`, `go.sum`
   - Pre-commit: `go test ./internal/formatter/... -count=1`
 
-- [ ] 37. Save Response to File
+- [x] 37. Save Response to File
 
   **What to do**:
   - **RED**: Write tests in `internal/client/output_test.go`:
@@ -2623,7 +2623,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/client/output.go`, `internal/client/output_test.go`, `internal/cli/commands/run.go`
   - Pre-commit: `go test ./internal/client/... -count=1`
 
-- [ ] 38. Dynamic Template Values (UUID, Timestamp, Random)
+- [x] 38. Dynamic Template Values (UUID, Timestamp, Random)
 
   **What to do**:
   - **RED**: Write tests in `internal/core/template/dynamic_test.go`:
@@ -2712,7 +2712,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
 
   - Pre-commit: `go test ./internal/core/template/... -count=1`
 
-- [ ] 39. Path Parameters Support
+- [x] 39. Path Parameters Support
 
   **What to do**:
   - **RED**: Write tests in `internal/core/template/pathparam_test.go`:
@@ -2789,7 +2789,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/core/template/pathparam.go`, `internal/core/template/pathparam_test.go`, `pkg/types/types.go`
   - Pre-commit: `go test ./internal/core/template/... -count=1`
 
-- [ ] 40. Request Timeout Configuration
+- [x] 40. Request Timeout Configuration
 
   **What to do**:
   - **RED**: Write tests in `internal/client/timeout_test.go`:
@@ -2869,7 +2869,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/client/client.go`, `internal/client/timeout_test.go`, `internal/cli/commands/run.go`, `pkg/types/types.go`
   - Pre-commit: `go test ./internal/client/... -count=1`
 
-- [ ] 41. GraphQL Client
+- [x] 41. GraphQL Client
 
   **What to do**:
   - **RED**: Write tests in `internal/protocols/graphql/graphql_test.go`:
