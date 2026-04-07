@@ -3,7 +3,12 @@
   "started_at": "2026-04-07T18:55:36.364Z",
   "session_ids": [
     "ses_296e3b0e5ffegthTpsFHVPBA56",
-    "ses_296b26b73ffecv0eGU3C7A7kkh"
+    "ses_296b26b73ffecv0eGU3C7A7kkh",
+    "ses_296b2875bffeD0hfjYRwRYZ46Q",
+    "ses_296ae424dffeJUTVxkoD6Io3Sz",
+    "ses_296ae8420ffeRDTfetTUXBwtDA",
+    "ses_296a535f0fferXazrCErF9om6m",
+    "ses_296a5143dffeh8I69B5psZU31G"
   ],
   "plan_name": "feature-parity",
   "agent": "atlas"

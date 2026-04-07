@@ -327,7 +327,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
 
 ## TODOs
 
-- [ ] 1. Rename scurl→gurl across all files, paths, configs, env vars
+- [x] 1. Rename scurl→gurl across all files, paths, configs, env vars
 
   **What to do**:
   - RED: Write a test that asserts DB path defaults to `~/.local/share/gurl/gurl.db` (not scurl)
@@ -392,7 +392,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: ALL files with scurl references
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 2. Delete dead code: internal/core/storage/
+- [x] 2. Delete dead code: internal/core/storage/
 
   **What to do**:
   - Verify `internal/core/storage/` is not imported by any production code (only tests if any)
@@ -445,7 +445,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/core/storage/`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 3. Rewrite curl parser using shell tokenization
+- [x] 3. Rewrite curl parser using shell tokenization
 
   **What to do**:
   - RED: Keep all 18 existing test cases. Add 20+ new edge cases: shell quoting (`$'...'`, double quotes with escapes), `--data-raw`, `--data-urlencode`, `-F` multipart, `@` file references, `-X POST`, unquoted headers, URLs with query params and fragments, multiline bodies, `--compressed`, `--location`, `-k`/`--insecure`, `-L`, `--max-redirs`, `--connect-timeout`, `--cookie`, `--cookie-jar`, `-u` user auth
@@ -511,7 +511,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/core/curl/parser.go`, `internal/core/curl/parser_test.go`
   - Pre-commit: `go test ./internal/core/curl/... -v -count=1`
 
-- [ ] 4. Create unified HTTP client (internal/client/) using net/http
+- [x] 4. Create unified HTTP client (internal/client/) using net/http
 
   **What to do**:
   - RED: Write tests for HTTP client: GET, POST with body, custom headers, status code capture, response body capture, response time tracking, error handling

@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
-	"github.com/urfave/cli/v3"
+	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
+	"github.com/urfave/cli/v3"
 )
 
 // RunCommand creates the run command
@@ -19,7 +21,7 @@ func RunCommand(db storage.DB) *cli.Command {
 		Aliases: []string{"r", "execute"},
 		Usage:   "Execute a saved request",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
+			&cli.StringSliceFlag{
 				Name:    "var",
 				Aliases: []string{"v"},
 				Usage:   "Variable substitution (--var key=value)",
@@ -48,6 +50,21 @@ func RunCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("request not found: %s", name)
 			}
 
+			varSlice := c.StringSlice("var")
+			vars := make(map[string]string)
+			for _, pair := range varSlice {
+				if idx := strings.Index(pair, "="); idx != -1 {
+					vars[pair[:idx]] = pair[idx+1:]
+				}
+			}
+
+			substitutedURL, err := template.Substitute(req.URL, vars)
+			if err != nil {
+				return fmt.Errorf("variable substitution failed: %w", err)
+			}
+
+			substitutedBody, _ := template.Substitute(req.Body, vars)
+
 			// Build curl command
 			cmdParts := []string{"curl", "-s", "-w", "\\n%{http_code}"}
 
@@ -59,11 +76,11 @@ func RunCommand(db storage.DB) *cli.Command {
 				cmdParts = append(cmdParts, "-H", fmt.Sprintf("%s: %s", header.Key, header.Value))
 			}
 
-			if req.Body != "" {
-				cmdParts = append(cmdParts, "-d", req.Body)
+			if substitutedBody != "" {
+				cmdParts = append(cmdParts, "-d", substitutedBody)
 			}
 
-			cmdParts = append(cmdParts, req.URL)
+			cmdParts = append(cmdParts, substitutedURL)
 
 			cmd := exec.Command("curl", cmdParts[1:]...)
 			cmd.Stdout = os.Stdout
@@ -75,7 +92,6 @@ func RunCommand(db storage.DB) *cli.Command {
 			}
 			duration := time.Since(start)
 
-			// Record execution history
 			history := &types.ExecutionHistory{
 				RequestID:  req.ID,
 				DurationMs: duration.Milliseconds(),
