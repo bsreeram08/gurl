@@ -110,6 +110,16 @@ gurl import postman ./collection.json
 gurl import har ./requests.har
 ```
 
+## Agent Skills
+
+For AI coding agents (Cursor, Claude Code, etc.):
+
+```bash
+npx skills add https://github.com/bsreeram08/gurl
+```
+
+This gives agents knowledge of Gurl commands for saving and running API requests.
+
 ## Contributing
 See CONTRIBUTING.md
 

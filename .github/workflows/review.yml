@@ -1,0 +1,63 @@
+name: Hound Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [master, main]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - uses: actions/checkout@v4
+        
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          
+      - name: Run Hound Review Script
+        run: |
+          chmod +x scripts/review.sh
+          ./scripts/review.sh --changed || true
+          
+      - name: Run go vet
+        run: go vet ./...
+        
+      - name: Check for security issues
+        run: |
+          # Check for common security issues
+          echo "=== Security Checks ==="
+          
+          # Shell injection patterns
+          SHELL_INJECT=$(grep -r 'exec\.Command.*+.*"' --include="*.go" . 2>/dev/null | grep -v "_test.go" || true)
+          if [[ -n "$SHELL_INJECT" ]]; then
+            echo "⚠️  SHELL INJECTION RISK:"
+            echo "$SHELL_INJECT"
+          fi
+          
+          # exec.Command with shell=true
+          SHELL_TRUE=$(grep -r 'Shell.*true' --include="*.go" . 2>/dev/null | grep -v "_test.go" || true)
+          if [[ -n "$SHELL_TRUE" ]]; then
+            echo "⚠️  SHELL=True RISK:"
+            echo "$SHELL_TRUE"
+          fi
+          
+          # Hardcoded secrets patterns
+          SECRETS=$(grep -rn 'password.*=\|api_key.*=\|secret.*=' --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v 'changeme\|example\|test' || true)
+          if [[ -n "$SECRETS" ]]; then
+            echo "⚠️  POTENTIAL SECRETS:"
+            echo "$SECRETS"
+          fi
+          
+          echo "=== Check Complete ==="
+
+      - name: Run tests
+        run: go test ./... -short
+
+      - name: Build check
+        run: go build -o /dev/null ./cmd/gurl

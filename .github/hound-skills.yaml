@@ -1,0 +1,16 @@
+name: bsreeram08/hound
+description: A brutal, thorough code review skill. Bloodhound for bugs and issues.
+version: 1.0.0
+
+skills:
+  - name: hound
+    description: |
+      AI-powered code review skill that spawns subagents to find security vulnerabilities,
+      architecture issues, and code quality problems. Follows deterministic review patterns.
+    triggers:
+      - "review"
+      - "code review"
+      - "swarm review"
+      - "lint test"
+      - "find issues"
+      - "check my code"
