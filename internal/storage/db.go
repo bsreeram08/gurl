@@ -72,6 +72,11 @@ func (db *LMDB) Open() error {
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
+
+	if err := db.MigrateIfNeeded(); err != nil {
+		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+
 	return nil
 }
 
