@@ -83,6 +83,46 @@ func TestSaveCommand(t *testing.T) {
 			args:    []string{"with_desc", "https://desc.example.com", "-d", "My description"},
 			wantErr: false,
 		},
+		{
+			name:    "saves with multiple tags",
+			args:    []string{"multi_tag", "https://tag.example.com", "--tag", "api", "--tag", "auth"},
+			wantErr: false,
+			checkFn: func(t *testing.T, db *mockDB) {
+				req, err := db.GetRequestByName("multi_tag")
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if req == nil {
+					t.Fatal("expected request to be saved")
+				}
+				if len(req.Tags) != 2 {
+					t.Errorf("expected 2 tags, got %d", len(req.Tags))
+				}
+				if req.Tags[0] != "api" || req.Tags[1] != "auth" {
+					t.Errorf("expected tags [api auth], got %v", req.Tags)
+				}
+			},
+		},
+		{
+			name:    "saves with single tag",
+			args:    []string{"single_tag", "https://single.example.com", "--tag", "important"},
+			wantErr: false,
+			checkFn: func(t *testing.T, db *mockDB) {
+				req, err := db.GetRequestByName("single_tag")
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if req == nil {
+					t.Fatal("expected request to be saved")
+				}
+				if len(req.Tags) != 1 {
+					t.Errorf("expected 1 tag, got %d", len(req.Tags))
+				}
+				if req.Tags[0] != "important" {
+					t.Errorf("expected tag [important], got %v", req.Tags)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

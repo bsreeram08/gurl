@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/urfave/cli/v3"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
+	"github.com/urfave/cli/v3"
 )
 
 // SaveCommand creates the save command
@@ -22,7 +22,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				Aliases: []string{"c"},
 				Usage:   "Assign to collection",
 			},
-			&cli.StringFlag{
+			&cli.StringSliceFlag{
 				Name:    "tag",
 				Aliases: []string{"t"},
 				Usage:   "Add tag (can repeat)",
@@ -52,6 +52,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				URL:          url,
 				Method:       "GET",
 				OutputFormat: c.String("format"),
+				Tags:         c.StringSlice("tag"),
 				CreatedAt:    time.Now().Unix(),
 				UpdatedAt:    time.Now().Unix(),
 			}
