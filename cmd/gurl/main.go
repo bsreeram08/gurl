@@ -61,6 +61,7 @@ Quick Start:
 			commands.ImportCommand(db),
 			commands.PasteCommand(db),
 			commands.CollectionCommand(db),
+			commands.UpdateCommand(),
 		},
 	}
 
