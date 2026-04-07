@@ -9,6 +9,7 @@ import (
 
 	"github.com/sreeram/gurl/internal/cli/commands"
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/protocols/graphql"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/urfave/cli/v3"
 )
@@ -63,6 +64,7 @@ Quick Start:
 			commands.PasteCommand(db),
 			commands.CollectionCommand(db),
 			commands.UpdateCommand(),
+			graphql.GraphQLCommand(db),
 		},
 	}
 

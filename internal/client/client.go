@@ -6,12 +6,53 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"time"
 )
 
 var ErrTooManyRedirects = errors.New("too many redirects")
+
+// wrapTimeoutError wraps context deadline exceeded errors with a friendly message
+func wrapTimeoutError(err error, timeout time.Duration) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("request timed out after %v", timeout)
+	}
+	return err
+}
+
+// Option is a functional option for configuring the Client
+type Option func(*Client)
+
+// WithTimeout sets the total request timeout
+func WithTimeout(total time.Duration) Option {
+	return func(c *Client) {
+		c.timeout = total
+	}
+}
+
+// WithConnectTimeout sets the connection establishment timeout
+func WithConnectTimeout(connect time.Duration) Option {
+	return func(c *Client) {
+		c.connectTimeout = connect
+		c.applyConnectTimeout()
+	}
+}
+
+// applyConnectTimeout applies the connect timeout to the transport's DialContext
+func (c *Client) applyConnectTimeout() {
+	if c.transport == nil {
+		c.transport = &http.Transport{}
+	}
+	dialer := &net.Dialer{
+		Timeout: c.connectTimeout,
+	}
+	c.transport.DialContext = dialer.DialContext
+}
 
 type statusCapturingTransport struct {
 	http.RoundTripper
@@ -35,10 +76,11 @@ type TLSConfig struct {
 }
 
 type Client struct {
-	transport   *http.Transport
-	timeout     time.Duration
-	proxyConfig *proxyConfig
-	Jar         http.CookieJar
+	transport      *http.Transport
+	timeout        time.Duration
+	connectTimeout time.Duration
+	proxyConfig    *proxyConfig
+	Jar            http.CookieJar
 }
 
 func NewClient() *Client {
@@ -119,7 +161,10 @@ func (c *Client) Execute(req Request) (Response, error) {
 }
 
 func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response, error) {
+	// Determine effective timeout: per-request overrides client default
+	effectiveTimeout := c.timeout
 	if req.Timeout > 0 {
+		effectiveTimeout = req.Timeout
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, req.Timeout)
 		defer cancel()
@@ -148,7 +193,7 @@ func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response,
 
 	httpClient := &http.Client{
 		Transport: c.transport,
-		Timeout:   c.timeout,
+		Timeout:   effectiveTimeout,
 	}
 
 	if req.ProxyURL != "" || len(req.NoProxy) > 0 {
@@ -211,7 +256,7 @@ func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response,
 				Redirects:  redirectHops,
 			}, nil
 		}
-		return Response{}, err
+		return Response{}, wrapTimeoutError(err, effectiveTimeout)
 	}
 	defer httpResp.Body.Close()
 

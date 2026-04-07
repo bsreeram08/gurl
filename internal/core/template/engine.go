@@ -113,20 +113,39 @@ func HasVariables(cmd string) bool {
 func GetVariablesFromRequest(request *types.SavedRequest) []types.Var {
 	vars := make([]types.Var, 0)
 
-	// Check URL
+	// Check URL for {{varName}} style
 	urlVars := ExtractVarNames(request.URL)
 	for _, name := range urlVars {
 		vars = append(vars, types.Var{
 			Name:    name,
-			Pattern: "", // Pattern not known from template alone
+			Pattern: "",
 			Example: "",
 		})
 	}
 
-	// Check body
+	// Check body for {{varName}} style
 	bodyVars := ExtractVarNames(request.Body)
 	for _, name := range bodyVars {
-		// Check if already added
+		found := false
+		for _, v := range vars {
+			if v.Name == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			vars = append(vars, types.Var{
+				Name:    name,
+				Pattern: "",
+				Example: "",
+			})
+		}
+	}
+
+	// Check URL for :param and {param} style path parameters
+	// but NOT {{var}} style template variables
+	pathParamNames := extractPathParamNamesFiltered(request.URL)
+	for _, name := range pathParamNames {
 		found := false
 		for _, v := range vars {
 			if v.Name == name {
@@ -144,4 +163,26 @@ func GetVariablesFromRequest(request *types.SavedRequest) []types.Var {
 	}
 
 	return vars
+}
+
+// ResolvePathParamsInRequest resolves :param and {param} placeholders in a request URL
+// using the PathParams field from the request. Returns error for unresolved params.
+func ResolvePathParamsInRequest(request *types.SavedRequest) error {
+	if !HasPathParams(request.URL) {
+		return nil
+	}
+
+	// Build params map from PathParams field
+	params := make(map[string]string)
+	for _, p := range request.PathParams {
+		params[p.Name] = p.Example
+	}
+
+	resolved, err := ResolvePathParams(request.URL, params)
+	if err != nil {
+		return err
+	}
+
+	request.URL = resolved
+	return nil
 }

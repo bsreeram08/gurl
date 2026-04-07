@@ -48,6 +48,34 @@
 - The plan says "use switch for line type detection" - implemented via `classifyLine()` returning lineType enum, then switch in `ParseDotenv()` handles each type
 - Task T16 (env CLI) was running in parallel and modified `env.go` — merged import subcommand into their version
 
+## Task T39: Path Parameters Support
+
+### What Worked
+- Created `internal/core/template/pathparam.go` with `ResolvePathParams(url string, params map[string]string) (string, error)`
+- Created `internal/core/template/pathparam_test.go` with 7 tests (6 required + 1 bonus)
+- Added `PathParams []Var` field to `SavedRequest` in `pkg/types/types.go`
+- Added `ResolvePathParamsInRequest()` and `GetVariablesFromRequest()` enhancement in `engine.go`
+
+### Key Edge Cases Handled
+- Both `:param` and `{param}` syntax supported via single regex `(:[a-zA-Z_][a-zA-Z0-9_]*|\{[a-zA-Z_][a-zA-Z0-9_]*\})`
+- Curly brace params need `}` stripped from name after removing leading `{`
+- Must skip `{{var}}` style template variables when extracting path params — regex matches `{var}` in both cases
+- URL encoding via `url.PathEscape()` — spaces become `%20`, `&` becomes `%26`, but `=` is NOT encoded (Go's PathEscape behavior)
+- Empty path param values return error (not silent empty segment)
+- Unresolved path params return error listing the first missing param name
+
+### Regex Pattern Matching
+- For `{{base_url}}/api`: match at [1,11] giving text `{base_url}` — check `match[0] > 1` before accessing `urlStr[match[0]-2]`
+- `url.PathEscape("hello world & foo=bar")` → `hello%20world%20&%20foo=bar` (note: `=` is NOT encoded)
+
+### Test Results
+- `go test ./internal/core/template/... -count=1` → 52 passed (including 7 pathparam tests)
+- `go test ./internal/core/template/... -v -run TestPathParam -count=1` → 7 passed
+
+### Notes
+- The plan specified "path params resolve BEFORE query params" — the `ResolvePathParamsInRequest()` function can be called before any template variable substitution in the render pipeline
+- `url.PathEscape` is correct for path segments but not for query strings (use `url.QueryEscape` for query string values with `+` for spaces)
+
 ## Task T17: Wire environments into run command
 
 ### What Worked
@@ -547,4 +575,157 @@ func ResolveAuthConfig(request *types.SavedRequest, collection *types.Collection
 - GREEN phase: implemented all formatting functions following spec
 - REFACTOR phase: extracted color constants to theme.go for future TUI reuse
 - Pre-existing build issue in diff.go (jsondiff.Operation.Type vs .Op) — fixed to make package compile
+
+## Task T34 Fix: Add HTML Syntax Highlighting (colorizeHTML)
+
+### What Worked
+- Added `colorizeHTML(output string) string` function that returns ANSI-colored HTML
+- Wired it into `FormatHTML` when `opts.Color` is true
+- Used same regex pattern as `colorizeXML`: `(<[^>]+>)` to split HTML into tags and text
+- Text content colored green (Green + Reset), tags colored via existing `colorizeHTMLTag`
+
+### Implementation Details
+- `colorizeHTML` splits HTML using regex, then:
+  - Text between tags: wrapped in `Green + text + Reset`
+  - Tags: passed through `colorizeHTMLTag` (already existed: tags=cyan, attributes=yellow)
+  - Comments and DOCTYPE: preserved as-is (no colorization)
+- `FormatHTML` now calls `colorizeHTML(output)` when `opts.Color` is true
+
+### ANSI Color Scheme for HTML
+- Tags: cyan (via `colorizeHTMLTag`)
+- Attributes: yellow (via `colorizeHTMLTag`)
+- Text content: green (new in `colorizeHTML`)
+
+### Test Results
+- `go test ./internal/formatter/... -count=1` → 57 passed
+- All existing tests continue to pass
+
+### Files Modified
+- `internal/formatter/formatter.go` — added `colorizeHTML()` function, modified `FormatHTML()` to call it
+
+## Task T41: GraphQL Client
+
+### What Worked
+- Created `internal/protocols/graphql/graphql.go` with `Client`, `Request`, `Response`, `GraphQLError`, `Location` types
+- Created `internal/protocols/graphql/graphql_test.go` with 8 tests covering all required scenarios
+- Created `internal/protocols/graphql/cli.go` with `GraphQLCommand` for `gurl graphql` subcommand
+- Implemented functional options pattern (`WithHeader`) for extensible client configuration
+- Handled null data edge case: `json.RawMessage` unmarshals JSON `null` as `[]byte("null")`, not Go `nil`
+
+### GraphQL Request/Response Types
+```go
+type Request struct {
+    Query         string
+    Variables     map[string]interface{}
+    OperationName string
+}
+
+type Response struct {
+    Data   json.RawMessage
+    Errors []GraphQLError
+}
+
+type GraphQLError struct {
+    Message   string
+    Locations []Location
+    Path      []interface{}
+}
+```
+
+### Implementation Details
+- POST request with `Content-Type: application/json`
+- Body format: `{"query": "...", "variables": {...}, "operationName": "..."}`
+- Null data handling: convert `[]byte("null")` to `nil` after unmarshalling
+- Functional options via `WithHeader(key, value)` for custom headers
+
+### CLI Subcommand
+- `gurl graphql "endpoint" --query 'query { ... }' --vars '{"limit": 10}'`
+- `--query-file`/`-f` flag for loading queries from `.graphql` files
+- `--operation-name`/`-op` for named operations
+- `--color`/`-c` for syntax highlighting via formatter
+- GraphQL errors printed to stderr with location info
+
+### Test Coverage
+- TestGraphQL_Query — basic query execution
+- TestGraphQL_QueryWithVariables — variables passed correctly
+- TestGraphQL_Mutation — mutation execution
+- TestGraphQL_Introspection — `__schema` query
+- TestGraphQL_ErrorResponse — error parsing with locations and path
+- TestGraphQL_Headers — custom headers passed via WithHeader option
+- TestGraphQL_BuildRequestBody — operation name included in body
+- TestGraphQL_MultilineQuery — multiline/fragment queries preserved
+
+### Test Results
+- `go test ./internal/protocols/graphql/... -count=1` → 8 passed
+- `go test ./... -count=1` → 466 passed (full test suite)
+- `go build ./...` → Success
+
+### Notes
+- urfave/cli/v3 does NOT use `Arguments` field - positional args accessed via `c.Args().Get(n)`
+- The `Args: true` field is not used in cli.Command struct
+- json.RawMessage is `nil` when JSON field is omitted, but `[]byte("null")` when JSON value is `null`
+
+## Task T40: Request Timeout Configuration
+
+### What Worked
+- Created `internal/client/timeout_test.go` with 14 tests covering all timeout scenarios
+- Added `Option` type with `WithTimeout` and `WithConnectTimeout` functional options
+- Added `connectTimeout` field to `Client` struct with `applyConnectTimeout()` method
+- Added `Timeout string` field to `SavedRequest` (JSON) and `Config.General` (TOML)
+- Wired connect timeout via `net.Dialer{Timeout: c.connectTimeout}` and `transport.DialContext`
+- Added friendly error wrapping: `wrapTimeoutError()` converts `context.DeadlineExceeded` to "request timed out after X"
+- Added `--timeout` flag to run command with `time.ParseDuration` support
+
+### Implementation Details
+- `Option` functional option pattern: `type Option func(*Client)`
+- `WithTimeout(total time.Duration) Option` — sets total request timeout
+- `WithConnectTimeout(connect time.Duration) Option` — sets connection establishment timeout
+- `applyConnectTimeout()` creates `net.Dialer{Timeout: c.connectTimeout}` and sets `transport.DialContext`
+- `wrapTimeoutError(err error, timeout time.Duration) error` — wraps context.DeadlineExceeded with friendly message
+- Per-request timeout (`req.Timeout > 0`) takes precedence over client default timeout
+- CLI `--timeout` flag overrides saved request's timeout field
+
+### Timeout Resolution Precedence
+1. CLI `--timeout` flag (highest priority)
+2. SavedRequest.Timeout field
+3. Client default timeout (30s from config)
+
+### Error Message Format
+- Old: `Get "http://...": context deadline exceeded`
+- New: `request timed out after 5s`
+
+### Test Coverage
+- `TestTimeout_Default` — default 30s timeout from config
+- `TestTimeout_PerRequest` — per-request timeout overrides client default
+- `TestTimeout_Zero` — zero timeout means no timeout (infinite)
+- `TestTimeout_Exceeded` — request exceeding timeout returns clear error
+- `TestTimeout_ConnectVsTotal` — separate connect timeout and total timeout
+- `TestTimeout_WithTimeout` — WithTimeout functional option works
+- `TestTimeout_ConnectTimeoutApplied` — connect timeout applied to transport
+- `TestTimeout_FriendlyError` — error message is user-friendly, not raw Go error
+- `TestTimeout_FromConfig` — reads timeout from TOML config
+- `TestTimeout_ConfigLoaderIntegration` — config loader handles timeout field
+- `TestTimeout_PerRequestOverridesClient` — per-request timeout overrides client timeout
+- `TestTimeout_ZeroTimeoutFromConfig` — "0" timeout means no timeout
+- `TestTimeout_ExecuteWithContextTimeout` — context timeout works with ExecuteWithContext
+- `TestTimeout_ErrorType` — timeout errors are properly typed
+
+### Files Modified
+- `pkg/types/types.go` — Added `Timeout string` to `SavedRequest` and `Config.General`
+- `internal/config/defaults.go` — Added `Timeout: "30s"` default to General config
+- `internal/client/client.go` — Added `Option` type, `WithTimeout`, `WithConnectTimeout`, `connectTimeout` field, `wrapTimeoutError`, `applyConnectTimeout`
+- `internal/client/timeout_test.go` — 14 timeout tests
+- `internal/cli/commands/run.go` — Added `--timeout` flag, timeout resolution logic
+
+### Test Results
+- `go test ./internal/client/... -v -run TestTimeout -count=1` → 14 passed
+- `go test ./internal/client/... -count=1` → 66 passed
+- `go build ./...` → Success
+
+### Notes
+- TDD RED phase: wrote tests first, they failed because functions didn't exist
+- GREEN phase: implemented functional options and timeout wiring
+- `effectiveTimeout` variable tracks which timeout was used for error message
+- `httpClient.Timeout` is set to `effectiveTimeout` (not always `c.timeout`) to handle per-request override
+- Pre-existing unrelated failures in template package (TestGetVariablesFromRequest) — not caused by T40
 

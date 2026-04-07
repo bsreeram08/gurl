@@ -345,7 +345,48 @@ func FormatHTML(body []byte, opts FormatOptions) string {
 
 	output := buf.String()
 	output = strings.TrimRight(output, "\n")
+
+	if opts.Color {
+		return colorizeHTML(output)
+	}
 	return output
+}
+
+// colorizeHTML applies ANSI colors to HTML string
+func colorizeHTML(s string) string {
+	var buf bytes.Buffer
+
+	re := regexp.MustCompile(`(<[^>]+>)`)
+	parts := re.Split(s, -1)
+	matches := re.FindAllStringSubmatchIndex(s, -1)
+
+	pi := 0
+	for i, match := range matches {
+		if pi < len(parts) {
+			// Color text content green
+			if parts[i] != "" {
+				buf.WriteString(Green + parts[i] + Reset)
+			}
+		}
+
+		tag := s[match[0]:match[1]]
+		if strings.HasPrefix(tag, "<!--") || strings.HasPrefix(tag, "<!DOCTYPE") {
+			buf.WriteString(tag)
+		} else {
+			buf.WriteString(colorizeHTMLTag(tag))
+		}
+
+		pi = match[1]
+	}
+
+	if pi < len(s) {
+		remaining := s[pi:]
+		if remaining != "" {
+			buf.WriteString(Green + remaining + Reset)
+		}
+	}
+
+	return buf.String()
 }
 
 // colorizeHTMLTag colors parts of an HTML tag

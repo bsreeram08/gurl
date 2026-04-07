@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/core/template"
@@ -52,6 +53,10 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 				Aliases: []string{"f"},
 				Usage:   "Force overwrite existing file",
 			},
+			&cli.StringFlag{
+				Name:  "timeout",
+				Usage: "Request timeout (e.g., 5s, 1m, 30s)",
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
@@ -94,11 +99,30 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 
 			substitutedBody, _ := template.Substitute(req.Body, vars)
 
+			// Determine timeout: CLI flag overrides saved request timeout
+			var timeout time.Duration
+			if timeoutStr := c.String("timeout"); timeoutStr != "" {
+				var err error
+				timeout, err = time.ParseDuration(timeoutStr)
+				if err != nil {
+					return fmt.Errorf("invalid timeout value %q: %w", timeoutStr, err)
+				}
+			} else if req.Timeout != "" {
+				var err error
+				timeout, err = time.ParseDuration(req.Timeout)
+				if err != nil {
+					return fmt.Errorf("invalid timeout in saved request %q: %w", req.Timeout, err)
+				}
+			}
+
 			clientReq := client.Request{
 				Method:  req.Method,
 				URL:     substitutedURL,
 				Headers: convertHeaders(req.Headers),
 				Body:    substitutedBody,
+			}
+			if timeout > 0 {
+				clientReq.Timeout = timeout
 			}
 
 			resp, err := client.Execute(clientReq)

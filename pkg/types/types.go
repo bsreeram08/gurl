@@ -43,10 +43,12 @@ type SavedRequest struct {
 	Headers      []Header    `json:"headers"`
 	Body         string      `json:"body,omitempty"`
 	Variables    []Var       `json:"variables,omitempty"`
+	PathParams   []Var       `json:"path_params,omitempty"`
 	Collection   string      `json:"collection,omitempty"`
 	Tags         []string    `json:"tags,omitempty"`
 	OutputFormat string      `json:"output_format"`
 	AuthConfig   *AuthConfig `json:"auth_config,omitempty"`
+	Timeout      string      `json:"timeout,omitempty"`
 	CreatedAt    int64       `json:"created_at"`
 	UpdatedAt    int64       `json:"updated_at"`
 }
@@ -90,6 +92,7 @@ type Config struct {
 		HistoryDepth   int    `toml:"history_depth"`
 		AutoTemplate   bool   `toml:"auto_template"`
 		CompletionMode string `toml:"completion_mode"`
+		Timeout        string `toml:"timeout"`
 	} `toml:"general"`
 
 	Output struct {

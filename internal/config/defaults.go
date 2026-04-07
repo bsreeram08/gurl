@@ -11,15 +11,17 @@ func DefaultConfig() *types.Config {
 			HistoryDepth   int    `toml:"history_depth"`
 			AutoTemplate   bool   `toml:"auto_template"`
 			CompletionMode string `toml:"completion_mode"`
+			Timeout        string `toml:"timeout"`
 		}{
 			HistoryDepth:   100,
 			AutoTemplate:   true,
 			CompletionMode: "both",
+			Timeout:        "30s",
 		},
 		Output: struct {
-			DefaultFormat    string `toml:"default_format"`
-			SyntaxHighlight  bool   `toml:"syntax_highlight"`
-			JSONPretty       bool   `toml:"json_pretty"`
+			DefaultFormat   string `toml:"default_format"`
+			SyntaxHighlight bool   `toml:"syntax_highlight"`
+			JSONPretty      bool   `toml:"json_pretty"`
 		}{
 			DefaultFormat:   "auto",
 			SyntaxHighlight: true,
