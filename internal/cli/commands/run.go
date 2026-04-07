@@ -9,17 +9,23 @@ import (
 
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/core/template"
+	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 
-func RunCommand(db storage.DB) *cli.Command {
+func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 	return &cli.Command{
 		Name:    "run",
 		Aliases: []string{"r", "execute"},
 		Usage:   "Execute a saved request",
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "env",
+				Aliases: []string{"e"},
+				Usage:   "Environment name to use for variable substitution",
+			},
 			&cli.StringSliceFlag{
 				Name:    "var",
 				Aliases: []string{"v"},
@@ -49,9 +55,23 @@ func RunCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("request not found: %s", name)
 			}
 
-			varSlice := c.StringSlice("var")
 			vars := make(map[string]string)
-			for _, pair := range varSlice {
+
+			if envName := c.String("env"); envName != "" {
+				if env, err := envStorage.GetEnvByName(envName); err == nil {
+					for k, v := range env.Variables {
+						vars[k] = v
+					}
+				}
+			} else if activeEnvName, err := envStorage.GetActiveEnv(); err == nil && activeEnvName != "" {
+				if env, err := envStorage.GetEnvByName(activeEnvName); err == nil {
+					for k, v := range env.Variables {
+						vars[k] = v
+					}
+				}
+			}
+
+			for _, pair := range c.StringSlice("var") {
 				if idx := strings.Index(pair, "="); idx != -1 {
 					vars[pair[:idx]] = pair[idx+1:]
 				}

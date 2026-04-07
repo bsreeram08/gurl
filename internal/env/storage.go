@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type EnvStorage struct {
@@ -100,4 +101,28 @@ func (s *EnvStorage) GetEnvByName(name string) (*Environment, error) {
 	}
 
 	return s.GetEnv(string(idData))
+}
+
+func (s *EnvStorage) GetActiveEnv() (string, error) {
+	data, err := s.db.DB.Get([]byte("cfg:activeEnv"), nil)
+	if err == leveldb.ErrNotFound {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to get active env: %w", err)
+	}
+	return string(data), nil
+}
+
+func (s *EnvStorage) SetActiveEnv(name string) error {
+	if name == "" {
+		if err := s.db.DB.Delete([]byte("cfg:activeEnv"), nil); err != nil && err != leveldb.ErrNotFound {
+			return fmt.Errorf("failed to clear active env: %w", err)
+		}
+		return nil
+	}
+	if err := s.db.DB.Put([]byte("cfg:activeEnv"), []byte(name), nil); err != nil {
+		return fmt.Errorf("failed to set active env: %w", err)
+	}
+	return nil
 }

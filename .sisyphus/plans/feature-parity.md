@@ -579,7 +579,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/client/client.go`, `internal/client/request.go`, `internal/client/response.go`, `internal/client/execute.go`, `internal/client/client_test.go`
   - Pre-commit: `go test ./internal/client/... -v -count=1`
 
-- [ ] 5. Add ParsedCurl↔SavedRequest conversion
+- [x] 5. Add ParsedCurl↔SavedRequest conversion
 
   **What to do**:
   - RED: Write tests for conversion: ParsedCurl with method, headers (map), body, URL → SavedRequest with Method, Headers ([]Header), Body, URL; and reverse
@@ -626,7 +626,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Message: `types: add ParsedCurl↔SavedRequest conversion — bridge parser and storage`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 6. Fix tags flag: StringFlag→StringSliceFlag
+- [x] 6. Fix tags flag: StringFlag→StringSliceFlag
 
   **What to do**:
   - RED: Write test that saves a request with multiple tags and verifies all are stored
@@ -670,7 +670,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Message: `save: fix tag flag to accept multiple values — was StringFlag, now StringSliceFlag`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 7. Fix --var flag: accept multiple values
+- [x] 7. Fix --var flag: accept multiple values
 
   **What to do**:
   - RED: Write test that runs a request with `--var KEY1=val1 --var KEY2=val2` and both are substituted
@@ -714,7 +714,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Message: `run: fix var flag to accept multiple values — was StringFlag, now StringSliceFlag`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 8. Add DB schema versioning + migration framework
+- [x] 8. Add DB schema versioning + migration framework
 
   **What to do**:
   - RED: Write tests that verify: (1) a new DB gets schema version "1" written, (2) a migration function can bump version, (3) opening an old DB triggers migration
@@ -780,7 +780,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/storage/db.go`, `internal/storage/migration.go`, `internal/storage/migration_test.go`
   - Pre-commit: `go test ./internal/storage/... -count=1`
 
-- [ ] 9. Store response body in execution history
+- [x] 9. Store response body in execution history
 
   **What to do**:
   - RED: Write test that executes a request via `internal/client`, stores the full response (body, headers, status, duration, size) in ExecutionHistory, and retrieves it
@@ -843,7 +843,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/cli/commands/run.go`, `internal/cli/commands/history.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 10. Migrate run command to internal/client
+- [x] 10. Migrate run command to internal/client
 
   **What to do**:
   - RED: Write integration test that uses `run` command action function → verifies it calls `internal/client.Execute()` instead of `exec.Command("curl")`
@@ -915,7 +915,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/cli/commands/run.go`, `internal/cli/commands/run_test.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 11. Migrate executor.go to internal/client
+- [x] 11. Migrate executor.go to internal/client
 
   **What to do**:
   - RED: Write test that verifies `ExecuteCurl()` and `ExecuteCurlWithOutput()` use `internal/client` instead of `exec.Command("curl")`
@@ -978,7 +978,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/core/curl/executor.go`, `internal/core/curl/executor_test.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 12. Implement detect command (read curl from stdin/file, parse, save)
+- [x] 12. Implement detect command (read curl from stdin/file, parse, save)
 
   **What to do**:
   - RED: Write tests: (1) detect reads curl from stdin, parses via parser, saves request with --name, (2) detect reads from --file flag, (3) detect without --name auto-generates name from URL
@@ -1043,7 +1043,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/cli/commands/detect.go`, `internal/cli/commands/detect_test.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 13. Fix export timestamp (use actual time instead of hardcoded)
+- [x] 13. Fix export timestamp (use actual time instead of hardcoded)
 
   **What to do**:
   - RED: Write test that calls export, verifies `exported_at` is a valid ISO8601 timestamp within last 5 seconds (not "2024-01-01T00:00:00Z")
@@ -1091,7 +1091,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/cli/commands/export.go`, `internal/cli/commands/export_test.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 14. Fix save command — accept --curl, -X, -H, -d flags, stdin
+- [x] 14. Fix save command — accept --curl, -X, -H, -d flags, stdin
 
   **What to do**:
   - RED: Write tests: (1) `save "name" --curl "curl -X POST -H 'CT: app/json' -d '{}' https://ex.com"` parses and saves with method, headers, body; (2) `save "name" -X POST -H "Auth: Bearer tok" -d '{"a":1}' https://ex.com` saves with individual flags; (3) piping curl to save via stdin
@@ -1166,7 +1166,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/cli/commands/save.go`, `internal/cli/commands/save_test.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 15. Environment system (internal/env/)
+- [x] 15. Environment system (internal/env/)
 
   **What to do**:
   - RED: Write tests: (1) create environment with name + variables, (2) get environment by name, (3) list environments, (4) update variables, (5) delete environment, (6) active environment selection
@@ -1527,7 +1527,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/env/dotenv.go`, `internal/env/dotenv_test.go`, `internal/cli/commands/env.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 21. Auth framework (internal/auth/) + Basic auth handler
+- [x] 21. Auth framework (internal/auth/) + Basic auth handler
 
   **What to do**:
   - RED: Write tests: (1) auth framework registers handlers by type, (2) Basic auth handler sets Authorization header with base64-encoded "user:pass", (3) auth applied to client.Request before execution
@@ -1590,7 +1590,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/auth/auth.go`, `internal/auth/registry.go`, `internal/auth/basic.go`, `internal/auth/basic_test.go`, `internal/auth/registry_test.go`
   - Pre-commit: `go test ./internal/auth/... -count=1`
 
-- [ ] 22. Bearer token auth
+- [x] 22. Bearer token auth
 
   **What to do**:
   - RED: Write test: Bearer handler sets `Authorization: Bearer <token>` header
@@ -1639,7 +1639,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/auth/bearer.go`, `internal/auth/bearer_test.go`
   - Pre-commit: `go test ./internal/auth/... -count=1`
 
-- [ ] 23. API Key auth (header or query param)
+- [x] 23. API Key auth (header or query param)
 
   **What to do**:
   - RED: Write tests: (1) API key in header mode sets custom header (e.g., `X-API-Key: <key>`), (2) API key in query param mode appends `?api_key=<key>` to URL
@@ -1698,7 +1698,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/auth/apikey.go`, `internal/auth/apikey_test.go`
   - Pre-commit: `go test ./internal/auth/... -count=1`
 
-- [ ] 24. OAuth 2.0 (authorization code + client credentials flows)
+- [x] 24. OAuth 2.0 (authorization code + client credentials flows)
 
   **What to do**:
   - RED: Write tests: (1) client credentials flow: POST to token endpoint with client_id+secret, parse JSON response, set Bearer token; (2) authorization code flow: build auth URL, exchange code for token, set Bearer; (3) token refresh when expired

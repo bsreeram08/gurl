@@ -7,9 +7,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/urfave/cli/v3"
 	"github.com/sreeram/gurl/internal/cli/commands"
+	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/urfave/cli/v3"
 )
 
 var version = "dev"
@@ -48,7 +49,7 @@ Quick Start:
   gurl delete "old request"`,
 		Commands: []*cli.Command{
 			commands.SaveCommand(db),
-			commands.RunCommand(db),
+			commands.RunCommand(db, env.NewEnvStorage(db)),
 			commands.ListCommand(db),
 			commands.DeleteCommand(db),
 			commands.RenameCommand(db),
