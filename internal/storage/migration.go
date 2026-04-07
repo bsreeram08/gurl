@@ -20,7 +20,7 @@ func migrateToV1(db *leveldb.DB) error {
 }
 
 func (db *LMDB) GetSchemaVersion() (int, error) {
-	data, err := db.db.Get([]byte(schemaVersionKey), nil)
+	data, err := db.DB.Get([]byte(schemaVersionKey), nil)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
 			return 0, nil
@@ -42,7 +42,7 @@ func (db *LMDB) setSchemaVersion(version int) error {
 		return fmt.Errorf("failed to marshal schema version: %w", err)
 	}
 
-	if err := db.db.Put([]byte(schemaVersionKey), data, nil); err != nil {
+	if err := db.DB.Put([]byte(schemaVersionKey), data, nil); err != nil {
 		return fmt.Errorf("failed to write schema version: %w", err)
 	}
 
@@ -65,7 +65,7 @@ func (db *LMDB) MigrateIfNeeded() error {
 			return fmt.Errorf("no migration function for version %d", v)
 		}
 
-		if err := migrateFn(db.db); err != nil {
+		if err := migrateFn(db.DB); err != nil {
 			return fmt.Errorf("migration to version %d failed: %w", v, err)
 		}
 

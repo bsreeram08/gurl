@@ -24,7 +24,7 @@ func TestSchemaVersionNewDB(t *testing.T) {
 	defer db.Close()
 
 	// Read the schema version key directly
-	data, err := db.db.Get([]byte("schema_version"), nil)
+	data, err := db.DB.Get([]byte("schema_version"), nil)
 	if err != nil {
 		t.Fatalf("schema_version key not found after Open: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestSchemaVersionLegacyDB(t *testing.T) {
 	defer db.Close()
 
 	// Verify schema version is now 1
-	data, err := db.db.Get([]byte("schema_version"), nil)
+	data, err := db.DB.Get([]byte("schema_version"), nil)
 	if err != nil {
 		t.Fatalf("schema_version key not found after migration: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestMigrateIfNeeded(t *testing.T) {
 
 	// Manually set version to 0
 	versionData, _ := json.Marshal(0)
-	db.db.Put([]byte("schema_version"), versionData, nil)
+	db.DB.Put([]byte("schema_version"), versionData, nil)
 	db.Close()
 
 	// Re-open and check MigrateIfNeeded runs
@@ -108,7 +108,7 @@ func TestMigrateIfNeeded(t *testing.T) {
 	defer db2.Close()
 
 	// Verify version is now 1
-	data, err := db2.db.Get([]byte("schema_version"), nil)
+	data, err := db2.DB.Get([]byte("schema_version"), nil)
 	if err != nil {
 		t.Fatalf("schema_version key not found: %v", err)
 	}

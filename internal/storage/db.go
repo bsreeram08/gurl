@@ -37,7 +37,7 @@ type ListOptions struct {
 
 // LMDB implements DB using goleveldb (LMDB-like storage)
 type LMDB struct {
-	db     *leveldb.DB
+	DB     *leveldb.DB
 	dbPath string
 }
 
@@ -63,10 +63,17 @@ func NewLMDB() (*LMDB, error) {
 	}, nil
 }
 
+// NewLMDBWithPath creates a new LMDB instance with a custom database path
+func NewLMDBWithPath(dbPath string) *LMDB {
+	return &LMDB{
+		dbPath: dbPath,
+	}
+}
+
 // Open opens the database
 func (db *LMDB) Open() error {
 	var err error
-	db.db, err = leveldb.OpenFile(db.dbPath, &opt.Options{
+	db.DB, err = leveldb.OpenFile(db.dbPath, &opt.Options{
 		WriteBuffer: 4 * 1024 * 1024, // 4MB write buffer
 	})
 	if err != nil {
@@ -82,8 +89,8 @@ func (db *LMDB) Open() error {
 
 // Close closes the database
 func (db *LMDB) Close() error {
-	if db.db != nil {
-		return db.db.Close()
+	if db.DB != nil {
+		return db.DB.Close()
 	}
 	return nil
 }
@@ -123,7 +130,7 @@ func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
 	}
 
 	// Atomic write
-	if err := db.db.Write(batch, nil); err != nil {
+	if err := db.DB.Write(batch, nil); err != nil {
 		return fmt.Errorf("failed to save request atomically: %w", err)
 	}
 
@@ -132,7 +139,7 @@ func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
 
 // addToIndexBatch adds a request ID to an index using a batch
 func (db *LMDB) addToIndexBatch(batch *leveldb.Batch, indexKey string, requestID string) error {
-	indexData, err := db.db.Get([]byte(indexKey), nil)
+	indexData, err := db.DB.Get([]byte(indexKey), nil)
 	if err != nil && err != leveldb.ErrNotFound {
 		return fmt.Errorf("failed to read index: %w", err)
 	}
@@ -163,7 +170,7 @@ func (db *LMDB) addToIndexBatch(batch *leveldb.Batch, indexKey string, requestID
 
 // addToIndex adds a request ID to an index
 func (db *LMDB) addToIndex(indexKey string, requestID string) error {
-	indexData, err := db.db.Get([]byte(indexKey), nil)
+	indexData, err := db.DB.Get([]byte(indexKey), nil)
 	if err != nil && err != leveldb.ErrNotFound {
 		return fmt.Errorf("failed to read index: %w", err)
 	}
@@ -188,13 +195,13 @@ func (db *LMDB) addToIndex(indexKey string, requestID string) error {
 		return fmt.Errorf("failed to marshal index: %w", err)
 	}
 
-	return db.db.Put([]byte(indexKey), newData, nil)
+	return db.DB.Put([]byte(indexKey), newData, nil)
 }
 
 // GetRequest retrieves a request by ID
 func (db *LMDB) GetRequest(id string) (*types.SavedRequest, error) {
 	key := fmt.Sprintf("request:%s", id)
-	data, err := db.db.Get([]byte(key), nil)
+	data, err := db.DB.Get([]byte(key), nil)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
 			return nil, fmt.Errorf("request not found: %s", id)
@@ -214,7 +221,7 @@ func (db *LMDB) GetRequest(id string) (*types.SavedRequest, error) {
 func (db *LMDB) GetRequestByName(name string) (*types.SavedRequest, error) {
 	// Look up in name index
 	nameKey := fmt.Sprintf("idx:name:%s", name)
-	idData, err := db.db.Get([]byte(nameKey), nil)
+	idData, err := db.DB.Get([]byte(nameKey), nil)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
 			return nil, fmt.Errorf("request not found: %s", name)
@@ -244,7 +251,7 @@ func (db *LMDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, error) {
 		requestIDs = db.getFromIndex(tagKey)
 	default:
 		// List all requests - scan all keys with "request:" prefix
-		iter := db.db.NewIterator(nil, nil)
+		iter := db.DB.NewIterator(nil, nil)
 		defer iter.Release()
 
 		for iter.Next() {
@@ -290,7 +297,7 @@ func (db *LMDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, error) {
 
 // getFromIndex retrieves all request IDs from an index
 func (db *LMDB) getFromIndex(indexKey string) []string {
-	data, err := db.db.Get([]byte(indexKey), nil)
+	data, err := db.DB.Get([]byte(indexKey), nil)
 	if err != nil {
 		return nil
 	}
@@ -328,13 +335,13 @@ func (db *LMDB) DeleteRequest(id string) error {
 
 	// Delete the request
 	key := fmt.Sprintf("request:%s", id)
-	if err := db.db.Delete([]byte(key), nil); err != nil {
+	if err := db.DB.Delete([]byte(key), nil); err != nil {
 		return fmt.Errorf("failed to delete request: %w", err)
 	}
 
 	// Delete from name index
 	nameKey := fmt.Sprintf("idx:name:%s", req.Name)
-	db.db.Delete([]byte(nameKey), nil)
+	db.DB.Delete([]byte(nameKey), nil)
 
 	// Delete from collection index
 	if req.Collection != "" {
@@ -353,7 +360,7 @@ func (db *LMDB) DeleteRequest(id string) error {
 
 // removeFromIndex removes a request ID from an index
 func (db *LMDB) removeFromIndex(indexKey string, requestID string) error {
-	indexData, err := db.db.Get([]byte(indexKey), nil)
+	indexData, err := db.DB.Get([]byte(indexKey), nil)
 	if err != nil {
 		return nil // Index doesn't exist, nothing to remove
 	}
@@ -376,7 +383,7 @@ func (db *LMDB) removeFromIndex(indexKey string, requestID string) error {
 		return fmt.Errorf("failed to marshal index: %w", err)
 	}
 
-	return db.db.Put([]byte(indexKey), newData, nil)
+	return db.DB.Put([]byte(indexKey), newData, nil)
 }
 
 // UpdateRequest updates an existing request
@@ -420,7 +427,7 @@ func (db *LMDB) SaveHistory(history *types.ExecutionHistory) error {
 
 	// Use timestamp as part of key for ordering
 	key := fmt.Sprintf("history:%s:%d", history.RequestID, history.Timestamp)
-	if err := db.db.Put([]byte(key), data, nil); err != nil {
+	if err := db.DB.Put([]byte(key), data, nil); err != nil {
 		return fmt.Errorf("failed to save history: %w", err)
 	}
 
@@ -436,7 +443,7 @@ func (db *LMDB) GetHistory(requestID string, limit int) ([]*types.ExecutionHisto
 	var results []*types.ExecutionHistory
 	prefix := fmt.Sprintf("history:%s:", requestID)
 
-	iter := db.db.NewIterator(nil, nil)
+	iter := db.DB.NewIterator(nil, nil)
 	defer iter.Release()
 
 	for iter.Next() {
