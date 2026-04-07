@@ -1,3 +1,8 @@
+---
+name: gurl-cli
+description: AI agent skill for using the Gurl CLI tool. Save, run, and manage HTTP requests with variable templates. Import from OpenAPI, Insomnia, Bruno, Postman.
+---
+
 # Gurl CLI Skill
 
 **GURL** = **G**url's **U**niversal **R**equest **L**ibrary

@@ -1,3 +1,8 @@
+---
+name: hound
+description: Brutal code review skill that spawns subagents for security, architecture, and code quality checks.
+---
+
 # Hound Code Review Skill
 
 **Bloodhound for Bugs and Issues**
