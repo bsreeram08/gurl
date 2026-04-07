@@ -12,6 +12,8 @@ import (
 	"github.com/sreeram/gurl/internal/storage"
 )
 
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -34,7 +36,7 @@ func run() error {
 	app := &cli.Command{
 		Name:    "gurl",
 		Usage:   "Smart curl saver - Your named request library",
-		Version: "0.1.0",
+		Version: version,
 		Description: `gurl replaces your chaotic curl history with an intelligent, 
 named request library. Save requests with memorable names 
 and run them whenever you need.

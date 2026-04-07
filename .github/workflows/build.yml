@@ -26,11 +26,13 @@ jobs:
           go-version: ${{ matrix.go }}
       
       - name: Build
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
           ext=""
           if [ "${{ matrix.os }}" = "windows-latest" ]; then ext=".exe"; fi
           name="gurl-${{ matrix.os }}-${{ matrix.arch }}${ext}"
-          go build -ldflags="-s -w" -o "$name" ./cmd/gurl
+          go build -ldflags="-s -w -X main.version=${VERSION}" -o "$name" ./cmd/gurl
       
       - name: Checksum
         run: |

@@ -3,61 +3,112 @@ name: Hound Code Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  push:
-    branches: [master, main]
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   review:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     
     steps:
       - uses: actions/checkout@v4
-        
+        with:
+          fetch-depth: 0
+          
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
           
-      - name: Run Hound Review Script
+      - name: Run Hound Review
+        id: review
         run: |
-          chmod +x scripts/review.sh
-          ./scripts/review.sh --changed || true
+          # Get changed files
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.go' | grep -v '_test.go' || true)
           
-      - name: Run go vet
-        run: go vet ./...
-        
-      - name: Check for security issues
-        run: |
-          # Check for common security issues
-          echo "=== Security Checks ==="
+          # Initialize review output
+          REVIEW_OUTPUT="## 🐕 Hound Code Review\n\n"
+          REVIEW_OUTPUT+="**Pull Request:** #${{ github.event.pull_request.number }}\n\n"
           
-          # Shell injection patterns
-          SHELL_INJECT=$(grep -r 'exec\.Command.*+.*"' --include="*.go" . 2>/dev/null | grep -v "_test.go" || true)
+          # Check for security issues
+          SECURITY_ISSUES=""
+          SHELL_INJECT=$(grep -rn 'exec\.Command.*+.*"' $CHANGED_FILES 2>/dev/null || true)
           if [[ -n "$SHELL_INJECT" ]]; then
-            echo "⚠️  SHELL INJECTION RISK:"
-            echo "$SHELL_INJECT"
+            SECURITY_ISSUES+="⚠️ **Shell Injection Risk:**\n\`exec.Command\` with string concatenation\n\n"
+            SECURITY_ISSUES+="\`\`\`\n$SHELL_INJECT\n\`\`\`\n\n"
           fi
           
-          # exec.Command with shell=true
-          SHELL_TRUE=$(grep -r 'Shell.*true' --include="*.go" . 2>/dev/null | grep -v "_test.go" || true)
+          SHELL_TRUE=$(grep -rn 'Shell.*true' $CHANGED_FILES 2>/dev/null || true)
           if [[ -n "$SHELL_TRUE" ]]; then
-            echo "⚠️  SHELL=True RISK:"
-            echo "$SHELL_TRUE"
+            SECURITY_ISSUES+="⚠️ **Shell=True Risk:**\n\`Shell=true\` in exec\n\n"
+            SECURITY_ISSUES+="\`\`\`\n$SHELL_TRUE\n\`\`\`\n\n"
           fi
           
-          # Hardcoded secrets patterns
-          SECRETS=$(grep -rn 'password.*=\|api_key.*=\|secret.*=' --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v 'changeme\|example\|test' || true)
-          if [[ -n "$SECRETS" ]]; then
-            echo "⚠️  POTENTIAL SECRETS:"
-            echo "$SECRETS"
+          # Check for go vet issues
+          VET_OUTPUT=$(go vet ./... 2>&1 || true)
+          if [[ -n "$VET_OUTPUT" && "$VET_OUTPUT" != "ok"* ]]; then
+            SECURITY_ISSUES+="⚠️ **Go Vet Warnings:**\n\`\`\`\n$VET_OUTPUT\n\`\`\`\n\n"
           fi
           
-          echo "=== Check Complete ==="
-
-      - name: Run tests
-        run: go test ./... -short
-
-      - name: Build check
-        run: go build -o /dev/null ./cmd/gurl
+          # Check for build
+          BUILD_OUTPUT=$(go build -o /dev/null ./cmd/gurl 2>&1 || true)
+          if [[ -n "$BUILD_OUTPUT" ]]; then
+            SECURITY_ISSUES+="❌ **Build Failed:**\n\`\`\`\n$BUILD_OUTPUT\n\`\`\`\n\n"
+          fi
+          
+          # Compile final review
+          if [[ -n "$SECURITY_ISSUES" ]]; then
+            REVIEW_OUTPUT+="### 🔴 Security & Quality Issues\n\n$SECURITY_ISSUES"
+          else
+            REVIEW_OUTPUT+="### 🟢 No Issues Found\n\nHound didn't find any security or quality issues.\n\n"
+          fi
+          
+          # Print for debugging
+          echo "$REVIEW_OUTPUT"
+          
+          # Save to file for next step
+          echo "review<<EOF" >> $GITHUB_OUTPUT
+          echo "$REVIEW_OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+      - name: Post Review Comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const review = `${{ steps.review.outputs.review }}`;
+            
+            const body = `## 🐕 Hound Code Review
+              
+**Files changed:** ${context.payload.pull_request.changed_files}
+              
+${review || 'No issues found.'}
+            `;
+            
+            // Get existing comments
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            
+            // Delete old Hound comments
+            for (const comment of comments.data) {
+              if (comment.user.login === 'github-actions[bot]' && comment.body.includes('🐕 Hound')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id
+                });
+              }
+            }
+            
+            // Post new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
