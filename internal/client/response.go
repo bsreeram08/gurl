@@ -17,4 +17,5 @@ type Response struct {
 	Duration   time.Duration
 	Size       int64
 	Redirects  []RedirectHop
+	URL        string // Request URL for filename derivation
 }

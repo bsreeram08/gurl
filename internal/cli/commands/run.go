@@ -42,6 +42,16 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 				Aliases: []string{"c"},
 				Usage:   "Use cached response if fresh",
 			},
+			&cli.StringFlag{
+				Name:    "output",
+				Aliases: []string{"o"},
+				Usage:   "Output file path (use - for stdout)",
+			},
+			&cli.BoolFlag{
+				Name:    "force",
+				Aliases: []string{"f"},
+				Usage:   "Force overwrite existing file",
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
@@ -105,6 +115,16 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 			)
 			if err := db.SaveHistory(history); err != nil {
 				return fmt.Errorf("failed to save history: %w", err)
+			}
+
+			if outputPath := c.String("output"); outputPath != "" {
+				resp.URL = substitutedURL
+				force := c.Bool("force")
+				if err := client.SaveToFile(&resp, outputPath, force); err != nil {
+					return fmt.Errorf("failed to save output: %w", err)
+				}
+				fmt.Printf("Response saved to %s\n", outputPath)
+				return nil
 			}
 
 			format := c.String("format")

@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/urfave/cli/v3"
+	"github.com/sreeram/gurl/internal/formatter"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/urfave/cli/v3"
 )
 
-// DiffCommand creates the diff command
 func DiffCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
 		Name:    "diff",
@@ -44,23 +44,15 @@ func DiffCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("not enough execution history to diff (need at least 2)")
 			}
 
-			// For now, just show a simple diff view
-			// Full diff implementation would require response storage
-			fmt.Printf("┌─ Diff: %s (Last %d executions) ──────────────────────┐\n", name, len(history))
-			fmt.Println("│                                                         │")
-			fmt.Println("│  Note: Full response diff requires response storage    │")
-			fmt.Println("│  Currently showing execution metadata:                  │")
-			fmt.Println("│                                                         │")
+			histA := history[0]
+			histB := history[1]
 
-			for i, h := range history {
-				timestamp := fmt.Sprintf("%d", h.Timestamp)
-				fmt.Printf("│  Response #%d: status=%d, duration=%dms, time=%s\n",
-					i+1, h.StatusCode, h.DurationMs, timestamp)
+			diff, err := formatter.DiffResponses(*histA, *histB)
+			if err != nil {
+				return fmt.Errorf("failed to diff responses: %w", err)
 			}
 
-			fmt.Println("│                                                         │")
-			fmt.Println("└─────────────────────────────────────────────────────────┘")
-
+			fmt.Println(diff)
 			return nil
 		},
 	}

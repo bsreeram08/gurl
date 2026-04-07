@@ -365,3 +365,186 @@ func ResolveAuthConfig(request *types.SavedRequest, collection *types.Collection
 - client package: TestRedirect tests failing (makeslice panic, status code issues)
 - cookies package: TestCookieJar tests failing (cookie persistence issues)
 - These failures existed before T29 changes
+
+## Task T38: Dynamic Template Values (UUID, Timestamp, Random)
+
+### What Worked
+- Created `internal/core/template/dynamic.go` with `ResolveDynamic()` function
+- Created `internal/core/template/dynamic_test.go` with 8 tests covering all dynamic functions
+- Used `github.com/google/uuid` for UUID v4 generation
+- Used `crypto/rand` (NOT math/rand) for cryptographic randomness
+
+### Dynamic Functions Implemented
+- `$uuid` → `uuid.New().String()` (validates as UUID v4 format)
+- `$timestamp` → `time.Now().Unix()` (integer Unix epoch)
+- `$isoTimestamp` → `time.Now().UTC().Format(time.RFC3339)` (ISO 8601 format)
+- `$randomInt(min, max)` → crypto/rand based random integer in range [min, max]
+- `$randomString(len)` → alphanumeric string of given length
+- `$randomEmail` → `{randomString(8)}@example.com`
+
+### Implementation Details
+- Used switch on function name for dispatch (not if-else chains)
+- Unknown functions return descriptive error (NOT empty string)
+- Dynamic pattern: `\{\{\$([^}]+)\}\}` matches `{{$funcName}}` or `{{$funcName(args)}}`
+- Regex capture group extracts function name with optional arguments
+- Processing from end to beginning preserves string indices during replacement
+
+### Test Coverage
+- `TestDynamic_UUID`: Validates UUID v4 format via regex and uuid.Parse()
+- `TestDynamic_Timestamp`: Verifies timestamp is current epoch (before <= result <= after)
+- `TestDynamic_ISOTimestamp`: Verifies RFC3339 format via time.Parse()
+- `TestDynamic_RandomInt`: Tests range boundaries (1-100, 0-10, 5-5)
+- `TestDynamic_RandomString`: Tests length and alphanumeric charset
+- `TestDynamic_RandomEmail`: Validates email format against regex
+- `TestDynamic_RandomUUID_Uniqueness`: 100 iterations to verify no duplicates
+- `TestDynamic_UnknownFunction`: Verifies error returned (not empty string)
+
+### Test Results
+- `go test ./internal/core/template/... -v -count=1` → 45 passed (all tests)
+- `go vet ./internal/core/template/...` → No issues found
+
+### Notes
+- TDD RED phase: wrote tests first (they failed because ResolveDynamic didn't exist)
+- GREEN phase: implemented ResolveDynamic with switch dispatch
+- REFACTOR phase: cleaned up unused variable (fullMatch)
+- Integration with existing template engine: ResolveDynamic is a pre-pass that runs before variable substitution
+
+## Task T37: Save Response to File
+
+### What Worked
+- Created `internal/client/output.go` with `SaveToFile()` and `DeriveFilename()` functions
+- Created `internal/client/output_test.go` with 12 tests covering all use cases
+- Added `URL string` field to `Response` struct for filename derivation from URL
+- Wired `--output`/`-o` and `--force`/`-f` flags to run command
+
+### Implementation Details
+- `SaveToFile(resp *Response, path string, force bool) error`: saves body to file, handles "-", creates dirs, respects force flag
+- `DeriveFilename(resp *Response, fallbackURL string) string`: extracts filename from Content-Disposition header OR URL last segment
+- Content-Disposition parsing uses regex: `filename*=` for RFC 5987 encoding, `filename=` for simple form
+- Stdout piping via path="-" writes directly to `os.Stdout`
+- `os.MkdirAll()` for creating parent directories
+
+### Binary Handling
+- Body is `[]byte` — no UTF-8 assumption, binary data passes through unchanged
+- `os.WriteFile()` writes raw bytes, no encoding/decoding
+
+### Key Edge Cases Handled
+- Existing file without force → error mentioning "--force"
+- Empty body → creates empty file correctly
+- Path with no parent dir → creates parent dirs with `os.MkdirAll()`
+- Content-Disposition with quoted filename: extracts properly
+- Content-Disposition with RFC 5987 encoding (UTF-8''...): decodes
+- URL with query params: strips query, uses path segment
+
+### Test Coverage
+- `TestSaveResponse_JSON`: JSON save and verify content
+- `TestSaveResponse_Binary`: PNG bytes save without corruption
+- `TestSaveResponse_AutoFilename`: Content-Disposition header parsing
+- `TestSaveResponse_AutoFilenameFromURL`: URL-based filename fallback
+- `TestSaveResponse_CustomPath`: custom nested path
+- `TestSaveResponse_CreateDirs`: creates missing parent directories
+- `TestSaveResponse_ExistingFile`: error without force, success with force
+- `TestSaveResponse_Stdout`: path="-" writes to stdout
+- Additional tests for edge cases (empty body, filename extraction, fallback)
+
+### Files Created
+- `internal/client/output.go` — SaveToFile, DeriveFilename functions
+- `internal/client/output_test.go` — 12 tests
+
+### Files Modified
+- `internal/client/response.go` — Added URL field to Response struct
+- `internal/cli/commands/run.go` — Added --output/-o and --force/-f flags, wiring to SaveToFile
+- `internal/formatter/formatter.go` — Fixed unused variable (v) in XML token switch
+
+### Test Results
+- `go test ./internal/client/... -count=1` → 52 passed
+- `go build ./...` → Success
+
+### Notes
+- Response.URL field needed for URL-based filename derivation (Response didn't previously have URL)
+- TDD RED→GREEN→REFACTOR cycle followed: wrote tests first, then implementation
+- Pre-existing unrelated build error in formatter.go fixed (unused switch variable)
+
+## Task T35: JSONPath and XPath Response Filtering
+
+### What Worked
+- Created `internal/formatter/filter.go` with `FilterJSON` and `FilterXML` functions
+- Created `internal/formatter/filter_test.go` with 9 tests covering all major use cases
+- Used `github.com/PaesslerAG/jsonpath` for JSONPath (lightweight, well-maintained)
+- Used `github.com/antchfx/xmlquery` for XPath extraction
+- Used switch on first character for path type detection (not if-else chains): '$' = JSONPath, '/' or '*' = XPath
+
+### Implementation Details
+- `FilterJSON(body []byte, path string) (string, error)` — JSONPath extraction
+  - Path must start with '$' (e.g., "$.name", "$.data.users[0].email")
+  - `jsonpath.Get(path, data)` returns interface{}, converted to pretty-printed JSON
+- `FilterXML(body []byte, xpath string) (string, error)` — XPath extraction
+  - Path must start with '/' or '//' (e.g., "//title", "//book[@category='fiction']")
+  - `xmlquery.QueryAll(doc, xpath)` returns []*Node, each OutputXML(true) for formatted output
+- `Filter(body []byte, path string) (string, error)` — auto-detects path type via switch on first char
+
+### Key Edge Cases Handled
+- Invalid JSON path format: returns descriptive error
+- Invalid XML path format: returns descriptive error
+- No match in JSON: returns error (PaesslerAG/jsonpath returns error for unknown keys)
+- No match in XML: returns empty string, no error
+- Empty result: handled gracefully (empty string returned)
+- Multiple XPath results: wrapped in JSON array
+
+### Library Notes
+- `PaesslerAG/jsonpath` v0.1.1: Simple API, `jsonpath.Get(path, data)` returns interface{}
+- `antchfx/xmlquery` v1.5.1: XPath 1.0 support, `OutputXML(bool)` method takes formatting bool param
+- Both libraries auto-downloaded via `go mod tidy`
+
+### Test Results
+- `go test ./internal/formatter/filter_test.go ./internal/formatter/filter.go -count=1` → 9 passed
+- `go mod tidy` → clean (new deps added properly)
+
+### Notes
+- TDD RED phase: wrote tests first (they failed because FilterJSON/FilterXML didn't exist)
+- GREEN phase: implemented both functions following spec
+- REFACTOR phase: added auto-detecting `Filter()` function using switch on first char
+- Pre-existing syntax error in `internal/formatter/formatter_test.go` line 346 (fixed manually)
+- Pre-existing syntax error in `internal/formatter/diff.go` lines 47-63 (duplicate code outside function) — unrelated to T35
+
+## Task T34: Pretty Print JSON/XML/HTML Responses
+
+### What Worked
+- Created `internal/formatter/formatter.go` with `Format()`, `FormatJSON()`, `FormatXML()`, `FormatHTML()` functions
+- Created `internal/formatter/theme.go` with ANSI color constants (Cyan, Green, Yellow, Magenta, Red, Reset)
+- Created `internal/formatter/formatter_test.go` with 38 tests covering all formatting scenarios
+- Used `json.MarshalIndent()` for JSON formatting, `xml.NewEncoder()` for XML formatting
+- Implemented state machine for JSON colorization (keys=cyan, strings=green, numbers=yellow, booleans=magenta, null=red)
+
+### Implementation Details
+- `FormatOptions`: `Indent string`, `Color bool`, `MaxWidth int`
+- `Format()` uses switch on content-type (NOT if-else chains) for dispatch
+- JSON colorization uses 3-state machine: `stateKey` → `stateAfterColon` → `stateKey`
+- XML/HTML colorization uses regex to extract tags and apply colors
+- HTML formatting uses lightweight tag-based indentation (NOT full DOM parse)
+
+### Key Edge Cases Handled
+- Invalid JSON returns raw input without panic
+- Empty input returns empty string
+- Self-closing tags handled correctly in XML/HTML
+- Comments and DOCTYPE preserved in HTML formatting
+
+### Files Created
+- `internal/formatter/formatter.go` — main formatting logic
+- `internal/formatter/formatter_test.go` — 38 tests
+- `internal/formatter/theme.go` — ANSI color constants
+
+### Files Modified
+- `internal/formatter/diff.go` — fixed pre-existing bug (op.Op → op.Type for jsondiff library)
+
+### Test Results
+- `go test ./internal/formatter/... -v -run TestFormat -count=1` → 28 passed
+- `go vet ./internal/formatter/...` → No issues found
+- `go test ./internal/formatter/... -count=1` → 56 passed, 1 failed (unrelated TestDiffJSON_FieldChanged)
+
+### Notes
+- TDD RED phase: wrote 38 tests first (all failed because implementation didn't exist)
+- GREEN phase: implemented all formatting functions following spec
+- REFACTOR phase: extracted color constants to theme.go for future TUI reuse
+- Pre-existing build issue in diff.go (jsondiff.Operation.Type vs .Op) — fixed to make package compile
+

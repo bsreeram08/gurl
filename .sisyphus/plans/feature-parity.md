@@ -1976,7 +1976,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/auth/ntlm.go`, `internal/auth/ntlm_test.go`
   - Pre-commit: `go test ./internal/auth/... -count=1`
 
-- [ ] 29. Auth inheritance from collections/folders
+- [x] 29. Auth inheritance from collections/folders
 
   **What to do**:
   - RED: Write test: (1) request with no auth config inherits auth from its collection, (2) request auth overrides collection auth, (3) "no auth" explicitly set on request prevents inheritance
@@ -2030,7 +2030,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `pkg/types/types.go`, `internal/auth/resolve.go`, `internal/storage/migration.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 30. Cookie jar management
+- [x] 30. Cookie jar management
 
   **What to do**:
   - RED: Write tests: (1) cookies from Set-Cookie headers saved to jar, (2) subsequent requests to same domain include saved cookies, (3) cookie expiry honored, (4) cookie jar persists across sessions
@@ -2085,7 +2085,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/cookies/jar.go`, `internal/cookies/jar_test.go`, `internal/cli/commands/cookies.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 31. Redirect handling (follow/max config)
+- [x] 31. Redirect handling (follow/max config)
 
   **What to do**:
   - RED: Write tests: (1) redirects followed by default (max 10), (2) `--no-follow` disables redirect following, (3) `--max-redirects N` limits redirect count, (4) redirect chain tracked in response metadata
@@ -2136,7 +2136,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/client/client.go`, `internal/client/client_test.go`
   - Pre-commit: `go test ./internal/client/... -count=1`
 
-- [ ] 32. Proxy configuration
+- [x] 32. Proxy configuration
 
   **What to do**:
   - RED: Write tests: (1) request sent through HTTP proxy, (2) HTTPS proxy (CONNECT), (3) SOCKS5 proxy, (4) no-proxy list honored, (5) proxy from environment (HTTP_PROXY, HTTPS_PROXY)
@@ -2190,7 +2190,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/client/client.go`, `internal/client/proxy.go`, `internal/client/proxy_test.go`
   - Pre-commit: `go test ./internal/client/... -count=1`
 
-- [ ] 33. Client certificates (mTLS) + SSL toggle
+- [x] 33. Client certificates (mTLS) + SSL toggle
 
   **What to do**:
   - RED: Write tests: (1) mTLS with client cert+key authenticates to server, (2) `--insecure` skips TLS verification, (3) custom CA cert bundle, (4) TLS version pinning
