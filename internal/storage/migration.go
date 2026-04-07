@@ -9,13 +9,23 @@ import (
 
 const schemaVersionKey = "schema_version"
 
-const currentSchemaVersion = 1
+const currentSchemaVersion = 3
 
 var migrations = map[int]func(db *leveldb.DB) error{
 	1: migrateToV1,
+	2: migrateToV2,
+	3: migrateToV3,
 }
 
 func migrateToV1(db *leveldb.DB) error {
+	return nil
+}
+
+func migrateToV2(db *leveldb.DB) error {
+	return nil
+}
+
+func migrateToV3(db *leveldb.DB) error {
 	return nil
 }
 

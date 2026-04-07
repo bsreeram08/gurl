@@ -1408,7 +1408,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/env/resolve.go`, `internal/env/resolve_test.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 19. Secret/encrypted variables
+- [x] 19. Secret/encrypted variables
 
   **What to do**:
   - RED: Write test: (1) save a secret variable — stored encrypted, (2) retrieve secret — decrypted only at execution time, (3) `env show` masks secret values with `***`
@@ -1764,7 +1764,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/auth/oauth2.go`, `internal/auth/oauth2_test.go`
   - Pre-commit: `go test ./internal/auth/... -count=1`
 
-- [ ] 25. OAuth 1.0
+- [x] 25. OAuth 1.0
 
   **What to do**:
   - RED: Write test: OAuth 1.0 handler generates correct signature base string, signs with HMAC-SHA1, sets Authorization header with oauth_* params
@@ -1817,7 +1817,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/auth/oauth1.go`, `internal/auth/oauth1_test.go`
   - Pre-commit: `go test ./internal/auth/... -count=1`
 
-- [ ] 26. AWS Signature v4
+- [x] 26. AWS Signature v4
 
   **What to do**:
   - RED: Write test: AWS Sig v4 handler generates correct canonical request, string to sign, signing key, and Authorization header matching AWS test suite
@@ -1871,7 +1871,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/auth/awsv4.go`, `internal/auth/awsv4_test.go`
   - Pre-commit: `go test ./internal/auth/... -count=1`
 
-- [ ] 27. Digest auth
+- [x] 27. Digest auth
 
   **What to do**:
   - RED: Write test: (1) first request gets 401 with WWW-Authenticate: Digest, (2) handler parses challenge, computes response hash, (3) retry with Authorization: Digest header
@@ -1923,7 +1923,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/auth/digest.go`, `internal/auth/digest_test.go`
   - Pre-commit: `go test ./internal/auth/... -count=1`
 
-- [ ] 28. NTLM auth
+- [x] 28. NTLM auth
 
   **What to do**:
   - RED: Write test: NTLM handler performs 3-step negotiate-challenge-authenticate handshake

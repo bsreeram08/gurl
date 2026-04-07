@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -403,5 +405,365 @@ func TestClient_AllMethods(t *testing.T) {
 		if err != nil {
 			t.Errorf("method %s failed: %v", method, err)
 		}
+	}
+}
+
+// ---- TLS Configuration Tests ----
+
+func TestTLSConfig_Struct(t *testing.T) {
+	cfg := TLSConfig{
+		CertFile:      "/path/to/cert.pem",
+		KeyFile:       "/path/to/key.pem",
+		CAFile:        "/path/to/ca.pem",
+		Insecure:      true,
+		MinTLSVersion: "1.2",
+	}
+
+	if cfg.CertFile != "/path/to/cert.pem" {
+		t.Errorf("expected CertFile '/path/to/cert.pem', got '%s'", cfg.CertFile)
+	}
+	if cfg.KeyFile != "/path/to/key.pem" {
+		t.Errorf("expected KeyFile '/path/to/key.pem', got '%s'", cfg.KeyFile)
+	}
+	if cfg.CAFile != "/path/to/ca.pem" {
+		t.Errorf("expected CAFile '/path/to/ca.pem', got '%s'", cfg.CAFile)
+	}
+	if !cfg.Insecure {
+		t.Error("expected Insecure to be true")
+	}
+	if cfg.MinTLSVersion != "1.2" {
+		t.Errorf("expected MinTLSVersion '1.2', got '%s'", cfg.MinTLSVersion)
+	}
+}
+
+func TestNewClientWithTLS_ValidConfig(t *testing.T) {
+	// Create a temporary self-signed certificate for testing
+	tmpDir := t.TempDir()
+	certFile := tmpDir + "/cert.pem"
+	keyFile := tmpDir + "/key.pem"
+
+	// Generate self-signed cert using Go's crypto libraries
+	generateSelfSignedCert(t, certFile, keyFile)
+
+	cfg := TLSConfig{
+		CertFile: certFile,
+		KeyFile:  keyFile,
+	}
+
+	client := NewClientWithTLS(cfg)
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+	if client.transport == nil {
+		t.Fatal("expected non-nil transport")
+	}
+	if client.transport.TLSClientConfig == nil {
+		t.Fatal("expected TLSClientConfig to be set")
+	}
+}
+
+func TestNewClientWithTLS_InsecureSkipsVerification(t *testing.T) {
+	tmpDir := t.TempDir()
+	certFile := tmpDir + "/cert.pem"
+	keyFile := tmpDir + "/key.pem"
+
+	generateSelfSignedCert(t, certFile, keyFile)
+
+	cfg := TLSConfig{
+		CertFile: certFile,
+		KeyFile:  keyFile,
+		Insecure: true,
+	}
+
+	client := NewClientWithTLS(cfg)
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+	if !client.transport.TLSClientConfig.InsecureSkipVerify {
+		t.Error("expected InsecureSkipVerify to be true")
+	}
+}
+
+func TestNewClientWithTLS_CustomCA(t *testing.T) {
+	tmpDir := t.TempDir()
+	certFile := tmpDir + "/cert.pem"
+	keyFile := tmpDir + "/key.pem"
+	caFile := tmpDir + "/ca.pem"
+
+	generateSelfSignedCert(t, certFile, keyFile)
+
+	// Use same cert as CA for testing
+	copyFile(t, certFile, caFile)
+
+	cfg := TLSConfig{
+		CertFile: certFile,
+		KeyFile:  keyFile,
+		CAFile:   caFile,
+	}
+
+	client := NewClientWithTLS(cfg)
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+	if client.transport.TLSClientConfig.RootCAs == nil {
+		t.Fatal("expected RootCAs to be set")
+	}
+}
+
+func TestNewClientWithTLS_MinTLSVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	certFile := tmpDir + "/cert.pem"
+	keyFile := tmpDir + "/key.pem"
+
+	generateSelfSignedCert(t, certFile, keyFile)
+
+	cfg := TLSConfig{
+		CertFile:      certFile,
+		KeyFile:       keyFile,
+		MinTLSVersion: "1.2",
+	}
+
+	client := NewClientWithTLS(cfg)
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+	// TLS 1.2 = 0x0303
+	if client.transport.TLSClientConfig.MinVersion != 0x0303 {
+		t.Errorf("expected MinVersion 0x0303 (TLS 1.2), got 0x%04x", client.transport.TLSClientConfig.MinVersion)
+	}
+}
+
+func TestNewClientWithTLS_CertFileNotFound(t *testing.T) {
+	cfg := TLSConfig{
+		CertFile: "/nonexistent/cert.pem",
+		KeyFile:  "/nonexistent/key.pem",
+	}
+
+	client := NewClientWithTLS(cfg)
+	// Should return client but with error logged (non-fatal for now)
+	if client == nil {
+		t.Fatal("expected non-nil client even with missing cert")
+	}
+}
+
+func TestNewClientWithTLS_KeyFileNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	certFile := tmpDir + "/cert.pem"
+
+	// Generate cert but no key
+	generateSelfSignedCert(t, certFile, "/dev/null")
+
+	cfg := TLSConfig{
+		CertFile: certFile,
+		KeyFile:  "/nonexistent/key.pem",
+	}
+
+	client := NewClientWithTLS(cfg)
+	if client == nil {
+		t.Fatal("expected non-nil client even with missing key")
+	}
+}
+
+func TestNewClientWithTLS_CAFileNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	certFile := tmpDir + "/cert.pem"
+	keyFile := tmpDir + "/key.pem"
+
+	generateSelfSignedCert(t, certFile, keyFile)
+
+	cfg := TLSConfig{
+		CertFile: certFile,
+		KeyFile:  keyFile,
+		CAFile:   "/nonexistent/ca.pem",
+	}
+
+	client := NewClientWithTLS(cfg)
+	if client == nil {
+		t.Fatal("expected non-nil client even with missing CA")
+	}
+}
+
+// ---- Helper functions for TLS tests ----
+
+// generateSelfSignedCert generates a self-signed certificate for testing
+func generateSelfSignedCert(t *testing.T, certFile, keyFile string) {
+	t.Helper()
+
+	// Use exec to generate cert since we can't easily do this in pure Go
+	// Skip if openssl not available
+	cmd := exec.Command("openssl", "req", "-x509", "-newkey", "rsa:2048",
+		"-keyout", keyFile, "-out", certFile,
+		"-days", "1", "-nodes", "-subj", "/CN=test")
+	err := cmd.Run()
+	if err != nil {
+		t.Skipf("openssl not available, skipping TLS test: %v", err)
+	}
+}
+
+func copyFile(t *testing.T, src, dst string) {
+	t.Helper()
+	content, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", src, err)
+	}
+	if err := os.WriteFile(dst, content, 0600); err != nil {
+		t.Fatalf("failed to write %s: %v", dst, err)
+	}
+}
+
+// ---- Redirect Handling Tests ----
+
+// redirectHandler creates a handler that redirects N times then returns final response
+func redirectHandler(redirectCount int, finalStatus int) http.HandlerFunc {
+	redirectCount++
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Track which hop this is
+		hops := r.Header.Get("X-Redirect-Hops")
+		if hops == "" {
+			hops = "0"
+		}
+		currentHop := len(strings.Split(hops, ","))
+
+		if currentHop < redirectCount {
+			// Perform redirect
+			baseURL := strings.Split(r.URL.String(), "/redirect-")[0]
+			if baseURL == r.URL.String() {
+				baseURL = strings.Split(r.URL.String(), "/final")[0]
+			}
+			redirectURL := baseURL + "/redirect-" + string(rune('0'+currentHop))
+			w.Header().Set("Location", redirectURL)
+			w.Header().Set("X-Redirect-Hops", hops+","+redirectURL)
+			w.WriteHeader(http.StatusFound) // 302
+		} else {
+			w.WriteHeader(finalStatus)
+		}
+	})
+}
+
+func TestRedirectFollowing_DefaultMax10(t *testing.T) {
+	hopCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hopCount < 3 {
+			w.Header().Set("Location", r.URL.Path+"-redirect")
+			hopCount++
+			w.WriteHeader(http.StatusFound)
+		} else {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"final":true}`))
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	resp, err := client.Execute(Request{
+		Method: "GET",
+		URL:    server.URL + "/start",
+	})
+	if err != nil {
+		t.Fatalf("Execute with redirects failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected final status 200, got %d", resp.StatusCode)
+	}
+	if len(resp.Redirects) != 3 {
+		t.Errorf("expected 3 redirect hops, got %d", len(resp.Redirects))
+	}
+}
+
+func TestRedirectFollowing_TracksChain(t *testing.T) {
+	hopCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hopCount < 2 {
+			w.Header().Set("Location", r.URL.Path+"-redirect")
+			hopCount++
+			w.WriteHeader(http.StatusFound)
+		} else {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"final":true}`))
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	resp, err := client.Execute(Request{
+		Method: "GET",
+		URL:    server.URL + "/start",
+	})
+	if err != nil {
+		t.Fatalf("Execute with redirects failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected final status 200, got %d", resp.StatusCode)
+	}
+	if len(resp.Redirects) != 2 {
+		t.Errorf("expected 2 redirect hops, got %d", len(resp.Redirects))
+	}
+	for i, hop := range resp.Redirects {
+		if hop.URL == "" {
+			t.Errorf("redirect hop %d: empty URL", i)
+		}
+		if hop.StatusCode == 0 {
+			t.Errorf("redirect hop %d: zero status code", i)
+		}
+	}
+}
+
+func TestRedirect_NoFollow(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/final")
+		w.WriteHeader(http.StatusFound)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := NewClient()
+	resp, err := client.Execute(Request{
+		Method:       "GET",
+		URL:          server.URL + "/start",
+		MaxRedirects: -1,
+	})
+	if err != nil {
+		t.Fatalf("Execute with no-follow failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusFound {
+		t.Errorf("expected 302 redirect status, got %d", resp.StatusCode)
+	}
+	if len(resp.Redirects) != 0 {
+		t.Errorf("expected 0 redirect hops recorded (not followed), got %d", len(resp.Redirects))
+	}
+}
+
+func TestRedirect_MaxRedirectsLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hops := r.Header.Get("X-Redirect-Hops")
+		if hops == "" {
+			hops = "0"
+		}
+		currentHop := len(strings.Split(hops, ","))
+		if currentHop < 5 {
+			w.Header().Set("Location", r.URL.Path+"-redirect")
+			w.Header().Set("X-Redirect-Hops", hops+",next")
+			w.WriteHeader(http.StatusFound)
+		} else {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"final":true}`))
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	resp, err := client.Execute(Request{
+		Method:       "GET",
+		URL:          server.URL + "/start",
+		MaxRedirects: 2,
+	})
+	if err != nil {
+		t.Fatalf("Execute with max-redirects failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusFound {
+		t.Errorf("expected 302 at max redirect limit, got %d", resp.StatusCode)
+	}
+	if len(resp.Redirects) != 2 {
+		t.Errorf("expected 2 redirect hops (at limit), got %d", len(resp.Redirects))
 	}
 }

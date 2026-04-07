@@ -34,12 +34,12 @@ func TestSchemaVersionNewDB(t *testing.T) {
 		t.Fatalf("failed to unmarshal schema version: %v", err)
 	}
 
-	if version != 1 {
-		t.Errorf("expected schema version 1, got %d", version)
+	if version != 3 {
+		t.Errorf("expected schema version 3, got %d", version)
 	}
 }
 
-// TestSchemaVersionLegacyDB tests that a DB without version key migrates to version 1 on Open()
+// TestSchemaVersionLegacyDB tests that a DB without version key migrates to version 3 on Open()
 func TestSchemaVersionLegacyDB(t *testing.T) {
 	// Create temp dir for test DB
 	tmpDir := t.TempDir()
@@ -73,8 +73,8 @@ func TestSchemaVersionLegacyDB(t *testing.T) {
 		t.Fatalf("failed to unmarshal schema version: %v", err)
 	}
 
-	if version != 1 {
-		t.Errorf("expected schema version 1 after migration, got %d", version)
+	if version != 3 {
+		t.Errorf("expected schema version 3 after migration, got %d", version)
 	}
 
 	// Verify legacy data still exists
@@ -89,7 +89,7 @@ func TestMigrateIfNeeded(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test_migrate.db")
 
-	// Create DB with version 0 (below current version 1)
+	// Create DB with version 0 (below current version 3)
 	db := &LMDB{dbPath: dbPath}
 	if err := db.Open(); err != nil {
 		t.Fatalf("failed to open DB: %v", err)
@@ -107,7 +107,7 @@ func TestMigrateIfNeeded(t *testing.T) {
 	}
 	defer db2.Close()
 
-	// Verify version is now 1
+	// Verify version is now 3
 	data, err := db2.DB.Get([]byte("schema_version"), nil)
 	if err != nil {
 		t.Fatalf("schema_version key not found: %v", err)
@@ -118,8 +118,8 @@ func TestMigrateIfNeeded(t *testing.T) {
 		t.Fatalf("failed to unmarshal schema version: %v", err)
 	}
 
-	if version != 1 {
-		t.Errorf("expected schema version 1 after migration, got %d", version)
+	if version != 3 {
+		t.Errorf("expected schema version 3 after migration, got %d", version)
 	}
 }
 
@@ -134,13 +134,13 @@ func TestGetSchemaVersion(t *testing.T) {
 	}
 	defer db.Close()
 
-	// New DB should have version 1 after Open
+	// New DB should have version 3 after Open
 	version, err := db.GetSchemaVersion()
 	if err != nil {
 		t.Fatalf("GetSchemaVersion failed: %v", err)
 	}
-	if version != 1 {
-		t.Errorf("expected version 1, got %d", version)
+	if version != 3 {
+		t.Errorf("expected version 3, got %d", version)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestSchemaVersionAfterOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSchemaVersion failed: %v", err)
 	}
-	if version != 1 {
-		t.Errorf("expected version 1 after Open(), got %d", version)
+	if version != 3 {
+		t.Errorf("expected version 3 after Open(), got %d", version)
 	}
 }

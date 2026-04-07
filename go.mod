@@ -3,15 +3,14 @@ module github.com/sreeram/gurl
 go 1.26.1
 
 require (
+	github.com/Azure/go-ntlmssp v0.1.0
 	github.com/google/uuid v1.6.0
+	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/pelletier/go-toml/v2 v2.3.0
 	github.com/syndtr/goleveldb v1.0.0
 	github.com/urfave/cli/v3 v3.5.0
+	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require (
-	github.com/Azure/go-ntlmssp v0.1.0 // indirect
-	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
-	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
-)
+require github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect

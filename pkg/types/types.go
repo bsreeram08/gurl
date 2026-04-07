@@ -6,6 +6,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// AuthConfig holds the authentication configuration for a request or collection.
+type AuthConfig struct {
+	Type   string            `json:"type"`
+	Params map[string]string `json:"params"`
+}
+
 // Header represents an HTTP header
 type Header struct {
 	Key   string `json:"key"`
@@ -29,19 +35,20 @@ type ParsedCurl struct {
 
 // SavedRequest represents a saved curl request
 type SavedRequest struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	CurlCmd      string   `json:"curl_cmd"`
-	URL          string   `json:"url"`
-	Method       string   `json:"method"`
-	Headers      []Header `json:"headers"`
-	Body         string   `json:"body,omitempty"`
-	Variables    []Var    `json:"variables,omitempty"`
-	Collection   string   `json:"collection,omitempty"`
-	Tags         []string `json:"tags,omitempty"`
-	OutputFormat string   `json:"output_format"`
-	CreatedAt    int64    `json:"created_at"`
-	UpdatedAt    int64    `json:"updated_at"`
+	ID           string      `json:"id"`
+	Name         string      `json:"name"`
+	CurlCmd      string      `json:"curl_cmd"`
+	URL          string      `json:"url"`
+	Method       string      `json:"method"`
+	Headers      []Header    `json:"headers"`
+	Body         string      `json:"body,omitempty"`
+	Variables    []Var       `json:"variables,omitempty"`
+	Collection   string      `json:"collection,omitempty"`
+	Tags         []string    `json:"tags,omitempty"`
+	OutputFormat string      `json:"output_format"`
+	AuthConfig   *AuthConfig `json:"auth_config,omitempty"`
+	CreatedAt    int64       `json:"created_at"`
+	UpdatedAt    int64       `json:"updated_at"`
 }
 
 // ExecutionHistory represents an execution record
@@ -70,10 +77,11 @@ func NewExecutionHistory(requestID string, response string, statusCode int, dura
 
 // Collection represents a collection of requests
 type Collection struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt int64  `json:"created_at"`
-	UpdatedAt int64  `json:"updated_at"`
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	AuthConfig *AuthConfig `json:"auth_config,omitempty"`
+	CreatedAt  int64       `json:"created_at"`
+	UpdatedAt  int64       `json:"updated_at"`
 }
 
 // Config represents the application configuration

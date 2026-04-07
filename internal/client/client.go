@@ -2,13 +2,43 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"fmt"
 	"net/http"
+	"os"
 	"time"
 )
 
+var ErrTooManyRedirects = errors.New("too many redirects")
+
+type statusCapturingTransport struct {
+	http.RoundTripper
+	onResponse func(statusCode int)
+}
+
+func (t *statusCapturingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.RoundTripper.RoundTrip(req)
+	if err == nil && resp != nil {
+		t.onResponse(resp.StatusCode)
+	}
+	return resp, err
+}
+
+type TLSConfig struct {
+	CertFile      string
+	KeyFile       string
+	CAFile        string
+	Insecure      bool
+	MinTLSVersion string
+}
+
 type Client struct {
-	transport *http.Transport
-	timeout   time.Duration
+	transport   *http.Transport
+	timeout     time.Duration
+	proxyConfig *proxyConfig
+	Jar         http.CookieJar
 }
 
 func NewClient() *Client {
@@ -17,6 +47,70 @@ func NewClient() *Client {
 			DisableKeepAlives: true,
 		},
 		timeout: defaultTimeout,
+	}
+}
+
+func NewClientWithTLS(cfg TLSConfig) *Client {
+	tlsConfig := &tls.Config{}
+
+	if cfg.Insecure {
+		tlsConfig.InsecureSkipVerify = true
+		fmt.Fprintf(os.Stderr, "WARNING: TLS verification disabled. This is insecure and should only be used for testing.\n")
+	}
+
+	if cfg.CertFile != "" && cfg.KeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: Failed to load client certificate: %v\n", err)
+		} else {
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+	}
+
+	if cfg.CAFile != "" {
+		caCert, err := os.ReadFile(cfg.CAFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: Failed to read CA file: %v\n", err)
+		} else {
+			caCertPool := x509.NewCertPool()
+			if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+				fmt.Fprintf(os.Stderr, "WARNING: Failed to parse CA certificate\n")
+			} else {
+				tlsConfig.RootCAs = caCertPool
+			}
+		}
+	}
+
+	if cfg.MinTLSVersion != "" {
+		version, err := parseTLSVersion(cfg.MinTLSVersion)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: Invalid TLS version '%s': %v\n", cfg.MinTLSVersion, err)
+		} else {
+			tlsConfig.MinVersion = version
+		}
+	}
+
+	return &Client{
+		transport: &http.Transport{
+			DisableKeepAlives: true,
+			TLSClientConfig:   tlsConfig,
+		},
+		timeout: defaultTimeout,
+	}
+}
+
+func parseTLSVersion(version string) (uint16, error) {
+	switch version {
+	case "1.0":
+		return tls.VersionTLS10, nil
+	case "1.1":
+		return tls.VersionTLS11, nil
+	case "1.2":
+		return tls.VersionTLS12, nil
+	case "1.3":
+		return tls.VersionTLS13, nil
+	default:
+		return 0, fmt.Errorf("unsupported TLS version: %s", version)
 	}
 }
 
@@ -44,16 +138,79 @@ func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response,
 		httpReq.Body = http.NoBody
 	}
 
-	client := &http.Client{
+	maxRedirects := req.MaxRedirects
+	if maxRedirects == 0 {
+		maxRedirects = DefaultMaxRedirects
+	}
+
+	var redirectHops []RedirectHop
+	var redirectChain []string
+
+	httpClient := &http.Client{
 		Transport: c.transport,
 		Timeout:   c.timeout,
 	}
 
+	if req.ProxyURL != "" || len(req.NoProxy) > 0 {
+		httpClient = c.buildClientWithProxy(req)
+	}
+
+	if maxRedirects < 0 {
+		httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	} else if maxRedirects > 0 {
+		redirectHops = make([]RedirectHop, 0, maxRedirects)
+		redirectChain = make([]string, 0, maxRedirects)
+		lastStatusCode := 0
+		origTransport := httpClient.Transport
+		httpClient.Transport = &statusCapturingTransport{
+			RoundTripper: origTransport,
+			onResponse: func(statusCode int) {
+				lastStatusCode = statusCode
+			},
+		}
+		httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			if len(via) > 0 {
+				prevReq := via[len(via)-1]
+				statusCode := lastStatusCode
+				if prevReq.Response != nil {
+					statusCode = prevReq.Response.StatusCode
+				}
+				hop := RedirectHop{
+					URL:        prevReq.URL.String(),
+					StatusCode: statusCode,
+				}
+				redirectHops = append(redirectHops, hop)
+				redirectChain = append(redirectChain, req.URL.String())
+			}
+			if len(via) >= maxRedirects {
+				return ErrTooManyRedirects
+			}
+			return nil
+		}
+	}
+
 	start := time.Now()
-	httpResp, err := client.Do(httpReq)
+	httpResp, err := httpClient.Do(httpReq)
 	duration := time.Since(start)
 
 	if err != nil {
+		if errors.Is(err, ErrTooManyRedirects) && len(redirectHops) > 0 {
+			lastHop := redirectHops[len(redirectHops)-1]
+			headers := http.Header{}
+			if httpResp != nil {
+				headers = httpResp.Header
+			}
+			return Response{
+				StatusCode: lastHop.StatusCode,
+				Headers:    headers,
+				Body:       []byte{},
+				Duration:   duration,
+				Size:       0,
+				Redirects:  redirectHops,
+			}, nil
+		}
 		return Response{}, err
 	}
 	defer httpResp.Body.Close()
@@ -76,5 +233,6 @@ func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response,
 		Body:       body,
 		Duration:   duration,
 		Size:       int64(len(body)),
+		Redirects:  redirectHops,
 	}, nil
 }
