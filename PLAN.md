@@ -172,18 +172,77 @@ if fn, ok := actions[x]; ok {
 
 ---
 
-## Implementation Order
+## Completed
 
-1. **Rename project** (gurl)
-2. **Update README.md** (all docs)
-3. **Setup GitHub Actions** (CI/CD)
-4. **Create release script**
-5. **Add import system** (interfaces first)
-6. **Implement OpenAPI importer**
-7. **Implement Insomnia importer**
-8. **Implement Bruno importer**
-9. **Create Journey.md**
-10. **Review and test**
+- [x] Rename project to Gurl
+- [x] README.md
+- [x] GitHub Actions CI/CD (build.yml)
+- [x] Install script (scripts/install.sh)
+- [x] Import system (OpenAPI, Insomnia, Bruno, Postman, HAR)
+- [x] Core CRUD: save (basic), run, list, delete, rename
+- [x] Storage: LevelDB with indices
+- [x] History tracking + timeline
+- [x] Collections + tags
+- [x] Template engine + variable detection
+- [x] Export (JSON) + paste (clipboard)
+- [x] Update command (self-update from GitHub releases)
+- [x] Shell completions (bash, zsh, fish)
+- [x] Journey.md
+
+## In Progress
+
+### Fix: Build workflow binary naming (v0.1.10)
+- [x] Fix `ubuntu-latest` → `linux` in binary names (build.yml)
+- [ ] Tag and release v0.1.10 to publish correctly-named binaries
+
+### Enhance: Save command (full curl support)
+The save command currently only accepts `<name> <url>` and stores as GET with no headers/body.
+The data model (`SavedRequest`) already supports headers, body, method, and curl_cmd — they're just not wired into the save command.
+
+**Implementation tasks:**
+- [ ] Add `-X/--method` flag for HTTP method
+- [ ] Add `-H/--header` flag (repeatable) for headers
+- [ ] Add `-d/--data` flag for request body
+- [ ] Add `--curl` flag for raw curl string parsing (uses existing `internal/core/curl/parser.go`)
+- [ ] Add stdin pipe detection for curl strings
+- [ ] Auto-detect POST when body present and no method specified
+- [ ] Store original curl command in `CurlCmd` field
+- [ ] Fix `--tag` flag to support multiple values (currently single StringFlag)
+- [ ] Wire in variable detection from `internal/core/curl/detector.go`
+
+**Files to modify:**
+- `internal/cli/commands/save.go` — main enhancement target
+- `internal/core/curl/parser.go` — may need fixes for multiline/complex bodies
+
+---
+
+## TODO: Remaining Feature Gaps
+
+### Stub commands that need implementation
+- [ ] `detect` command — interactive curl parsing flow (Phase 2, TUI)
+- [ ] `edit` command — modify saved requests (TUI form)
+- [ ] `diff` command — needs response body storage in history
+
+### Config integration
+- [ ] Wire `internal/config/` loader into commands
+- [ ] Respect config settings (history_depth, auto_template, output format, etc.)
+
+### Testing
+- [ ] Integration tests for save → run round-trip
+- [ ] Parser tests for complex curl strings
+- [ ] Storage layer tests beyond basic mocks
+
+---
+
+## Implementation Order (Next)
+
+1. **Enhance save command** (headers, body, method, curl parsing)
+2. **Fix build workflow** (binary naming) + release v0.1.10
+3. **Wire config** into commands
+4. **Implement detect** command
+5. **Implement edit** command
+6. **Add response storage** for diff
+7. **Expand tests**
 
 ---
 

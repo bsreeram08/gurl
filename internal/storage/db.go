@@ -48,13 +48,13 @@ func NewLMDB() (*LMDB, error) {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	dbDir := filepath.Join(homeDir, ".local", "share", "scurl")
+	dbDir := filepath.Join(homeDir, ".local", "share", "gurl")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create db directory: %w", err)
 	}
 
-	dbPath := filepath.Join(dbDir, "scurl.db")
-	if envPath := os.Getenv("SCURL_DB_PATH"); envPath != "" {
+	dbPath := filepath.Join(dbDir, "gurl.db")
+	if envPath := os.Getenv("GURL_DB_PATH"); envPath != "" {
 		dbPath = envPath
 	}
 

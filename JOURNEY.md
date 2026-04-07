@@ -28,7 +28,7 @@
 
 | Date | Decision | Rationale | Alternative Considered |
 |------|----------|-----------|----------------------|
-| 2026-04-07 | Name: Gurl | Memorable, short, Google-proof | scurl, rcurl, hurl, acurl |
+| 2026-04-07 | Name: Gurl | Memorable, short, Google-proof | gurl, rcurl, hurl, acurl |
 | 2026-04-07 | GURL acronym | "Gurl's Universal Request Library" - like GNU | Various alternatives |
 | 2026-04-07 | Go over Zig | Faster development, better CLI ecosystem (cobra, bubbletea) | Zig for performance |
 | 2026-04-07 | TOML config | Native Go library, human-readable | YAML, JSON |

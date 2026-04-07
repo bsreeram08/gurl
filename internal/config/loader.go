@@ -18,9 +18,9 @@ type Loader struct {
 func NewLoader() *Loader {
 	return &Loader{
 		configPaths: []string{
-			".scurlrc",
-			filepath.Join(os.Getenv("HOME"), ".scurlrc"),
-			filepath.Join(os.Getenv("HOME"), ".config", "scurl", "config.toml"),
+			".gurlrc",
+			filepath.Join(os.Getenv("HOME"), ".gurlrc"),
+			filepath.Join(os.Getenv("HOME"), ".config", "gurl", "config.toml"),
 		},
 	}
 }
@@ -29,10 +29,10 @@ func NewLoader() *Loader {
 func (l *Loader) Load() (*types.Config, error) {
 	config := DefaultConfig()
 
-	// Check SCURL_CONFIG_PATH environment variable first
-	if envPath := os.Getenv("SCURL_CONFIG_PATH"); envPath != "" {
+	// Check GURL_CONFIG_PATH environment variable first
+	if envPath := os.Getenv("GURL_CONFIG_PATH"); envPath != "" {
 		if err := l.loadFile(envPath, config); err != nil {
-			return nil, fmt.Errorf("loading config from SCURL_CONFIG_PATH: %w", err)
+			return nil, fmt.Errorf("loading config from GURL_CONFIG_PATH: %w", err)
 		}
 		return config, nil
 	}

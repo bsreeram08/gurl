@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/urfave/cli/v3"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/urfave/cli/v3"
 )
 
 // DetectCommand creates the detect command
@@ -39,7 +39,7 @@ func DetectCommand(db storage.DB) *cli.Command {
 			fmt.Println("│  Detect feature is under development                     │")
 			fmt.Println("│                                                         │")
 			fmt.Println("│  Currently supported:                                   │")
-			fmt.Println("│    - Save requests with: scurl save <name> <url>        │")
+			fmt.Println("│    - Save requests with: gurl save <name> <url>          │")
 			fmt.Println("│    - Parse curl: Coming in Phase 2                     │")
 			fmt.Println("│                                                         │")
 			fmt.Println("└─────────────────────────────────────────────────────────┘")

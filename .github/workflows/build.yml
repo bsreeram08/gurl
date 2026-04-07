@@ -42,13 +42,23 @@ jobs:
         run: |
           ext=""
           if [ "${{ matrix.os }}" = "windows-latest" ]; then ext=".exe"; fi
-          os_name=$([[ "${{ matrix.os }}" == "macos-latest" ]] && echo "darwin" || echo "${{ matrix.os }}")
+          case "${{ matrix.os }}" in
+            macos-latest) os_name="darwin" ;;
+            ubuntu-latest) os_name="linux" ;;
+            windows-latest) os_name="windows" ;;
+            *) os_name="${{ matrix.os }}" ;;
+          esac
           name="gurl-${os_name}-${{ matrix.arch }}${ext}"
           go build -ldflags="-s -w -X main.version=${VERSION} -X github.com/sreeram/gurl/internal/cli/commands.CurrentVersion=${VERSION}" -o "$name" ./cmd/gurl
 
       - name: Checksum
         run: |
-          os_name=$([[ "${{ matrix.os }}" == "macos-latest" ]] && echo "darwin" || echo "${{ matrix.os }}")
+          case "${{ matrix.os }}" in
+            macos-latest) os_name="darwin" ;;
+            ubuntu-latest) os_name="linux" ;;
+            windows-latest) os_name="windows" ;;
+            *) os_name="${{ matrix.os }}" ;;
+          esac
           name="gurl-${os_name}-${{ matrix.arch }}"
           sha256sum "$name" > SHA256SUMS
           tar -czf "${name}.tar.gz" "$name"

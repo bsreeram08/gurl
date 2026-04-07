@@ -233,7 +233,7 @@ gurl: Failed to connect: connection refused
 ## Environment Variables
 
 ```bash
-SCURL_DB_PATH=~/.local/share/gurl/gurl.db
-SCURL_CONFIG_PATH=./.gurlrc
+GURL_DB_PATH=~/.local/share/gurl/gurl.db
+GURL_CONFIG_PATH=./.gurlrc
 GURL_TOKEN=your-api-token  # Use in requests with $VAR
 ```

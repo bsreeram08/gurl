@@ -1,19 +1,19 @@
-# AGENT.md - scurl Development Guide
+# AGENT.md - gurl Development Guide
 
 ## Project Overview
 
-**scurl** is a smart curl saver and API companion built in Go. It replaces chaotic `Ctrl+R` curl history with an intelligent, named request library.
+**gurl** is a smart curl saver and API companion built in Go. It replaces chaotic `Ctrl+R` curl history with an intelligent, named request library.
 
 - **Language**: Go 1.21+
-- **Module**: `github.com/sreeram/scurl`
+- **Module**: `github.com/sreeram/gurl`
 - **Tech Stack**: Go + bubbletea (TUI) + LMDB (storage) + urfave/cli (CLI)
 - **PRD**: See `PRD.md` for full specification
 
 ## Project Structure
 
 ```
-scurl/
-├── cmd/scurl/main.go           # Entry point
+gurl/
+├── cmd/gurl/main.go           # Entry point
 ├── internal/
 │   ├── cli/                    # CLI framework
 │   │   ├── parser.go          # Argument parsing
@@ -42,36 +42,36 @@ scurl/
 
 ### Storage
 - **LMDB** via Go wrapper - Fast embedded key-value store
-- Database location: `~/.local/share/scurl/scurl.db`
+- Database location: `~/.local/share/gurl/gurl.db`
 
 ### Configuration
 - **go-toml/v2** - TOML config file parsing
 - Config locations checked in order:
-  1. `./.scurlrc`
-  2. `~/.scurlrc`
-  3. `~/.config/scurl/config.toml`
+  1. `./.gurlrc`
+  2. `~/.gurlrc`
+  3. `~/.config/gurl/config.toml`
 
 ## Commands to Implement
 
 ### Phase 1 (Core Foundation)
-- [ ] `scurl save <name> <url> [options]` - Save a request
-- [ ] `scurl run <name> [--var key=value]` - Execute a request
-- [ ] `scurl list [--pattern] [--collection] [--tag] [--json]` - List requests
-- [ ] `scurl delete <name>` - Delete a request
-- [ ] `scurl rename <old> <new>` - Rename a request
+- [ ] `gurl save <name> <url> [options]` - Save a request
+- [ ] `gurl run <name> [--var key=value]` - Execute a request
+- [ ] `gurl list [--pattern] [--collection] [--tag] [--json]` - List requests
+- [ ] `gurl delete <name>` - Delete a request
+- [ ] `gurl rename <old> <new>` - Rename a request
 
 ### Phase 2 (Detect & Templates)
-- [ ] `scurl detect` - Parse curl from stdin
+- [ ] `gurl detect` - Parse curl from stdin
 - [ ] Variable extraction ({{var}})
 - [ ] Template engine
 
 ### Phase 3 (History & Timeline)
-- [ ] `scurl history <name>` - Per-request history
-- [ ] `scurl timeline` - Global timeline
-- [ ] `scurl diff <name>` - Compare responses
+- [ ] `gurl history <name>` - Per-request history
+- [ ] `gurl timeline` - Global timeline
+- [ ] `gurl diff <name>` - Compare responses
 
 ### Phase 4 (Collections)
-- [ ] `scurl collection add|list|remove|rename`
+- [ ] `gurl collection add|list|remove|rename`
 - [ ] Tag management
 - [ ] Auto-grouping by endpoint
 
@@ -130,12 +130,12 @@ syntax_highlight = true
 
 ```bash
 # Build
-go build -o scurl ./cmd/scurl
+go build -o gurl ./cmd/gurl
 
 # Run
-./scurl --help
-./scurl save "test" https://example.com
-./scurl list
+./gurl --help
+./gurl save "test" https://example.com
+./gurl list
 
 # Test
 go test ./...
@@ -146,8 +146,8 @@ go mod tidy
 
 ## Environment Variables
 
-- `SCURL_CONFIG_PATH` - Override config file path
-- `SCURL_DB_PATH` - Override database path
+- `GURL_CONFIG_PATH` - Override config file path
+- `GURL_DB_PATH` - Override database path
 
 ## Important Notes for AI Agents
 

@@ -1,10 +1,10 @@
-# scurl - Smart Curl Saver & API Companion
+# gurl - Smart Curl Saver & API Companion
 
 ## 1. Concept & Vision
 
-**scurl** replaces your chaotic `Ctrl+R` curl history with an intelligent, named request library. It's the tool you reach for when you're tired of typing `curl -X POST https://api.example.com/orders/12345/items` for the 47th time only to realize you meant `12346`.
+**gurl** replaces your chaotic `Ctrl+R` curl history with an intelligent, named request library. It's the tool you reach for when you're tired of typing `curl -X POST https://api.example.com/orders/12345/items` for the 47th time only to realize you meant `12346`.
 
-The experience: Pipe any curl command through `scurl detect`, give it a memorable name like "add-item-to-order", and run it forever with `scurl run "add-item-to-order"`. It's Insomnia for the terminal—agent-friendly, plugin-extensible, and designed for the person who lives in the CLI.
+The experience: Pipe any curl command through `gurl detect`, give it a memorable name like "add-item-to-order", and run it forever with `gurl run "add-item-to-order"`. It's Insomnia for the terminal—agent-friendly, plugin-extensible, and designed for the person who lives in the CLI.
 
 **Core Philosophy**: Local-first, config-driven, plugin-based. No cloud dependencies by default. Every behavior is tunable via TOML config. Every extension point is a plugin.
 
@@ -52,10 +52,10 @@ Minimal animation. Instant feedback for commands. TUI transitions only where the
 ### CLI Interface (Default)
 ```
 ┌─────────────────────────────────────────────────────┐
-│ scurl v0.1.0                                        │
+│ gurl v0.1.0                                        │
 ├─────────────────────────────────────────────────────┤
 │                                                     │
-│  Usage: scurl <command> [options]                   │
+│  Usage: gurl <command> [options]                   │
 │                                                     │
 │  Commands:                                          │
 │    save      Save a curl request with a name       │
@@ -83,9 +83,9 @@ Minimal animation. Instant feedback for commands. TUI transitions only where the
 
 ### TUI Interface (On-Demand)
 Launched via:
-- `scurl detect` (complex decision flows)
-- `scurl edit <name>` (request editing)
-- `scurl --tui` (full interactive mode)
+- `gurl detect` (complex decision flows)
+- `gurl edit <name>` (request editing)
+- `gurl --tui` (full interactive mode)
 - Any command where config specifies `tui_on_decisions: true`
 
 TUI uses **bubbletea** (Elm-style) for interactive elements.
@@ -130,31 +130,55 @@ TUI uses **bubbletea** (Elm-style) for interactive elements.
 
 **Usage**:
 ```bash
-scurl save "health check" https://api.example.com/health
-scurl save "create order" -X POST https://api.example.com/orders \
+# Mode 1: Structured flags (name + URL as positional args)
+gurl save "health check" https://api.example.com/health
+gurl save "create order" https://api.example.com/orders \
+  -X POST \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {{token}}" \
   -d '{"customer_id": 123, "items": [{"sku": "ABC"}]}'
-scurl save "get user" https://api.example.com/users/{{userId}} \
-  --var userId=12345
+
+# Mode 2: Raw curl string (pipe or --curl flag)
+echo 'curl -X POST https://api.example.com/orders -H "Content-Type: application/json" -d "{}"' | gurl save "create order"
+gurl save "create order" --curl 'curl -X POST https://api.example.com/orders -d "{}"'
+
+# With organization
+gurl save "list orders" https://api.example.com/orders \
+  -H "API-KEY: {{apiKey}}" \
+  --collection orders --tag production --tag api
 ```
 
 **Behavior**:
-1. Parse URL, method, headers, body from arguments
-2. Extract variables automatically (IDs, UUIDs in URL path)
-3. Normalize URL (remove trailing slashes, query param ordering)
-4. Store in LMDB with name as primary key
-5. Create indices for collection, tags, endpoint
+1. Detect input mode: structured flags vs raw curl string (stdin or `--curl`)
+2. Parse URL, method, headers, body from arguments or curl string
+3. Extract variables automatically (IDs, UUIDs in URL path)
+4. Normalize URL (remove trailing slashes, query param ordering)
+5. Store in LMDB with name as primary key
+6. Create indices for collection, tags, endpoint
+7. Store original curl command string for reference
 
 **Options**:
+- `-X, --method <METHOD>` - HTTP method (GET, POST, PUT, DELETE, PATCH)
+- `-H, --header <header>` - HTTP header (repeatable, format: "Key: Value")
+- `-d, --data <body>` - Request body
+- `--curl <string>` - Raw curl command to parse
 - `--collection <name>` - Assign to collection
-- `--tag <name>` - Add tag (can repeat)
+- `--tag <name>` - Add tag (repeatable)
 - `--format <auto|json|table>` - Output format preference
 - `--description <text>` - Human-readable description
+
+**Input Modes**:
+1. **Structured** (default): `gurl save <name> <url> [-X method] [-H header]... [-d body]`
+2. **Curl string**: `gurl save <name> --curl '<curl command>'`
+3. **Stdin pipe**: `echo '<curl command>' | gurl save <name>`
 
 **Edge Cases**:
 - Duplicate name: Prompt to rename or overwrite
 - Malformed curl: Show parse error with suggestions
 - Missing URL: Show error "URL required"
+- Body with `-d` auto-sets method to POST if no `-X` given
+- Multiple `-H` flags accumulate (not replace)
+- Stdin + `--curl` both present: `--curl` takes precedence
 
 ---
 
@@ -164,11 +188,11 @@ scurl save "get user" https://api.example.com/users/{{userId}} \
 
 **Usage**:
 ```bash
-scurl run "health check"
-scurl "health check"              # shorthand
-scurl run "get user" --var userId=67890
-scurl run "create order" --format json
-scurl run "create order" --cache  # use cached response if fresh
+gurl run "health check"
+gurl "health check"              # shorthand
+gurl run "get user" --var userId=67890
+gurl run "create order" --format json
+gurl run "create order" --cache  # use cached response if fresh
 ```
 
 **Behavior**:
@@ -185,7 +209,7 @@ scurl run "create order" --cache  # use cached response if fresh
 - `table`: Status-line format
 
 **Error Handling**:
-- Request not found: Show "No saved request named 'X'. Try `scurl list`."
+- Request not found: Show "No saved request named 'X'. Try `gurl list`."
 - Variable missing: Show "Missing variable: userId. Usage: --var userId=123"
 - Network error: Show error with curl exit code
 
@@ -197,9 +221,9 @@ scurl run "create order" --cache  # use cached response if fresh
 
 **Usage**:
 ```bash
-echo "curl -X POST https://api.example.com/orders/123" | scurl detect
-cat request.curl | scurl detect
-scurl detect --file request.curl
+echo "curl -X POST https://api.example.com/orders/123" | gurl detect
+cat request.curl | gurl detect
+gurl detect --file request.curl
 ```
 
 **Flow** (TUI mode):
@@ -237,12 +261,12 @@ scurl detect --file request.curl
 
 **Usage**:
 ```bash
-scurl list
-scurl list "order*"
-scurl list --collection orders
-scurl list --tag auth
-scurl list --json
-scurl list --format table
+gurl list
+gurl list "order*"
+gurl list --collection orders
+gurl list --tag auth
+gurl list --json
+gurl list --format table
 ```
 
 **Output**:
@@ -272,8 +296,8 @@ scurl list --format table
 
 **Usage**:
 ```bash
-scurl history "create order"
-scurl history "create order" --limit 10
+gurl history "create order"
+gurl history "create order" --limit 10
 ```
 
 **Output**:
@@ -295,9 +319,9 @@ scurl history "create order" --limit 10
 
 **Usage**:
 ```bash
-scurl timeline
-scurl timeline --since 24h
-scurl timeline --filter "order*"
+gurl timeline
+gurl timeline --since 24h
+gurl timeline --filter "order*"
 ```
 
 **Output**:
@@ -318,7 +342,7 @@ scurl timeline --filter "order*"
 
 **Usage**:
 ```bash
-scurl diff "create order"
+gurl diff "create order"
 ```
 
 **Output**:
@@ -343,12 +367,12 @@ scurl diff "create order"
 
 **Usage**:
 ```bash
-scurl collection list
-scurl collection add orders
-scurl collection add users
-scurl collection remove old-api
-scurl collection rename old-api new-api
-scurl save "list orders" --collection orders
+gurl collection list
+gurl collection add orders
+gurl collection add users
+gurl collection remove old-api
+gurl collection rename old-api new-api
+gurl save "list orders" --collection orders
 ```
 
 **Output**:
@@ -371,11 +395,11 @@ scurl save "list orders" --collection orders
 
 **Usage**:
 ```bash
-scurl export "create order" > order.json
-scurl export --collection orders > orders-backup.json
-scurl export --all > full-backup.json
-scurl import order.json
-scurl paste "create order"   # copy as curl to clipboard
+gurl export "create order" > order.json
+gurl export --collection orders > orders-backup.json
+gurl export --all > full-backup.json
+gurl import order.json
+gurl paste "create order"   # copy as curl to clipboard
 ```
 
 **Export Format**:
@@ -402,7 +426,7 @@ scurl paste "create order"   # copy as curl to clipboard
 
 **Usage**:
 ```bash
-scurl edit "create order"
+gurl edit "create order"
 ```
 
 **TUI Flow**:
@@ -423,7 +447,7 @@ Built with **mri** (lightweight Go equivalent: `urfave/cli` or native flag parsi
 - Help: Display command-specific help
 
 ### 5.2 LMDB Storage
-Single database file at `~/.local/share/scurl/scurl.db`.
+Single database file at `~/.local/share/gurl/gurl.db`.
 
 **Keys**:
 ```
@@ -471,7 +495,7 @@ Format responses for display.
 - Table: Compact status-line format
 
 ### 5.6 Plugin Loader
-Load plugins from `~/.config/scurl/plugins/`.
+Load plugins from `~/.config/gurl/plugins/`.
 
 **Plugin Types**:
 - Middleware: Transform requests/responses
@@ -482,9 +506,9 @@ Load plugins from `~/.config/scurl/plugins/`.
 Launch bubbletea TUI when decisions needed.
 
 **Triggers**:
-- `scurl detect` (interactive flow)
-- `scurl edit` (form-based editing)
-- `scurl --tui` (full interactive mode)
+- `gurl detect` (interactive flow)
+- `gurl edit` (form-based editing)
+- `gurl --tui` (full interactive mode)
 - Config: `tui_on_decisions: true`
 
 ### 5.8 Shell Completion
@@ -537,9 +561,9 @@ github.com/urfave/cli/v3/complete   // Shell completions
 
 ### Project Structure
 ```
-scurl/
+gurl/
 ├── cmd/
-│   └── scurl/
+│   └── gurl/
 │       └── main.go           # Entry point
 ├── internal/
 │   ├── cli/
@@ -591,7 +615,7 @@ scurl/
 │   │   └── components/      # TUI components
 │   └── agent/
 │       ├── api.go          # Programmatic API
-│       └── rcfile.go       # Generate .scurlrc
+│       └── rcfile.go       # Generate .gurlrc
 ├── pkg/
 │   └── types/               # Shared types
 ├── completions/            # Shell completion scripts
@@ -603,7 +627,7 @@ scurl/
 
 ### Data Model (LMDB)
 
-**Database**: `~/.local/share/scurl/scurl.db`
+**Database**: `~/.local/share/gurl/gurl.db`
 
 ```
 # Request definitions
@@ -643,7 +667,7 @@ idx:endpoint:{normalizedUrl} → [requestId, ...]
 
 ### Config File (TOML)
 
-Location: `~/.scurlrc` or `./.scurlrc`
+Location: `~/.gurlrc` or `./.gurlrc`
 
 ```toml
 [general]
@@ -678,7 +702,7 @@ enabled = []                # List of enabled plugins
 
 ### Plugin System
 
-**Plugin Location**: `~/.config/scurl/plugins/`
+**Plugin Location**: `~/.config/gurl/plugins/`
 
 **Plugin Interface**:
 ```go
@@ -707,10 +731,10 @@ type CommandPlugin interface {
 
 **Example Plugin**:
 ```go
-// ~/.config/scurl/plugins/auth-encrypt/main.go
+// ~/.config/gurl/plugins/auth-encrypt/main.go
 package main
 
-import "scurl/plugin"
+import "gurl/plugin"
 
 func main() {
     plugin.Register(&AuthEncryptPlugin{})
@@ -730,19 +754,19 @@ func (p *AuthEncryptPlugin) BeforeRequest(ctx *plugin.RequestContext) *plugin.Re
 
 **Programmatic API**:
 ```go
-import "scurl"
+import "gurl"
 
 func main() {
     // Run saved request
-    resp, err := scurl.Run("create order", scurl.WithVars(map[string]string{
+    resp, err := gurl.Run("create order", gurl.WithVars(map[string]string{
         "customerId": "12345",
     }))
     
     // Save new request
-    err = scurl.Save("health check", "https://api.example.com/health", nil)
+    err = gurl.Save("health check", "https://api.example.com/health", nil)
     
     // List requests
-    requests, err := scurl.List(scurl.ListOptions{
+    requests, err := gurl.List(gurl.ListOptions{
         Collection: "orders",
     })
 }
@@ -750,11 +774,11 @@ func main() {
 
 **Agent Config File**:
 ```bash
-# Generate .scurlrc for agent
-scurl agent-init > .scurlrc
+# Generate .gurlrc for agent
+gurl agent-init > .gurlrc
 
 # Agent queries requests
-scurl list --json | jq '.[] | select(.name | contains("order"))'
+gurl list --json | jq '.[] | select(.name | contains("order"))'
 ```
 
 ---
@@ -765,21 +789,21 @@ scurl list --json | jq '.[] | select(.name | contains("order"))'
 - [ ] Project setup, Go dependencies
 - [ ] LMDB storage layer
 - [ ] CLI framework with commands
-- [ ] `scurl save` - basic save
-- [ ] `scurl run` - basic execute
-- [ ] `scurl list` - list with filters
+- [ ] `gurl save` - basic save
+- [ ] `gurl run` - basic execute
+- [ ] `gurl list` - list with filters
 
 ### Phase 2: Detect & Templates
 - [ ] Curl parser
 - [ ] Variable extraction
-- [ ] `scurl detect` pipe flow
+- [ ] `gurl detect` pipe flow
 - [ ] TUI launcher (bubbletea)
 
 ### Phase 3: History & Timeline
 - [ ] Execution history storage
-- [ ] `scurl history`
-- [ ] `scurl timeline`
-- [ ] `scurl diff`
+- [ ] `gurl history`
+- [ ] `gurl timeline`
+- [ ] `gurl diff`
 
 ### Phase 4: Collections & Organization
 - [ ] Collection management
@@ -805,13 +829,13 @@ scurl list --json | jq '.[] | select(.name | contains("order"))'
 ### Phase 8: Agent Integration
 - [ ] Programmatic API (Go library)
 - [ ] Shell completions
-- [ ] .scurlrc generator
+- [ ] .gurlrc generator
 
 ---
 
 ## 8. Success Metrics
 
-- **Speed**: `scurl run "name"` completes in < 50ms (excluding network)
+- **Speed**: `gurl run "name"` completes in < 50ms (excluding network)
 - **Storage**: 1000 requests + history < 50MB LMDB file
 - **CLI**: All commands return in < 100ms
 - **Parse**: Detect curl command in < 10ms

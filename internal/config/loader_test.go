@@ -15,13 +15,13 @@ func TestLoadConfig(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		// Clear environment variables
-		oldConfigPath := os.Getenv("SCURL_CONFIG_PATH")
-		os.Unsetenv("SCURL_CONFIG_PATH")
+		oldConfigPath := os.Getenv("GURL_CONFIG_PATH")
+		os.Unsetenv("GURL_CONFIG_PATH")
 
 		loader := NewLoader()
 		config, err := loader.Load()
 
-		os.Setenv("SCURL_CONFIG_PATH", oldConfigPath)
+		os.Setenv("GURL_CONFIG_PATH", oldConfigPath)
 
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -37,7 +37,7 @@ func TestLoadConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("loads from SCURL_CONFIG_PATH", func(t *testing.T) {
+	t.Run("loads from GURL_CONFIG_PATH", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "config.toml")
 
@@ -71,9 +71,9 @@ enabled = ["plugin1", "plugin2"]
 			t.Fatalf("failed to write config: %v", err)
 		}
 
-		oldConfigPath := os.Getenv("SCURL_CONFIG_PATH")
-		os.Setenv("SCURL_CONFIG_PATH", configPath)
-		defer os.Setenv("SCURL_CONFIG_PATH", oldConfigPath)
+		oldConfigPath := os.Getenv("GURL_CONFIG_PATH")
+		os.Setenv("GURL_CONFIG_PATH", configPath)
+		defer os.Setenv("GURL_CONFIG_PATH", oldConfigPath)
 
 		loader := NewLoader()
 		config, err := loader.Load()
@@ -98,28 +98,28 @@ enabled = ["plugin1", "plugin2"]
 		}
 	})
 
-	t.Run("loads from .scurlrc in current directory", func(t *testing.T) {
+	t.Run("loads from .gurlrc in current directory", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		oldCwd, _ := os.Getwd()
 		defer os.Chdir(oldCwd)
 		os.Chdir(tmpDir)
 
-		// Clear env var to ensure .scurlrc is used
-		oldConfigPath := os.Getenv("SCURL_CONFIG_PATH")
-		os.Unsetenv("SCURL_CONFIG_PATH")
+		// Clear env var to ensure .gurlrc is used
+		oldConfigPath := os.Getenv("GURL_CONFIG_PATH")
+		os.Unsetenv("GURL_CONFIG_PATH")
 
-		// Create .scurlrc
+		// Create .gurlrc
 		content := `[general]
 history_depth = 200
 `
-		if err := os.WriteFile(".scurlrc", []byte(content), 0644); err != nil {
-			t.Fatalf("failed to write .scurlrc: %v", err)
+		if err := os.WriteFile(".gurlrc", []byte(content), 0644); err != nil {
+			t.Fatalf("failed to write .gurlrc: %v", err)
 		}
 
 		loader := NewLoader()
 		config, err := loader.Load()
 
-		os.Setenv("SCURL_CONFIG_PATH", oldConfigPath)
+		os.Setenv("GURL_CONFIG_PATH", oldConfigPath)
 
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -129,29 +129,29 @@ history_depth = 200
 		}
 	})
 
-	t.Run("loads from home directory .scurlrc", func(t *testing.T) {
+	t.Run("loads from home directory .gurlrc", func(t *testing.T) {
 		// Create a temp home directory
 		tmpDir := t.TempDir()
 		homeDir := filepath.Join(tmpDir, "home")
 		os.MkdirAll(homeDir, 0755)
 
-		// Write config to home/.scurlrc
+		// Write config to home/.gurlrc
 		content := `[general]
 history_depth = 300
 `
-		if err := os.WriteFile(filepath.Join(homeDir, ".scurlrc"), []byte(content), 0644); err != nil {
-			t.Fatalf("failed to write .scurlrc: %v", err)
+		if err := os.WriteFile(filepath.Join(homeDir, ".gurlrc"), []byte(content), 0644); err != nil {
+			t.Fatalf("failed to write .gurlrc: %v", err)
 		}
 
 		oldHome := os.Getenv("HOME")
 		os.Setenv("HOME", homeDir)
 		defer os.Setenv("HOME", oldHome)
 
-		// Clear env var to prevent SCURL_CONFIG_PATH from taking precedence
-		oldConfigPath := os.Getenv("SCURL_CONFIG_PATH")
-		os.Unsetenv("SCURL_CONFIG_PATH")
+		// Clear env var to prevent GURL_CONFIG_PATH from taking precedence
+		oldConfigPath := os.Getenv("GURL_CONFIG_PATH")
+		os.Unsetenv("GURL_CONFIG_PATH")
 
-		// Create a temp cwd with no .scurlrc
+		// Create a temp cwd with no .gurlrc
 		tmpCwd := t.TempDir()
 		oldCwd, _ := os.Getwd()
 		defer os.Chdir(oldCwd)
@@ -160,7 +160,7 @@ history_depth = 300
 		loader := NewLoader()
 		config, err := loader.Load()
 
-		os.Setenv("SCURL_CONFIG_PATH", oldConfigPath)
+		os.Setenv("GURL_CONFIG_PATH", oldConfigPath)
 
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -172,7 +172,7 @@ history_depth = 300
 
 	t.Run("handles invalid TOML gracefully", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		oldConfigPath := os.Getenv("SCURL_CONFIG_PATH")
+		oldConfigPath := os.Getenv("GURL_CONFIG_PATH")
 		configPath := filepath.Join(tmpDir, "config.toml")
 
 		// Write invalid TOML
@@ -184,8 +184,8 @@ invalid_toml =
 			t.Fatalf("failed to write config: %v", err)
 		}
 
-		os.Setenv("SCURL_CONFIG_PATH", configPath)
-		defer os.Setenv("SCURL_CONFIG_PATH", oldConfigPath)
+		os.Setenv("GURL_CONFIG_PATH", configPath)
+		defer os.Setenv("GURL_CONFIG_PATH", oldConfigPath)
 
 		loader := NewLoader()
 		_, err := loader.Load()
@@ -197,7 +197,7 @@ invalid_toml =
 
 	t.Run("merges user config with defaults", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		oldConfigPath := os.Getenv("SCURL_CONFIG_PATH")
+		oldConfigPath := os.Getenv("GURL_CONFIG_PATH")
 		configPath := filepath.Join(tmpDir, "config.toml")
 
 		// Write partial config - only override specific fields
@@ -208,8 +208,8 @@ history_depth = 999
 			t.Fatalf("failed to write config: %v", err)
 		}
 
-		os.Setenv("SCURL_CONFIG_PATH", configPath)
-		defer os.Setenv("SCURL_CONFIG_PATH", oldConfigPath)
+		os.Setenv("GURL_CONFIG_PATH", configPath)
+		defer os.Setenv("GURL_CONFIG_PATH", oldConfigPath)
 
 		loader := NewLoader()
 		config, err := loader.Load()

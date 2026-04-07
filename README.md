@@ -91,7 +91,7 @@ gurl list
 | collection | Manage collections |
 
 ## Configuration
-See `.scurlrc` or `~/.gurlrc`:
+See `.gurlrc` or `~/.gurlrc`:
 ```toml
 [general]
 history_depth = 100
