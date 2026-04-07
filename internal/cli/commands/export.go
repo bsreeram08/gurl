@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
-	"github.com/urfave/cli/v3"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
+	"github.com/urfave/cli/v3"
 )
 
 // ExportCommand creates the export command
@@ -66,12 +67,12 @@ func ExportCommand(db storage.DB) *cli.Command {
 			}
 
 			exportData := struct {
-				Version    string                   `json:"version"`
-				ExportedAt string                   `json:"exported_at"`
-				Requests   []*types.SavedRequest    `json:"requests"`
+				Version    string                `json:"version"`
+				ExportedAt string                `json:"exported_at"`
+				Requests   []*types.SavedRequest `json:"requests"`
 			}{
 				Version:    "1.0",
-				ExportedAt: "2024-01-01T00:00:00Z", // TODO: use actual time
+				ExportedAt: time.Now().UTC().Format(time.RFC3339),
 				Requests:   requests,
 			}
 
