@@ -210,3 +210,68 @@ func TestEnvStorageSaveWithoutID(t *testing.T) {
 		t.Errorf("expected Name 'No ID Environment', got '%s'", retrieved.Name)
 	}
 }
+
+func TestSecretEncryptionRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test_secret_roundtrip.db")
+
+	db := storage.NewLMDBWithPath(dbPath)
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open DB: %v", err)
+	}
+	defer db.Close()
+
+	envStore := NewEnvStorage(db)
+
+	env := &Environment{
+		ID:         "secret-test-env",
+		Name:       "Secret Test",
+		Variables:  map[string]string{"API_KEY": "super-secret-key-12345", "BASE_URL": "https://api.example.com"},
+		SecretKeys: map[string]bool{"API_KEY": true},
+		ParentID:   "",
+	}
+
+	if err := envStore.SaveEnv(env); err != nil {
+		t.Fatalf("failed to save environment with secret: %v", err)
+	}
+
+	retrieved, err := envStore.GetEnv("secret-test-env")
+	if err != nil {
+		t.Fatalf("failed to get environment: %v", err)
+	}
+
+	if !retrieved.IsSecret("API_KEY") {
+		t.Error("API_KEY should be marked as secret")
+	}
+
+	if retrieved.Variables["API_KEY"] != "super-secret-key-12345" {
+		t.Errorf("API_KEY should be decrypted, got %q", retrieved.Variables["API_KEY"])
+	}
+
+	if retrieved.Variables["BASE_URL"] != "https://api.example.com" {
+		t.Errorf("BASE_URL should NOT be decrypted, got %q", retrieved.Variables["BASE_URL"])
+	}
+}
+
+func TestSecretMasking(t *testing.T) {
+	env := &Environment{
+		ID:         "mask-test-env",
+		Name:       "Mask Test",
+		Variables:  map[string]string{"API_KEY": "secret-value", "BASE_URL": "https://api.example.com"},
+		SecretKeys: map[string]bool{"API_KEY": true},
+		ParentID:   "",
+	}
+
+	if !env.IsSecret("API_KEY") {
+		t.Error("API_KEY should be marked as secret")
+	}
+
+	if env.IsSecret("BASE_URL") {
+		t.Error("BASE_URL should NOT be marked as secret")
+	}
+
+	maskedSecret := MaskSecret(env.Variables["API_KEY"])
+	if maskedSecret != "*****" {
+		t.Errorf("secret value should be masked as *****, got %q", maskedSecret)
+	}
+}

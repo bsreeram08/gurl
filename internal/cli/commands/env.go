@@ -34,6 +34,11 @@ func EnvCommand(db EnvStorage) *cli.Command {
 						Aliases: []string{"v"},
 						Usage:   "Variable in KEY=VALUE format (can repeat)",
 					},
+					&cli.StringSliceFlag{
+						Name:    "secret",
+						Aliases: []string{"s"},
+						Usage:   "Mark variable as secret (KEY name, can repeat)",
+					},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					args := c.Args()
@@ -49,6 +54,10 @@ func EnvCommand(db EnvStorage) *cli.Command {
 						if len(parts) == 2 {
 							newEnv.SetVariable(parts[0], parts[1])
 						}
+					}
+
+					for _, key := range c.StringSlice("secret") {
+						newEnv.SecretKeys[key] = true
 					}
 
 					if err := db.SaveEnv(newEnv); err != nil {
@@ -164,8 +173,8 @@ func EnvCommand(db EnvStorage) *cli.Command {
 					} else {
 						fmt.Println("Variables:")
 						for k, v := range env.Variables {
-							if isSecretVariable(k) {
-								v = "********"
+							if env.IsSecret(k) {
+								v = "*****"
 							}
 							fmt.Printf("  %s = %s\n", k, v)
 						}
@@ -182,6 +191,11 @@ func EnvCommand(db EnvStorage) *cli.Command {
 						Aliases:  []string{"v"},
 						Usage:    "Variable in KEY=VALUE format (can repeat)",
 						Required: true,
+					},
+					&cli.StringSliceFlag{
+						Name:    "secret",
+						Aliases: []string{"s"},
+						Usage:   "Mark variable as secret (KEY name, can repeat)",
 					},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
@@ -201,6 +215,10 @@ func EnvCommand(db EnvStorage) *cli.Command {
 						if len(parts) == 2 {
 							env.SetVariable(parts[0], parts[1])
 						}
+					}
+
+					for _, key := range c.StringSlice("secret") {
+						env.SecretKeys[key] = true
 					}
 
 					if err := db.SaveEnv(env); err != nil {

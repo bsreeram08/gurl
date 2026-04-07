@@ -1235,7 +1235,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/env/env.go`, `internal/env/store.go`, `internal/env/store_test.go`
   - Pre-commit: `go test ./internal/env/... -count=1`
 
-- [ ] 16. Environment CLI commands (env create/list/switch/delete/show)
+- [x] 16. Environment CLI commands (env create/list/switch/delete/show)
 
   **What to do**:
   - RED: Write tests for each subcommand: `env create`, `env list`, `env switch`, `env delete`, `env show`
@@ -1295,7 +1295,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/cli/commands/env.go`, `internal/cli/commands/env_test.go`, `cmd/gurl/main.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 17. Wire environments into run command
+- [x] 17. Wire environments into run command
 
   **What to do**:
   - RED: Write test: `run "test" --env dev` resolves variables from "dev" environment before executing
@@ -1356,7 +1356,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/cli/commands/run.go`, `internal/cli/commands/run_test.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 18. Variable scoping (request→folder→collection→environment→global)
+- [x] 18. Variable scoping (request→folder→collection→environment→global)
 
   **What to do**:
   - RED: Write test: variables resolve in order: request-level > folder-level > collection-level > environment-level > global, with closest scope winning
@@ -1473,7 +1473,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/env/secrets.go`, `internal/env/secrets_test.go`
   - Pre-commit: `go test ./... -count=1`
 
-- [ ] 20. .env file support
+- [x] 20. .env file support
 
   **What to do**:
   - RED: Write test: (1) parse `.env` file into key-value pairs, (2) `env import --file .env --name dev` creates environment from .env, (3) handles comments, empty lines, quoted values, multiline

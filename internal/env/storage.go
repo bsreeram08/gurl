@@ -22,13 +22,28 @@ func (s *EnvStorage) SaveEnv(env *Environment) error {
 		env.ID = uuid.New().String()
 	}
 
+	key, err := GetOrCreateMachineKey()
+	if err != nil {
+		return fmt.Errorf("failed to get encryption key: %w", err)
+	}
+
+	for k, isSecret := range env.SecretKeys {
+		if isSecret {
+			encrypted, encErr := EncryptSecret(key, env.Variables[k])
+			if encErr != nil {
+				return fmt.Errorf("failed to encrypt secret %s: %w", k, encErr)
+			}
+			env.Variables[k] = encrypted
+		}
+	}
+
 	data, err := json.Marshal(env)
 	if err != nil {
 		return fmt.Errorf("failed to marshal environment: %w", err)
 	}
 
-	key := fmt.Sprintf("env:%s", env.ID)
-	if err := s.db.DB.Put([]byte(key), data, nil); err != nil {
+	dbKey := fmt.Sprintf("env:%s", env.ID)
+	if err := s.db.DB.Put([]byte(dbKey), data, nil); err != nil {
 		return fmt.Errorf("failed to save environment: %w", err)
 	}
 
@@ -41,8 +56,8 @@ func (s *EnvStorage) SaveEnv(env *Environment) error {
 }
 
 func (s *EnvStorage) GetEnv(id string) (*Environment, error) {
-	key := fmt.Sprintf("env:%s", id)
-	data, err := s.db.DB.Get([]byte(key), nil)
+	dbKey := fmt.Sprintf("env:%s", id)
+	data, err := s.db.DB.Get([]byte(dbKey), nil)
 	if err != nil {
 		return nil, fmt.Errorf("environment not found: %s", id)
 	}
@@ -50,6 +65,21 @@ func (s *EnvStorage) GetEnv(id string) (*Environment, error) {
 	var env Environment
 	if err := json.Unmarshal(data, &env); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal environment: %w", err)
+	}
+
+	key, err := GetOrCreateMachineKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get encryption key: %w", err)
+	}
+
+	for k, isSecret := range env.SecretKeys {
+		if isSecret && IsEncryptedValue(env.Variables[k]) {
+			decrypted, decErr := DecryptSecret(key, env.Variables[k])
+			if decErr != nil {
+				return nil, fmt.Errorf("failed to decrypt secret %s: %w", k, decErr)
+			}
+			env.Variables[k] = decrypted
+		}
 	}
 
 	return &env, nil
