@@ -3,10 +3,11 @@ package commands
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/urfave/cli/v3"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/urfave/cli/v3"
 )
 
 // HistoryCommand creates the history command
@@ -59,6 +60,15 @@ func HistoryCommand(db storage.DB) *cli.Command {
 
 				fmt.Printf("│  %d   %-6s   %-8s   %-8s %s\n",
 					i+1, status, duration, size, timestamp)
+
+				if h.Response != "" {
+					preview := h.Response
+					if len(preview) > 60 {
+						preview = preview[:60] + "..."
+					}
+					preview = strings.ReplaceAll(preview, "\n", " ")
+					fmt.Printf("│       RESP: %s\n", preview)
+				}
 			}
 
 			fmt.Println("└──────────────────────────────────────────────────────────┘")

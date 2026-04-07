@@ -10,7 +10,6 @@ import (
 	"github.com/sreeram/gurl/pkg/types"
 )
 
-// mockDBWithHistory implements mockDB and tracks saved history
 type mockDBWithHistory struct {
 	*mockDB
 	history []*types.ExecutionHistory
@@ -24,7 +23,6 @@ func newMockDBWithHistory() *mockDBWithHistory {
 }
 
 func (m *mockDBWithHistory) SaveHistory(history *types.ExecutionHistory) error {
-	// Store a copy
 	hCopy := *history
 	m.history = append(m.history, &hCopy)
 	return nil
@@ -41,7 +39,6 @@ func (m *mockDBWithHistory) GetHistory(requestID string, limit int) ([]*types.Ex
 }
 
 func TestResponseStorage(t *testing.T) {
-	// Create test server that returns known response
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -51,7 +48,6 @@ func TestResponseStorage(t *testing.T) {
 
 	db := newMockDBWithHistory()
 
-	// Create a test request pointing to our test server
 	req := &types.SavedRequest{
 		ID:     "test-req-id",
 		Name:   "test-request",
@@ -60,7 +56,6 @@ func TestResponseStorage(t *testing.T) {
 	}
 	db.SaveRequest(req)
 
-	// Execute via client to get response
 	resp, err := client.Execute(client.Request{
 		Method: "GET",
 		URL:    server.URL,
@@ -69,7 +64,6 @@ func TestResponseStorage(t *testing.T) {
 		t.Fatalf("client.Execute failed: %v", err)
 	}
 
-	// Create execution history with full response data
 	history := types.NewExecutionHistory(
 		req.ID,
 		string(resp.Body),
@@ -79,7 +73,6 @@ func TestResponseStorage(t *testing.T) {
 	)
 	db.SaveHistory(history)
 
-	// Verify: GetHistory returns entry with non-empty Response body
 	entries, err := db.GetHistory(req.ID, 1)
 	if err != nil {
 		t.Fatalf("GetHistory failed: %v", err)
@@ -99,7 +92,6 @@ func TestResponseStorage(t *testing.T) {
 		t.Error("expected non-zero SizeBytes")
 	}
 
-	// Verify response body content
 	var result map[string]string
 	if err := json.Unmarshal([]byte(entry.Response), &result); err != nil {
 		t.Errorf("response body should be valid JSON: %v", err)
@@ -112,7 +104,6 @@ func TestResponseStorage(t *testing.T) {
 func TestGetHistoryRetrievesResponseBody(t *testing.T) {
 	db := newMockDBWithHistory()
 
-	// Create and save a history entry directly
 	history := types.NewExecutionHistory(
 		"req-123",
 		`{"key":"value","nested":{"data":"test"}}`,
@@ -122,7 +113,6 @@ func TestGetHistoryRetrievesResponseBody(t *testing.T) {
 	)
 	db.SaveHistory(history)
 
-	// Verify GetHistory retrieves the response body
 	entries, err := db.GetHistory("req-123", 1)
 	if err != nil {
 		t.Fatalf("GetHistory failed: %v", err)
@@ -143,13 +133,7 @@ func TestGetHistoryRetrievesResponseBody(t *testing.T) {
 	}
 }
 
-// TestRunCommandStoresFullResponse tests the integration of run command with response storage
 func TestRunCommandStoresFullResponse(t *testing.T) {
-	// This test verifies the complete flow:
-	// 1. Run command executes request via client
-	// 2. Response is captured and stored in history
-	// 3. History entry contains full response body
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
@@ -159,7 +143,6 @@ func TestRunCommandStoresFullResponse(t *testing.T) {
 
 	db := newMockDBWithHistory()
 
-	// Create test request
 	req := &types.SavedRequest{
 		ID:     "run-test-req",
 		Name:   "run-test",
@@ -169,9 +152,6 @@ func TestRunCommandStoresFullResponse(t *testing.T) {
 	}
 	db.SaveRequest(req)
 
-	// Simulate what run command does:
-	// 1. Get request from db (already done above)
-	// 2. Execute via client
 	resp, err := client.Execute(client.Request{
 		Method: req.Method,
 		URL:    req.URL,
@@ -188,7 +168,6 @@ func TestRunCommandStoresFullResponse(t *testing.T) {
 		t.Fatalf("client.Execute failed: %v", err)
 	}
 
-	// 3. Save history with full response data
 	history := types.NewExecutionHistory(
 		req.ID,
 		string(resp.Body),
@@ -198,7 +177,6 @@ func TestRunCommandStoresFullResponse(t *testing.T) {
 	)
 	db.SaveHistory(history)
 
-	// 4. Verify history contains full response
 	entries, err := db.GetHistory(req.ID, 1)
 	if err != nil {
 		t.Fatalf("GetHistory failed: %v", err)
@@ -218,7 +196,6 @@ func TestRunCommandStoresFullResponse(t *testing.T) {
 		t.Error("SizeBytes is zero")
 	}
 
-	// Verify the JSON can be parsed
 	var result map[string]interface{}
 	if err := json.Unmarshal([]byte(entry.Response), &result); err != nil {
 		t.Errorf("invalid JSON in response: %v", err)

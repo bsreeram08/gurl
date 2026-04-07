@@ -2,19 +2,18 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
-	"time"
 
+	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 
-// RunCommand creates the run command
 func RunCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
 		Name:    "run",
@@ -65,41 +64,66 @@ func RunCommand(db storage.DB) *cli.Command {
 
 			substitutedBody, _ := template.Substitute(req.Body, vars)
 
-			// Build curl command
-			cmdParts := []string{"curl", "-s", "-w", "\\n%{http_code}"}
-
-			if req.Method != "GET" {
-				cmdParts = append(cmdParts, "-X", req.Method)
+			clientReq := client.Request{
+				Method:  req.Method,
+				URL:     substitutedURL,
+				Headers: convertHeaders(req.Headers),
+				Body:    substitutedBody,
 			}
 
-			for _, header := range req.Headers {
-				cmdParts = append(cmdParts, "-H", fmt.Sprintf("%s: %s", header.Key, header.Value))
+			resp, err := client.Execute(clientReq)
+			if err != nil {
+				return fmt.Errorf("request failed: %w", err)
 			}
 
-			if substitutedBody != "" {
-				cmdParts = append(cmdParts, "-d", substitutedBody)
+			history := types.NewExecutionHistory(
+				req.ID,
+				string(resp.Body),
+				resp.StatusCode,
+				resp.Duration.Milliseconds(),
+				resp.Size,
+			)
+			if err := db.SaveHistory(history); err != nil {
+				return fmt.Errorf("failed to save history: %w", err)
 			}
 
-			cmdParts = append(cmdParts, substitutedURL)
+			format := c.String("format")
+			return printResponse(os.Stdout, resp.Body, format)
 
-			cmd := exec.Command("curl", cmdParts[1:]...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-
-			start := time.Now()
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("curl execution failed: %w", err)
-			}
-			duration := time.Since(start)
-
-			history := &types.ExecutionHistory{
-				RequestID:  req.ID,
-				DurationMs: duration.Milliseconds(),
-				Timestamp:  time.Now().Unix(),
-			}
-			db.SaveHistory(history)
-
-			return nil
 		},
+	}
+}
+
+func convertHeaders(headers []types.Header) []client.Header {
+	result := make([]client.Header, len(headers))
+	for i, h := range headers {
+		result[i] = client.Header{Key: h.Key, Value: h.Value}
+	}
+	return result
+}
+
+func printResponse(out *os.File, body []byte, format string) error {
+	switch format {
+	case "json":
+		var data interface{}
+		if json.Unmarshal(body, &data) == nil {
+			enc := json.NewEncoder(out)
+			enc.SetIndent("", "  ")
+			return enc.Encode(data)
+		}
+		_, err := out.Write(body)
+		return err
+	case "table":
+		var data interface{}
+		if json.Unmarshal(body, &data) == nil {
+			enc := json.NewEncoder(out)
+			enc.SetIndent("  ", "")
+			return enc.Encode(data)
+		}
+		_, err := out.Write(body)
+		return err
+	default:
+		_, err := out.Write(body)
+		return err
 	}
 }
