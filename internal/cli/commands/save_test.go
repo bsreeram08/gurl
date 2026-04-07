@@ -123,6 +123,78 @@ func TestSaveCommand(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:    "saves with --curl flag and full curl command",
+			args:    []string{"curl_test", "--curl", `curl -X POST -H "Content-Type: application/json" -d '{"key":"value"}' https://example.com`},
+			wantErr: false,
+			checkFn: func(t *testing.T, db *mockDB) {
+				req, err := db.GetRequestByName("curl_test")
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if req == nil {
+					t.Fatal("expected request to be saved")
+				}
+				if req.Method != "POST" {
+					t.Errorf("expected method 'POST', got '%s'", req.Method)
+				}
+				if req.URL != "https://example.com" {
+					t.Errorf("expected URL 'https://example.com', got '%s'", req.URL)
+				}
+				if len(req.Headers) != 1 {
+					t.Errorf("expected 1 header, got %d", len(req.Headers))
+				}
+				if req.Body != `{"key":"value"}` {
+					t.Errorf("expected body '{\"key\":\"value\"}', got '%s'", req.Body)
+				}
+			},
+		},
+		{
+			name:    "saves with -X -H -d individual flags",
+			args:    []string{"flags_test", "-X", "PUT", "-H", "Authorization: Bearer token123", "-d", "name=test", "https://api.example.com"},
+			wantErr: false,
+			checkFn: func(t *testing.T, db *mockDB) {
+				req, err := db.GetRequestByName("flags_test")
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if req == nil {
+					t.Fatal("expected request to be saved")
+				}
+				if req.Method != "PUT" {
+					t.Errorf("expected method 'PUT', got '%s'", req.Method)
+				}
+				if req.URL != "https://api.example.com" {
+					t.Errorf("expected URL 'https://api.example.com', got '%s'", req.URL)
+				}
+				if len(req.Headers) != 1 {
+					t.Errorf("expected 1 header, got %d", len(req.Headers))
+				}
+				if req.Headers[0].Key != "Authorization" || req.Headers[0].Value != "Bearer token123" {
+					t.Errorf("expected header 'Authorization: Bearer token123', got '%s: %s'", req.Headers[0].Key, req.Headers[0].Value)
+				}
+				if req.Body != "name=test" {
+					t.Errorf("expected body 'name=test', got '%s'", req.Body)
+				}
+			},
+		},
+		{
+			name:    "saves with multiple -H flags",
+			args:    []string{"multi_header", "-X", "POST", "-H", "Content-Type: application/json", "-H", "Accept: text/plain", "https://multi-header.example.com"},
+			wantErr: false,
+			checkFn: func(t *testing.T, db *mockDB) {
+				req, err := db.GetRequestByName("multi_header")
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if req == nil {
+					t.Fatal("expected request to be saved")
+				}
+				if len(req.Headers) != 2 {
+					t.Errorf("expected 2 headers, got %d", len(req.Headers))
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
