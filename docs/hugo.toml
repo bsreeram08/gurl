@@ -1,0 +1,76 @@
+baseURL = 'https://sreeram.github.io/terminal-curl/'
+languageCode = 'en-us'
+title = 'Gurl CLI'
+theme = 'PaperMod'
+
+[params]
+description = "The terminal-first API client. Like Postman, for your terminal."
+author = "Sreeram"
+defaultTheme = "dark"
+ShowReadingTime = false
+ShowShareButtons = false
+ShowPostNavLinks = false
+ShowBreadCrumbs = true
+ShowCodeCopyButtons = true
+ShowToc = true
+TocOpen = false
+
+[params.homeInfoParams]
+Title = "Gurl CLI"
+Content = """
+**The terminal-first API client.**
+
+Save, run, and manage API requests from your terminal.
+9 auth handlers, 4 protocols, scripting, assertions, collection runner, TUI, and plugin system.
+Works great with AI agents — they never touch your credentials.
+"""
+
+[[params.socialIcons]]
+name = "github"
+url = "https://github.com/sreeram/terminal-curl"
+
+[params.assets]
+favicon = "/favicon.ico"
+
+[markup]
+[markup.highlight]
+style = "dracula"
+lineNos = false
+codeFences = true
+
+[menus]
+[[menus.main]]
+identifier = "docs"
+name = "Docs"
+url = "/docs/"
+weight = 10
+
+[[menus.main]]
+identifier = "cli"
+name = "CLI Reference"
+url = "/cli/"
+weight = 20
+
+[[menus.main]]
+identifier = "guides"
+name = "Guides"
+url = "/guides/"
+weight = 30
+
+[[menus.main]]
+identifier = "security"
+name = "Security"
+url = "/security/"
+weight = 40
+
+[[menus.main]]
+identifier = "ai"
+name = "AI Integration"
+url = "/ai/"
+weight = 50
+
+[[menus.main]]
+identifier = "arch"
+name = "Architecture"
+url = "/architecture/"
+weight = 60
