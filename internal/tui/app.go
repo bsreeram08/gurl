@@ -25,6 +25,7 @@ type App struct {
 	config          *types.Config
 	requests        []*types.SavedRequest
 	selectedRequest *types.SavedRequest
+	selectedIndex   int
 	focusedPanel    Panel
 	width           int
 	height          int
@@ -103,12 +104,16 @@ func (m *App) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "up", "k":
-		// Navigate up in current panel
 		return m.handleNavigateUp()
 
 	case "down", "j":
-		// Navigate down in current panel
 		return m.handleNavigateDown()
+
+	case "enter":
+		if m.focusedPanel == PanelSidebar && len(m.requests) > 0 {
+			m.selectedRequest = m.requests[m.selectedIndex]
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -116,11 +121,21 @@ func (m *App) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleNavigateUp handles upward navigation
 func (m *App) handleNavigateUp() (tea.Model, tea.Cmd) {
+	if m.focusedPanel == PanelSidebar && len(m.requests) > 0 {
+		if m.selectedIndex > 0 {
+			m.selectedIndex--
+		}
+	}
 	return m, nil
 }
 
 // handleNavigateDown handles downward navigation
 func (m *App) handleNavigateDown() (tea.Model, tea.Cmd) {
+	if m.focusedPanel == PanelSidebar && len(m.requests) > 0 {
+		if m.selectedIndex < len(m.requests)-1 {
+			m.selectedIndex++
+		}
+	}
 	return m, nil
 }
 
@@ -169,7 +184,7 @@ func (m *App) renderSidebar(layout Layout) string {
 	} else {
 		for i, req := range m.requests {
 			sb.WriteString("\n")
-			if i == 0 && m.focusedPanel == PanelSidebar {
+			if i == m.selectedIndex && m.focusedPanel == PanelSidebar {
 				sb.WriteString(Style.SelectedItem.Render(fmt.Sprintf("▶ %s", req.Name)))
 			} else {
 				sb.WriteString(Style.ListItem.Render(fmt.Sprintf("  %s", req.Name)))

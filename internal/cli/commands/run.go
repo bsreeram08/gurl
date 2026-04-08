@@ -17,6 +17,7 @@ import (
 	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/scripting"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/internal/tui"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 )
@@ -87,10 +88,23 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
+			var name string
 			if args.Len() < 1 {
-				return fmt.Errorf("request name argument is required")
+				requests, err := db.ListRequests(nil)
+				if err != nil {
+					return fmt.Errorf("failed to list requests: %w", err)
+				}
+				chosen, err := tui.RunPicker(requests)
+				if err != nil {
+					return fmt.Errorf("picker error: %w", err)
+				}
+				if chosen == "" {
+					return nil
+				}
+				name = chosen
+			} else {
+				name = args.Get(0)
 			}
-			name := args.Get(0)
 
 			enableChain := c.Bool("chain")
 			dataFile := c.String("data")
