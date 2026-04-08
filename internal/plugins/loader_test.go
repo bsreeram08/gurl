@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/sreeram/gurl/internal/client"
@@ -363,20 +364,393 @@ func TestLoader_BuiltInPlugins(t *testing.T) {
 	}
 }
 
-func TestRegistry_UnknownPluginType(t *testing.T) {
+func TestLoader_Discover_EmptyDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	loader := NewLoader(tmpDir, nil)
+
+	discovered, err := loader.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+	if len(discovered) != 0 {
+		t.Errorf("expected 0 discovered plugins, got %d", len(discovered))
+	}
+}
+
+func TestLoader_Discover_NonExistentDir(t *testing.T) {
+	loader := NewLoader("/nonexistent/path/to/plugins", nil)
+
+	discovered, err := loader.Discover()
+	if err != nil {
+		t.Fatalf("Discover should not return error for nonexistent dir: %v", err)
+	}
+	if discovered != nil {
+		t.Errorf("expected nil for nonexistent dir, got %v", discovered)
+	}
+}
+
+func TestLoader_Discover_WithSubdirectories(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("plugin package not supported on darwin")
+	}
+
+	tmpDir := t.TempDir()
+	plugin1Dir := filepath.Join(tmpDir, "plugin1")
+	plugin2Dir := filepath.Join(tmpDir, "plugin2")
+	plugin3Dir := filepath.Join(tmpDir, "plugin3")
+	os.MkdirAll(plugin1Dir, 0755)
+	os.MkdirAll(plugin2Dir, 0755)
+	os.MkdirAll(plugin3Dir, 0755)
+
+	os.WriteFile(filepath.Join(plugin1Dir, "plugin1.so"), []byte("dummy"), 0444)
+	os.WriteFile(filepath.Join(plugin2Dir, "plugin2.so"), []byte("dummy"), 0444)
+	os.WriteFile(filepath.Join(plugin3Dir, "plugin3.so"), []byte("dummy"), 0444)
+
+	loader := NewLoader(tmpDir, nil)
+	discovered, err := loader.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	if len(discovered) != 3 {
+		t.Errorf("expected 3 discovered plugins, got %d", len(discovered))
+	}
+
+	found := map[string]bool{"plugin1": false, "plugin2": false, "plugin3": false}
+	for _, name := range discovered {
+		found[name] = true
+	}
+	for name, ok := range found {
+		if !ok {
+			t.Errorf("expected plugin %s to be discovered", name)
+		}
+	}
+}
+
+func TestLoader_Discover_WithFilesInRoot(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "not_a_plugin.txt"), []byte("content"), 0644)
+	os.MkdirAll(filepath.Join(tmpDir, "valid_plugin"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "valid_plugin", "valid_plugin.so"), []byte("dummy"), 0444)
+
+	loader := NewLoader(tmpDir, nil)
+	discovered, err := loader.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	if len(discovered) != 1 {
+		t.Errorf("expected 1 discovered plugin, got %d", len(discovered))
+	}
+	if discovered[0] != "valid_plugin" {
+		t.Errorf("expected plugin 'valid_plugin', got %s", discovered[0])
+	}
+}
+
+func TestLoader_Discover_WithMissingSo(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.MkdirAll(filepath.Join(tmpDir, "plugin_without_so"), 0755)
+
+	loader := NewLoader(tmpDir, nil)
+	discovered, err := loader.Discover()
+	if err != nil {
+		t.Fatalf("Discover failed: %v", err)
+	}
+
+	if len(discovered) != 0 {
+		t.Errorf("expected 0 discovered plugins when no .so files exist, got %d", len(discovered))
+	}
+}
+
+func TestLoader_IsEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		enabled  []string
+		plugin   string
+		expected bool
+	}{
+		{"empty enabled list", []string{}, "test", false},
+		{"plugin in list", []string{"a", "b", "c"}, "b", true},
+		{"plugin not in list", []string{"a", "b", "c"}, "d", false},
+		{"single match", []string{"only"}, "only", true},
+		{"single no match", []string{"only"}, "other", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isEnabled(tt.plugin, tt.enabled)
+			if result != tt.expected {
+				t.Errorf("isEnabled(%q, %v) = %v, want %v", tt.plugin, tt.enabled, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLoader_Load_UnsupportedPlatform(t *testing.T) {
+	loader := NewLoader("/some/path", nil)
+
+	_, err := loader.Load("/some/plugin.so")
+	if err == nil {
+		t.Error("expected error on unsupported platform")
+	}
+	if !strings.Contains(err.Error(), "not supported") {
+		t.Errorf("expected 'not supported' in error, got: %v", err)
+	}
+}
+
+func TestLoader_Load_InvalidPath(t *testing.T) {
+	loader := NewLoader("/some/plugin/dir", nil)
+	_, err := loader.Load("/nonexistent/plugin.so")
+	if err == nil {
+		t.Error("expected error for nonexistent plugin")
+	}
+}
+
+func TestLoader_LoadAll_EmptyPluginDir(t *testing.T) {
+	loader := NewLoader("", nil)
+	loader.RegisterBuiltIn(&mockMiddleware{name: "builtin"})
+
+	registry, err := loader.LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll failed: %v", err)
+	}
+	if registry == nil {
+		t.Fatal("expected non-nil registry")
+	}
+	if len(registry.Middleware()) != 1 {
+		t.Errorf("expected 1 middleware, got %d", len(registry.Middleware()))
+	}
+}
+
+func TestLoader_LoadAll_WithMultipleBuiltIns(t *testing.T) {
+	loader := NewLoader("", []string{"mw1", "mw2", "out1"})
+
+	loader.RegisterBuiltIn(&mockMiddleware{name: "mw1"})
+	loader.RegisterBuiltIn(&mockMiddleware{name: "mw2"})
+	loader.RegisterBuiltIn(&mockMiddleware{name: "disabled_mw"})
+	loader.RegisterBuiltIn(&mockOutputPlugin{name: "out1"})
+	loader.RegisterBuiltIn(&mockOutputPlugin{name: "out2"})
+
+	registry, err := loader.LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll failed: %v", err)
+	}
+
+	if len(registry.Middleware()) != 3 {
+		t.Errorf("expected 3 middleware (built-ins always loaded), got %d", len(registry.Middleware()))
+	}
+	if len(registry.Outputs()) != 2 {
+		t.Errorf("expected 2 outputs (built-ins always loaded), got %d", len(registry.Outputs()))
+	}
+}
+
+func TestLoader_LoadAll_EnabledFiltering(t *testing.T) {
+	loader := NewLoader("/nonexistent", []string{"enabled1", "enabled3"})
+	loader.RegisterBuiltIn(&mockMiddleware{name: "builtin1"})
+	loader.RegisterBuiltIn(&mockMiddleware{name: "builtin2"})
+
+	registry, err := loader.LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll failed: %v", err)
+	}
+
+	middleware := registry.Middleware()
+	if len(middleware) != 2 {
+		t.Errorf("expected 2 built-in middleware, got %d", len(middleware))
+	}
+
+	names := make([]string, len(middleware))
+	for i, m := range middleware {
+		names[i] = m.Name()
+	}
+	if names[0] != "builtin1" || names[1] != "builtin2" {
+		t.Errorf("unexpected middleware order or names: %v", names)
+	}
+}
+
+func TestSupportsPlugins(t *testing.T) {
+	result := supportsPlugins()
+	if runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") {
+		if !result {
+			t.Error("expected supportsPlugins() to return true on linux/amd64 or linux/arm64")
+		}
+	} else {
+		if result {
+			t.Error("expected supportsPlugins() to return false on non-linux or non-amd64/arm64")
+		}
+	}
+}
+
+func TestRegistry_GetOutputByFormat_MultipleOutputs(t *testing.T) {
 	registry := NewRegistry()
 
-	// Register something that doesn't implement any plugin interface
-	registry.Register("not a plugin")
+	registry.Register(&mockOutputPlugin{name: "json_out", format: "json"})
+	registry.Register(&mockOutputPlugin{name: "xml_out", format: "xml"})
+	registry.Register(&mockOutputPlugin{name: "yaml_out", format: "yaml"})
 
-	// Should not panic and should result in empty slices
-	if len(registry.Middleware()) != 0 {
-		t.Errorf("expected 0 middleware, got %d", len(registry.Middleware()))
+	jsonOut, ok := registry.GetOutputByFormat("json")
+	if !ok {
+		t.Fatal("expected to find json output")
 	}
-	if len(registry.Outputs()) != 0 {
-		t.Errorf("expected 0 outputs, got %d", len(registry.Outputs()))
+	if jsonOut.Name() != "json_out" {
+		t.Errorf("expected json_out, got %s", jsonOut.Name())
 	}
-	if len(registry.Commands()) != 0 {
-		t.Errorf("expected 0 commands, got %d", len(registry.Commands()))
+
+	yamlOut, ok := registry.GetOutputByFormat("yaml")
+	if !ok {
+		t.Fatal("expected to find yaml output")
+	}
+	if yamlOut.Name() != "yaml_out" {
+		t.Errorf("expected yaml_out, got %s", yamlOut.Name())
+	}
+
+	_, ok = registry.GetOutputByFormat("text")
+	if ok {
+		t.Error("expected not to find text format")
+	}
+}
+
+func TestRegistry_MiddlewareTracker(t *testing.T) {
+	registry := NewRegistry()
+
+	beforeOrder := []string{}
+	afterOrder := []string{}
+
+	mw1 := &middlewareTracker{name: "mw1", beforeOrder: &beforeOrder, afterOrder: &afterOrder}
+	mw2 := &middlewareTracker{name: "mw2", beforeOrder: &beforeOrder, afterOrder: &afterOrder}
+	mw3 := &middlewareTracker{name: "mw3", beforeOrder: &beforeOrder, afterOrder: &afterOrder}
+
+	registry.Register(mw1)
+	registry.Register(mw2)
+	registry.Register(mw3)
+
+	ctx := &RequestContext{Request: &client.Request{URL: "http://example.com"}}
+	result := registry.ApplyBeforeRequest(ctx)
+
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	if len(beforeOrder) != 3 {
+		t.Fatalf("expected 3 before calls, got %d", len(beforeOrder))
+	}
+
+	expectedOrder := []string{"mw1", "mw2", "mw3"}
+	for i, name := range expectedOrder {
+		if beforeOrder[i] != name {
+			t.Errorf("position %d: expected %s, got %s", i, name, beforeOrder[i])
+		}
+	}
+
+	beforeOrder = nil
+	afterOrder = nil
+
+	respCtx := &ResponseContext{Request: &client.Request{}, Response: &client.Response{}}
+	registry.ApplyAfterResponse(respCtx)
+
+	if len(afterOrder) != 3 {
+		t.Fatalf("expected 3 after calls, got %d", len(afterOrder))
+	}
+
+	expectedAfterOrder := []string{"mw3", "mw2", "mw1"}
+	for i, name := range expectedAfterOrder {
+		if afterOrder[i] != name {
+			t.Errorf("after position %d: expected %s, got %s", i, name, afterOrder[i])
+		}
+	}
+}
+
+func TestRegistry_ApplyAfterResponse_ReverseOrder(t *testing.T) {
+	registry := NewRegistry()
+
+	afterOrder := []string{}
+	registry.Register(&middlewareTracker{name: "first", afterOrder: &afterOrder})
+	registry.Register(&middlewareTracker{name: "second", afterOrder: &afterOrder})
+	registry.Register(&middlewareTracker{name: "third", afterOrder: &afterOrder})
+
+	registry.ApplyAfterResponse(&ResponseContext{Request: &client.Request{}, Response: &client.Response{}})
+
+	if len(afterOrder) != 3 {
+		t.Fatalf("expected 3 after calls, got %d", len(afterOrder))
+	}
+	if afterOrder[0] != "third" {
+		t.Errorf("expected third to run first (reverse), got %v", afterOrder)
+	}
+	if afterOrder[1] != "second" {
+		t.Errorf("expected second to run second, got %v", afterOrder)
+	}
+	if afterOrder[2] != "first" {
+		t.Errorf("expected first to run last, got %v", afterOrder)
+	}
+}
+
+func TestRegistry_MiddlewarePanicRecovery_AfterResponse(t *testing.T) {
+	registry := NewRegistry()
+
+	panicMW := &mockMiddleware{name: "panic", panicInAfter: true}
+	normalMW := &mockMiddleware{name: "normal"}
+	finalMW := &mockMiddleware{name: "final"}
+
+	registry.Register(panicMW)
+	registry.Register(normalMW)
+	registry.Register(finalMW)
+
+	result := registry.ApplyAfterResponse(&ResponseContext{Request: &client.Request{}, Response: &client.Response{}})
+
+	if result == nil {
+		t.Error("expected non-nil result despite panic in middleware")
+	}
+}
+
+func TestRegistry_Commands_Multiple(t *testing.T) {
+	registry := NewRegistry()
+
+	registry.Register(&mockCommandPlugin{name: "cmd1", command: "cmd1", description: "Command 1"})
+	registry.Register(&mockCommandPlugin{name: "cmd2", command: "cmd2", description: "Command 2"})
+	registry.Register(&mockCommandPlugin{name: "cmd3", command: "cmd3", description: "Command 3"})
+
+	cmds := registry.Commands()
+	if len(cmds) != 3 {
+		t.Errorf("expected 3 commands, got %d", len(cmds))
+	}
+}
+
+func TestRegistry_Commands_Empty(t *testing.T) {
+	registry := NewRegistry()
+	cmds := registry.Commands()
+	if len(cmds) != 0 {
+		t.Errorf("expected 0 commands, got %d", len(cmds))
+	}
+}
+
+func TestRegistry_Outputs_Empty(t *testing.T) {
+	registry := NewRegistry()
+	outputs := registry.Outputs()
+	if len(outputs) != 0 {
+		t.Errorf("expected 0 outputs, got %d", len(outputs))
+	}
+}
+
+func TestRegistry_Middleware_Empty(t *testing.T) {
+	registry := NewRegistry()
+	mw := registry.Middleware()
+	if len(mw) != 0 {
+		t.Errorf("expected 0 middleware, got %d", len(mw))
+	}
+}
+
+func TestRegistry_ApplyBeforeRequest_Empty(t *testing.T) {
+	registry := NewRegistry()
+	result := registry.ApplyBeforeRequest(&RequestContext{Request: &client.Request{URL: "http://example.com"}})
+	if result == nil {
+		t.Error("expected non-nil result with no middleware")
+	}
+}
+
+func TestRegistry_ApplyAfterResponse_Empty(t *testing.T) {
+	registry := NewRegistry()
+	result := registry.ApplyAfterResponse(&ResponseContext{Request: &client.Request{}, Response: &client.Response{}})
+	if result == nil {
+		t.Error("expected non-nil result with no middleware")
 	}
 }

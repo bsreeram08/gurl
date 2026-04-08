@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -595,5 +597,284 @@ func TestRunner_EmptyCollection(t *testing.T) {
 	_, err := runner.Run(context.Background(), config)
 	if err == nil {
 		t.Error("expected error for empty collection")
+	}
+}
+
+func TestRunner_ConvertHeaders(t *testing.T) {
+	headers := []types.Header{
+		{Key: "Content-Type", Value: "application/json"},
+		{Key: "Authorization", Value: "Bearer token"},
+	}
+
+	result := convertHeaders(headers)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 headers, got %d", len(result))
+	}
+	if result[0].Key != "Content-Type" || result[0].Value != "application/json" {
+		t.Errorf("unexpected header: %+v", result[0])
+	}
+	if result[1].Key != "Authorization" || result[1].Value != "Bearer token" {
+		t.Errorf("unexpected header: %+v", result[1])
+	}
+}
+
+func TestRunner_ConvertHeaders_Nil(t *testing.T) {
+	result := convertHeaders(nil)
+	if result != nil {
+		t.Errorf("expected nil, got %v", result)
+	}
+}
+
+func TestRunner_ConvertAssertions(t *testing.T) {
+	typeAssertions := []types.Assertion{
+		{Field: "status", Op: "equals", Value: "200"},
+		{Field: "body.name", Op: "contains", Value: "Alice"},
+	}
+
+	result := convertAssertions(typeAssertions)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 assertions, got %d", len(result))
+	}
+	if result[0].Field != "status" || result[0].Op != "equals" || result[0].Value != "200" {
+		t.Errorf("unexpected assertion: %+v", result[0])
+	}
+}
+
+func TestRunner_ConvertAssertions_Nil(t *testing.T) {
+	result := convertAssertions(nil)
+	if result != nil {
+		t.Errorf("expected nil, got %v", result)
+	}
+}
+
+func TestRunner_RunWithDataFile(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	tmpDir := t.TempDir()
+	jsonPath := filepath.Join(tmpDir, "test_data.json")
+	if err := os.WriteFile(jsonPath, []byte(`[{"name":"Alice"},{"name":"Bob"}]`), 0644); err != nil {
+		t.Fatalf("failed to write test data: %v", err)
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "data-test",
+		URL:        ts.URL + "/{{name}}",
+		Method:     "GET",
+		Collection: "data-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "data-col",
+		DataFile:       jsonPath,
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Errorf("expected 2 results (2 data rows), got %d", len(results))
+	}
+}
+
+func TestRunner_RunWithDataFile_CSV(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	tmpDir := t.TempDir()
+	csvPath := filepath.Join(tmpDir, "test_data.csv")
+	if err := os.WriteFile(csvPath, []byte("name,value\nAlice,100\nBob,200"), 0644); err != nil {
+		t.Fatalf("failed to write test data: %v", err)
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "csv-test",
+		URL:        ts.URL,
+		Method:     "GET",
+		Collection: "csv-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "csv-col",
+		DataFile:       csvPath,
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Errorf("expected 2 results, got %d", len(results))
+	}
+}
+
+func TestRunner_RunRequest_VariableSubstitutionError(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "var-error",
+		URL:        ts.URL + "/{{nonexistent}}",
+		Method:     "GET",
+		Collection: "var-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "var-col",
+		Iterations:     1,
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Failed != 1 {
+		t.Errorf("expected 1 failed request, got %d", results[0].Failed)
+	}
+}
+
+func TestRunner_RunRequest_Timeout(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "timeout-test",
+		URL:        ts.URL,
+		Method:     "GET",
+		Collection: "timeout-col",
+		Timeout:    "50ms",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "timeout-col",
+		Iterations:     1,
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Failed != 1 {
+		t.Errorf("expected 1 failed request (timeout), got %d", results[0].Failed)
+	}
+}
+
+func TestRunner_RunWithAssertions(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"name": "Alice", "age": "30"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "assertion-test",
+		URL:        ts.URL,
+		Method:     "GET",
+		Collection: "assert-col",
+		Assertions: []types.Assertion{
+			{Field: "status_code", Op: "equals", Value: "200"},
+		},
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "assert-col",
+		Iterations:     1,
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Passed != 1 {
+		t.Errorf("expected passed=1, got %d", results[0].Passed)
+	}
+}
+
+func TestRunner_MultipleIterations(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	count := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count++
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]int{"count": count})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "multi-iter",
+		URL:        ts.URL,
+		Method:     "GET",
+		Collection: "multi-iter-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "multi-iter-col",
+		Iterations:     5,
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 5 {
+		t.Errorf("expected 5 iterations, got %d", len(results))
+	}
+	if count != 5 {
+		t.Errorf("expected 5 total requests, got %d", count)
+	}
+
+	for i, r := range results {
+		if r.Iteration != i+1 {
+			t.Errorf("iteration %d: expected Iteration=%d, got %d", i+1, i+1, r.Iteration)
+		}
 	}
 }

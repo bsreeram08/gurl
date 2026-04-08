@@ -6,9 +6,11 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -180,7 +182,8 @@ func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response,
 	}
 
 	if req.Body != "" {
-		httpReq.Body = http.NoBody
+		httpReq.Body = io.NopCloser(strings.NewReader(req.Body))
+		httpReq.ContentLength = int64(len(req.Body))
 	}
 
 	maxRedirects := req.MaxRedirects

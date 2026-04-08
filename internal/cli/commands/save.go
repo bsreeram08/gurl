@@ -198,6 +198,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				Method:       "GET",
 				OutputFormat: c.String("format"),
 				Tags:         c.StringSlice("tag"),
+				Collection:   c.String("collection"),
 				Folder:       c.String("folder"),
 				CreatedAt:    time.Now().Unix(),
 				UpdatedAt:    time.Now().Unix(),

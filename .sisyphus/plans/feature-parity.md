@@ -3088,7 +3088,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/protocols/grpc/grpc.go`, `internal/protocols/grpc/reflection.go`, `internal/protocols/grpc/grpc_test.go`, `internal/protocols/grpc/cli.go`, `go.mod`, `go.sum`
   - Pre-commit: `go test ./internal/protocols/grpc/... -count=1`
 
-- [ ] 43. WebSocket Client
+- [x] 43. WebSocket Client
 
   **What to do**:
   - **RED**: Write tests in `internal/protocols/grpc/grpc_test.go`:
@@ -3310,7 +3310,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/protocols/websocket/ws.go`, `internal/protocols/websocket/interactive.go`, `internal/protocols/websocket/ws_test.go`, `internal/protocols/websocket/cli.go`, `go.mod`, `go.sum`
   - Pre-commit: `go test ./internal/protocols/websocket/... -count=1`
 
-- [ ] 44. Server-Sent Events (SSE) Client
+- [x] 44. Server-Sent Events (SSE) Client
 
   **What to do**:
   - **RED**: Write tests in `internal/protocols/sse/sse_test.go`:
@@ -4717,7 +4717,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/tui/requestlist.go`, `internal/tui/listitem.go`, `internal/tui/requestlist_test.go`
   - Pre-commit: `go test ./internal/tui/... -count=1`
 
-- [ ] 59. TUI: Request Builder Panel
+- [x] 59. TUI: Request Builder Panel
 
   **What to do**:
   - **RED**: Write tests in `internal/tui/requestbuilder_test.go`:
@@ -4821,7 +4821,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
 
   - Pre-commit: `go test ./internal/tui/... -count=1`
 
-- [ ] 60. TUI: Response Viewer Panel
+- [x] 60. TUI: Response Viewer Panel
 
   **What to do**:
   - **RED**: Write tests in `internal/tui/responseviewer_test.go`:
@@ -4920,7 +4920,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/tui/responseviewer.go`, `internal/tui/tabs.go`, `internal/tui/responseviewer_test.go`, `go.mod`, `go.sum`
   - Pre-commit: `go test ./internal/tui/... -count=1`
 
-- [ ] 61. TUI: Environment Switcher
+- [x] 61. TUI: Environment Switcher
 
   **What to do**:
   - **RED**: Write tests in `internal/tui/envswitcher_test.go`:

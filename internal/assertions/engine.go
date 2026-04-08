@@ -96,8 +96,8 @@ func (e *Evaluator) extractField(resp *client.Response, field string) (string, e
 		return string(resp.Body), nil
 	}
 
-	// Handle status field
-	if field == "status" {
+	// Handle status field (also accept "status_code" as alias)
+	if field == "status" || field == "status_code" {
 		return strconv.Itoa(resp.StatusCode), nil
 	}
 

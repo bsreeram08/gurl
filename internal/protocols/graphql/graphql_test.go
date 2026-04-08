@@ -318,6 +318,158 @@ func TestGraphQL_BuildRequestBody(t *testing.T) {
 	}
 }
 
+// Test for NewClient
+func TestNewClient(t *testing.T) {
+	c := NewClient()
+	if c == nil {
+		t.Fatal("NewClient() returned nil")
+	}
+	if c.httpClient == nil {
+		t.Error("httpClient should not be nil")
+	}
+}
+
+func TestClient_WithNilHTTPClient(t *testing.T) {
+	c := &Client{httpClient: nil}
+
+	ctx := context.Background()
+	_, _ = c.Execute(ctx, "http://example.com", Request{Query: "{}"})
+}
+
+func TestGraphQL_ExecuteWithCustomHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Custom-Header") != "custom-value" {
+			t.Errorf("expected X-Custom-Header, got %s", r.Header.Get("X-Custom-Header"))
+		}
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			t.Errorf("expected Authorization header, got %s", r.Header.Get("Authorization"))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		resp := `{"data": {"test": true}}`
+		w.Write([]byte(resp))
+	}))
+	defer server.Close()
+
+	c := NewClient()
+
+	_, _ = c.Execute(context.Background(), server.URL, Request{
+		Query: `query { test }`,
+	}, WithHeader("X-Custom-Header", "custom-value"), WithHeader("Authorization", "Bearer test-token"))
+}
+
+func TestGraphQL_ExecuteWithOperationName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&reqBody)
+
+		if reqBody["operationName"] != "MyOperation" {
+			t.Errorf("expected operationName=MyOperation, got %v", reqBody["operationName"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		resp := `{"data": {}}`
+		w.Write([]byte(resp))
+	}))
+	defer server.Close()
+
+	c := NewClient()
+
+	_, _ = c.Execute(context.Background(), server.URL, Request{
+		Query:         `query MyOperation { me { name } }`,
+		OperationName: "MyOperation",
+	})
+}
+
+func TestGraphQL_NullData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := `{"data": null}`
+		w.Write([]byte(resp))
+	}))
+	defer server.Close()
+
+	c := NewClient()
+
+	resp, err := c.Execute(context.Background(), server.URL, Request{
+		Query: `query { me { name } }`,
+	})
+
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	if resp.Data != nil {
+		t.Errorf("expected nil Data for null response, got %s", string(resp.Data))
+	}
+}
+
+func TestGraphQL_EmptyQuery(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&reqBody)
+
+		w.Header().Set("Content-Type", "application/json")
+		resp := `{"data": {}}`
+		w.Write([]byte(resp))
+	}))
+	defer server.Close()
+
+	c := NewClient()
+
+	_, _ = c.Execute(context.Background(), server.URL, Request{
+		Query: "",
+	})
+}
+
+func TestGraphQL_VariablesAndOperationName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&reqBody)
+
+		if reqBody["query"] == nil {
+			t.Error("expected query field")
+		}
+		if reqBody["variables"] == nil {
+			t.Error("expected variables field")
+		}
+		if reqBody["operationName"] != "CreateUser" {
+			t.Errorf("expected operationName=CreateUser, got %v", reqBody["operationName"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		resp := `{"data": {"createUser": {"id": "123"}}}`
+		w.Write([]byte(resp))
+	}))
+	defer server.Close()
+
+	c := NewClient()
+
+	_, _ = c.Execute(context.Background(), server.URL, Request{
+		Query:         `mutation CreateUser($name: String!) { createUser(name: $name) { id } }`,
+		Variables:     map[string]interface{}{"name": "Alice"},
+		OperationName: "CreateUser",
+	})
+}
+
+func TestGraphQL_InvalidResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("not valid json"))
+	}))
+	defer server.Close()
+
+	c := NewClient()
+
+	_, err := c.Execute(context.Background(), server.URL, Request{
+		Query: `query { test }`,
+	})
+
+	if err == nil {
+		t.Error("expected error for invalid JSON response")
+	}
+}
+
 func TestGraphQL_MultilineQuery(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var reqBody map[string]interface{}

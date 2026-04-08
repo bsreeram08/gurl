@@ -80,12 +80,20 @@ func TestSSE_EventTypes(t *testing.T) {
 	// Mock SSE server that sends events with different types
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("Expected ResponseWriter to implement Flusher")
+		}
+
 		w.Write([]byte("event: update\n"))
 		w.Write([]byte("data: update data\n"))
 		w.Write([]byte("\n"))
+		flusher.Flush()
+
 		w.Write([]byte("event: message\n"))
 		w.Write([]byte("data: message data\n"))
 		w.Write([]byte("\n"))
+		flusher.Flush()
 	}))
 	defer server.Close()
 
@@ -132,15 +140,25 @@ func TestSSE_EventTypeFilter(t *testing.T) {
 	// Mock SSE server that sends events with different types
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("Expected ResponseWriter to implement Flusher")
+		}
+
 		w.Write([]byte("event: update\n"))
 		w.Write([]byte("data: update data\n"))
 		w.Write([]byte("\n"))
+		flusher.Flush()
+
 		w.Write([]byte("event: message\n"))
 		w.Write([]byte("data: message data\n"))
 		w.Write([]byte("\n"))
+		flusher.Flush()
+
 		w.Write([]byte("event: update\n"))
 		w.Write([]byte("data: another update\n"))
 		w.Write([]byte("\n"))
+		flusher.Flush()
 	}))
 	defer server.Close()
 
