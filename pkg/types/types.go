@@ -25,6 +25,13 @@ type Var struct {
 	Example string `json:"example"`
 }
 
+// Assertion represents a declarative assertion to evaluate against a response.
+type Assertion struct {
+	Field string `json:"field"`
+	Op    string `json:"op"`
+	Value string `json:"value"`
+}
+
 // ParsedCurl represents a parsed curl command
 type ParsedCurl struct {
 	URL     string            `json:"url"`
@@ -49,6 +56,9 @@ type SavedRequest struct {
 	OutputFormat string      `json:"output_format"`
 	AuthConfig   *AuthConfig `json:"auth_config,omitempty"`
 	Timeout      string      `json:"timeout,omitempty"`
+	Assertions   []Assertion `json:"assertions,omitempty"`
+	Folder       string      `json:"folder,omitempty"`
+	SortOrder    int         `json:"sort_order"`
 	CreatedAt    int64       `json:"created_at"`
 	UpdatedAt    int64       `json:"updated_at"`
 }

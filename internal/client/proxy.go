@@ -139,7 +139,11 @@ func shouldUseProxy(req *http.Request, noProxy []string) bool {
 }
 
 func (c *Client) buildClientWithProxy(req Request) *http.Client {
-	transport := *c.transport
+	transport := &http.Transport{
+		TLSClientConfig:   c.transport.TLSClientConfig,
+		DialContext:       c.transport.DialContext,
+		DisableKeepAlives: c.transport.DisableKeepAlives,
+	}
 
 	if req.ProxyURL != "" {
 		proxyURL, err := url.Parse(req.ProxyURL)
@@ -176,7 +180,7 @@ func (c *Client) buildClientWithProxy(req Request) *http.Client {
 	}
 
 	return &http.Client{
-		Transport: &transport,
+		Transport: transport,
 		Timeout:   c.timeout,
 	}
 }

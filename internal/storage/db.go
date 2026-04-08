@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/sreeram/gurl/pkg/types"
@@ -24,6 +25,10 @@ type DB interface {
 	UpdateRequest(req *types.SavedRequest) error
 	SaveHistory(history *types.ExecutionHistory) error
 	GetHistory(requestID string, limit int) ([]*types.ExecutionHistory, error)
+	ListFolder(path string) ([]*types.SavedRequest, error)
+	ListFolderRecursive(path string) ([]*types.SavedRequest, error)
+	DeleteFolder(path string) error
+	GetAllFolders() ([]string, error)
 }
 
 // ListOptions defines filtering options for listing requests
@@ -127,6 +132,11 @@ func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
 	for _, tag := range req.Tags {
 		tagKey := fmt.Sprintf("idx:tag:%s", tag)
 		db.addToIndexBatch(batch, tagKey, req.ID)
+	}
+
+	if req.Folder != "" {
+		folderKey := fmt.Sprintf("idx:folder:%s", req.Folder)
+		db.addToIndexBatch(batch, folderKey, req.ID)
 	}
 
 	// Atomic write
@@ -404,13 +414,16 @@ func (db *LMDB) UpdateRequest(req *types.SavedRequest) error {
 		db.removeFromIndex(colKey, req.ID)
 	}
 
-	// Remove old tag indices
 	for _, tag := range existing.Tags {
 		tagKey := fmt.Sprintf("idx:tag:%s", tag)
 		db.removeFromIndex(tagKey, req.ID)
 	}
 
-	// Save the updated request
+	if existing.Folder != "" && existing.Folder != req.Folder {
+		folderKey := fmt.Sprintf("idx:folder:%s", existing.Folder)
+		db.removeFromIndex(folderKey, req.ID)
+	}
+
 	return db.SaveRequest(req)
 }
 
@@ -470,6 +483,121 @@ func (db *LMDB) GetHistory(requestID string, limit int) ([]*types.ExecutionHisto
 	return results, nil
 }
 
-// JSONMarshal is exported for use by commands
+func (db *LMDB) ListFolder(path string) ([]*types.SavedRequest, error) {
+	folderKey := fmt.Sprintf("idx:folder:%s", path)
+	requestIDs := db.getFromIndex(folderKey)
+	if requestIDs == nil {
+		return []*types.SavedRequest{}, nil
+	}
+
+	var results []*types.SavedRequest
+	for _, id := range requestIDs {
+		req, err := db.GetRequest(id)
+		if err != nil {
+			continue
+		}
+		results = append(results, req)
+	}
+
+	return results, nil
+}
+
+func (db *LMDB) ListFolderRecursive(path string) ([]*types.SavedRequest, error) {
+	iter := db.DB.NewIterator(nil, nil)
+	defer iter.Release()
+
+	var requestIDs []string
+	folderPrefix := fmt.Sprintf("idx:folder:%s/", path)
+	exactFolder := fmt.Sprintf("idx:folder:%s", path)
+
+	for iter.Next() {
+		key := string(iter.Key())
+		if key == exactFolder {
+			data := iter.Value()
+			var ids []string
+			if err := json.Unmarshal(data, &ids); err == nil {
+				requestIDs = append(requestIDs, ids...)
+			}
+		} else if strings.HasPrefix(key, folderPrefix) {
+			data := iter.Value()
+			var ids []string
+			if err := json.Unmarshal(data, &ids); err == nil {
+				requestIDs = append(requestIDs, ids...)
+			}
+		}
+	}
+
+	if len(requestIDs) == 0 {
+		return []*types.SavedRequest{}, nil
+	}
+
+	uniqueIDs := uniqueStrings(requestIDs)
+	var results []*types.SavedRequest
+	for _, id := range uniqueIDs {
+		req, err := db.GetRequest(id)
+		if err != nil {
+			continue
+		}
+		results = append(results, req)
+	}
+
+	return results, nil
+}
+
+func (db *LMDB) DeleteFolder(path string) error {
+	requests, err := db.ListFolder(path)
+	if err != nil {
+		return err
+	}
+
+	for _, req := range requests {
+		req.Folder = ""
+		if err := db.UpdateRequest(req); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (db *LMDB) GetAllFolders() ([]string, error) {
+	iter := db.DB.NewIterator(nil, nil)
+	defer iter.Release()
+
+	folderSet := make(map[string]bool)
+	prefix := "idx:folder:"
+
+	for iter.Next() {
+		key := string(iter.Key())
+		if strings.HasPrefix(key, prefix) {
+			folderPath := strings.TrimPrefix(key, prefix)
+			folderSet[folderPath] = true
+		}
+	}
+
+	if len(folderSet) == 0 {
+		return []string{}, nil
+	}
+
+	folders := make([]string, 0, len(folderSet))
+	for folder := range folderSet {
+		folders = append(folders, folder)
+	}
+
+	return folders, nil
+}
+
+func uniqueStrings(slice []string) []string {
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(slice))
+	for _, s := range slice {
+		if !seen[s] {
+			seen[s] = true
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
 var JSONMarshal = json.Marshal
 var JSONUnmarshal = json.Unmarshal

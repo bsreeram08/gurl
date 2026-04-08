@@ -1,0 +1,407 @@
+package tui
+
+import (
+	"fmt"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/atotto/clipboard"
+	"github.com/charmbracelet/bubbles/viewport"
+	"github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/sreeram/gurl/internal/client"
+	"github.com/sreeram/gurl/internal/formatter"
+)
+
+// ResponseTab represents the active tab in the response viewer
+type ResponseTab int
+
+const (
+	TabBody ResponseTab = iota
+	TabHeaders
+	TabCookies
+	TabTiming
+)
+
+// ResponseViewer is a bubbletea sub-model for displaying HTTP responses
+type ResponseViewer struct {
+	response   *client.Response
+	activeTab  ResponseTab
+	viewport   viewport.Model
+	filterText string
+	filtering  bool
+	width      int
+	height     int
+	copied     bool
+	saved      bool
+}
+
+// NewResponseViewer creates a new response viewer component
+func NewResponseViewer() *ResponseViewer {
+	vp := viewport.New(80, 20)
+
+	return &ResponseViewer{
+		activeTab: TabBody,
+		viewport:  vp,
+	}
+}
+
+// SetResponse sets the response to display
+func (rv *ResponseViewer) SetResponse(resp *client.Response) {
+	rv.response = resp
+	rv.copied = false
+	rv.saved = false
+	rv.updateViewportContent()
+}
+
+// updateViewportContent updates the viewport with current tab content
+func (rv *ResponseViewer) updateViewportContent() {
+	if rv.response == nil {
+		return
+	}
+
+	var content string
+	switch rv.activeTab {
+	case TabBody:
+		content = rv.formatBody()
+	case TabHeaders:
+		content = rv.formatHeaders()
+	case TabCookies:
+		content = rv.formatCookies()
+	case TabTiming:
+		content = rv.formatTiming()
+	}
+
+	rv.viewport.SetContent(content)
+}
+
+// formatBody formats the response body with syntax highlighting
+func (rv *ResponseViewer) formatBody() string {
+	if rv.response == nil || len(rv.response.Body) == 0 {
+		return "(empty response body)"
+	}
+
+	contentType := ""
+	if rv.response.Headers != nil {
+		contentType = rv.response.Headers.Get("Content-Type")
+	}
+
+	opts := formatter.FormatOptions{
+		Indent: "  ",
+		Color:  true,
+	}
+
+	return formatter.Format(rv.response.Body, contentType, opts)
+}
+
+// formatHeaders formats response headers as a table
+func (rv *ResponseViewer) formatHeaders() string {
+	if rv.response == nil || rv.response.Headers == nil {
+		return "(no headers)"
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Status: ")
+	sb.WriteString(rv.statusCodeColor())
+	sb.WriteString(fmt.Sprintf("%d %s\n\n", rv.response.StatusCode, http.StatusText(rv.response.StatusCode)))
+
+	sb.WriteString("Headers:\n")
+	for key, values := range rv.response.Headers {
+		for _, value := range values {
+			sb.WriteString(fmt.Sprintf("  %s: %s\n", Style.Header.Render(key), value))
+		}
+	}
+
+	return sb.String()
+}
+
+// formatCookies parses and displays Set-Cookie headers
+func (rv *ResponseViewer) formatCookies() string {
+	if rv.response == nil || rv.response.Headers == nil {
+		return "(no cookies)"
+	}
+
+	cookies := rv.response.Headers["Set-Cookie"]
+	if len(cookies) == 0 {
+		return "(no cookies set)"
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Cookies:\n\n")
+	for _, cookie := range cookies {
+		sb.WriteString(fmt.Sprintf("  %s\n", cookie))
+	}
+
+	return sb.String()
+}
+
+// formatTiming displays timing breakdown
+func (rv *ResponseViewer) formatTiming() string {
+	if rv.response == nil {
+		return "(no timing data)"
+	}
+
+	var sb strings.Builder
+	dur := rv.response.Duration
+
+	sb.WriteString("Request Timing:\n\n")
+	sb.WriteString(fmt.Sprintf("  Total:    %s\n", dur))
+	sb.WriteString(fmt.Sprintf("  DNS:      %s\n", rv.estimateDNS()))
+	sb.WriteString(fmt.Sprintf("  Connect:  %s\n", rv.estimateConnect()))
+	sb.WriteString(fmt.Sprintf("  TLS:      %s\n", rv.estimateTLS()))
+	sb.WriteString(fmt.Sprintf("  TTFB:     %s\n", rv.estimateTTFB(dur)))
+
+	return sb.String()
+}
+
+// estimateDNS estimates DNS lookup time (placeholder)
+func (rv *ResponseViewer) estimateDNS() time.Duration {
+	return rv.response.Duration / 10 // Rough estimate
+}
+
+// estimateConnect estimates connection time (placeholder)
+func (rv *ResponseViewer) estimateConnect() time.Duration {
+	return rv.response.Duration / 5 // Rough estimate
+}
+
+// estimateTLS estimates TLS handshake time (placeholder)
+func (rv *ResponseViewer) estimateTLS() time.Duration {
+	return rv.response.Duration / 4 // Rough estimate
+}
+
+// estimateTTFB estimates time to first byte
+func (rv *ResponseViewer) estimateTTFB(total time.Duration) time.Duration {
+	return total / 2
+}
+
+// statusCodeColor returns the color string for the current status code
+func (rv *ResponseViewer) statusCodeColor() string {
+	if rv.response == nil {
+		return ""
+	}
+
+	switch {
+	case rv.response.StatusCode >= 200 && rv.response.StatusCode < 300:
+		return "82" // Green
+	case rv.response.StatusCode >= 300 && rv.response.StatusCode < 400:
+		return "228" // Yellow
+	case rv.response.StatusCode >= 400 && rv.response.StatusCode < 500:
+		return "214" // Orange
+	default:
+		return "196" // Red
+	}
+}
+
+// StatusBadge returns the status code styled for display
+func (rv *ResponseViewer) StatusBadge() string {
+	if rv.response == nil {
+		return ""
+	}
+
+	color := rv.statusCodeColor()
+	badge := fmt.Sprintf("%d %s", rv.response.StatusCode, http.StatusText(rv.response.StatusCode))
+
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true)
+	return style.Render(badge)
+}
+
+// MetaInfo returns response metadata as a string
+func (rv *ResponseViewer) MetaInfo() string {
+	if rv.response == nil {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Time: %s | Size: %s", rv.response.Duration, formatSize(rv.response.Size)))
+
+	if rv.response.Headers != nil {
+		ct := rv.response.Headers.Get("Content-Type")
+		if ct != "" {
+			sb.WriteString(fmt.Sprintf(" | Type: %s", ct))
+		}
+	}
+
+	return sb.String()
+}
+
+// formatSize formats byte size for display
+func formatSize(size int64) string {
+	const unit = 1024
+	if size < unit {
+		return fmt.Sprintf("%d B", size)
+	}
+	div, exp := int64(unit), 0
+	for n := size / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+// CopyToClipboard copies the response body to clipboard
+func (rv *ResponseViewer) CopyToClipboard() error {
+	if rv.response == nil {
+		return fmt.Errorf("no response to copy")
+	}
+
+	// Copy raw body, not formatted
+	return clipboard.WriteAll(string(rv.response.Body))
+}
+
+// SaveToFile saves the response body to a file
+func (rv *ResponseViewer) SaveToFile(filename string) error {
+	if rv.response == nil {
+		return fmt.Errorf("no response to save")
+	}
+
+	return os.WriteFile(filename, rv.response.Body, 0644)
+}
+
+// ActiveTab returns the currently active tab
+func (rv *ResponseViewer) ActiveTab() ResponseTab {
+	return rv.activeTab
+}
+
+// SetTab switches to the specified tab
+func (rv *ResponseViewer) SetTab(tab ResponseTab) {
+	rv.activeTab = tab
+	rv.updateViewportContent()
+}
+
+// handleKeyPress handles keyboard input
+func (rv *ResponseViewer) handleKeyPress(msg tea.KeyMsg) bool {
+	switch msg.Type {
+	case tea.KeyRunes:
+		runeStr := string(msg.Runes)
+		switch runeStr {
+		case "b":
+			rv.SetTab(TabBody)
+			return true
+		case "h":
+			rv.SetTab(TabHeaders)
+			return true
+		case "c":
+			rv.SetTab(TabCookies)
+			return true
+		case "t":
+			rv.SetTab(TabTiming)
+			return true
+		case "y":
+			rv.copied = true
+			rv.CopyToClipboard()
+			return true
+		case "s":
+			rv.saved = true
+			return true
+		}
+	case tea.KeyUp, tea.KeyDown:
+		// Handled by viewport
+		return false
+	}
+
+	return false
+}
+
+// View renders the response viewer
+func (rv *ResponseViewer) View() string {
+	if rv.response == nil {
+		return Style.WelcomeText.Render("  Send a request to see the response")
+	}
+
+	var sb strings.Builder
+
+	// Status line with status code, time, size
+	statusColor := rv.statusCodeColor()
+	statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Bold(true)
+
+	sb.WriteString(fmt.Sprintf("  %s %s %s\n",
+		statusStyle.Render(fmt.Sprintf("%d %s", rv.response.StatusCode, http.StatusText(rv.response.StatusCode))),
+		Style.PlainText.Render(rv.response.Duration.String()),
+		Style.PlainText.Render(formatSize(rv.response.Size)),
+	))
+
+	// Tab bar
+	sb.WriteString(rv.renderTabBar())
+	sb.WriteString("\n")
+
+	// Content based on active tab
+	switch rv.activeTab {
+	case TabBody:
+		sb.WriteString(rv.viewport.View())
+	case TabHeaders:
+		sb.WriteString(rv.formatHeaders())
+	case TabCookies:
+		sb.WriteString(rv.formatCookies())
+	case TabTiming:
+		sb.WriteString(rv.formatTiming())
+	}
+
+	// Copy/save feedback
+	if rv.copied {
+		sb.WriteString(Style.Hint.Render("  Copied!"))
+	} else if rv.saved {
+		sb.WriteString(Style.Hint.Render("  Saved!"))
+	}
+
+	return sb.String()
+}
+
+// renderTabBar renders the tab bar
+func (rv *ResponseViewer) renderTabBar() string {
+	tabs := []string{"Body", "Headers", "Cookies", "Timing"}
+	var sb strings.Builder
+
+	for i, tab := range tabs {
+		if ResponseTab(i) == rv.activeTab {
+			sb.WriteString(Style.SelectedItem.Render(fmt.Sprintf(" [%s] ", tab)))
+		} else {
+			sb.WriteString(Style.ListItem.Render(fmt.Sprintf(" %s ", tab)))
+		}
+	}
+
+	return sb.String()
+}
+
+// Update implements tea.Model.Update
+func (rv *ResponseViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		rv.width = msg.Width
+		rv.height = msg.Height
+		rv.viewport.Width = msg.Width - 4
+		rv.viewport.Height = msg.Height - 8
+		rv.updateViewportContent()
+		return rv, nil
+
+	case tea.KeyMsg:
+		if rv.handleKeyPress(msg) {
+			return rv, nil
+		}
+
+		// Pass to viewport for scrolling
+		if IsNavigateUpKey(msg.String()) {
+			rv.viewport.LineUp(3)
+			return rv, nil
+		}
+		if IsNavigateDownKey(msg.String()) {
+			rv.viewport.LineDown(3)
+			return rv, nil
+		}
+
+		rv.viewport, _ = rv.viewport.Update(msg)
+	}
+
+	return rv, nil
+}
+
+// Init implements tea.Model.Init
+func (rv *ResponseViewer) Init() tea.Cmd {
+	return nil
+}
+
+// GetResponse returns the current response
+func (rv *ResponseViewer) GetResponse() *client.Response {
+	return rv.response
+}

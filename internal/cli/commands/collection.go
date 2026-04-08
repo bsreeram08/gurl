@@ -5,18 +5,21 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/urfave/cli/v3"
+	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
+	"github.com/urfave/cli/v3"
 )
 
 // CollectionCommand creates the collection command
-func CollectionCommand(db storage.DB) *cli.Command {
+func CollectionCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 	return &cli.Command{
 		Name:    "collection",
 		Aliases: []string{"collections", "col", "c"},
 		Usage:   "Manage collections",
 		Commands: []*cli.Command{
+			runner.CollectionRunCommand(db, envStorage),
 			{
 				Name:    "list",
 				Aliases: []string{"ls", "l"},

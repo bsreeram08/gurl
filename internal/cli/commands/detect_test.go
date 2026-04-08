@@ -242,7 +242,10 @@ func TestDetectParsesHeadersCorrectly(t *testing.T) {
 
 	// Test with multiple headers
 	r, w, _ := os.Pipe()
+	origStdin := os.Stdin
 	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
 	_, _ = w.WriteString("curl -X POST https://headers.example.com -H 'Authorization: Bearer token123' -H 'X-Custom-Header: value'")
 	w.Close()
 
@@ -258,6 +261,4 @@ func TestDetectParsesHeadersCorrectly(t *testing.T) {
 	if len(req.Headers) != 2 {
 		t.Errorf("expected 2 headers, got %d", len(req.Headers))
 	}
-
-	os.Stdin = os.Stdin // restore
 }

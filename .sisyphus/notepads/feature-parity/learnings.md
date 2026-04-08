@@ -729,3 +729,234 @@ type GraphQLError struct {
 - `httpClient.Timeout` is set to `effectiveTimeout` (not always `c.timeout`) to handle per-request override
 - Pre-existing unrelated failures in template package (TestGetVariablesFromRequest) — not caused by T40
 
+## Task T45: JavaScript Scripting Engine (goja runtime)
+
+### What Worked
+- Created `internal/scripting/engine.go` with `Engine` struct wrapping `*goja.Runtime`
+- Created `internal/scripting/globals.go` with `gurl`, `console`, `require` objects
+- Created `internal/scripting/sandbox.go` with security restrictions (blocks fs, net, os, child_process, http, https)
+- Created 28 tests covering all required functionality
+- Used goja ES5.1 runtime (v0.0.0-20260311135729)
+
+### Key Implementation Details
+- `Engine.vm` is set before calling `RegisterGlobals` so methods can access the runtime
+- `gurl.request` and `gurl.response` use JavaScript getters via `Object.defineProperty` in JS
+- `gurl._request` and `gurl._response` are internal properties set via `updateGurlRequest/Response`
+- Sandbox enforcement: JavaScript overrides `global.require` to block listed modules
+- Allowed modules (crypto, JSON, Math, Date, Buffer) are set as globals via `vm.Set`
+- Timeout uses `context.WithTimeout` with goroutine for execution
+- Test assertions use `panic/recover` to catch assertion failures in JS callbacks
+
+### goja API Gotchas
+- `goja.FunctionCall` does NOT have `.Runtime()` or `.VM` field - use `e.vm` directly
+- `goja.Value.Call()` does NOT exist - use `goja.AssertFunction(fn)` to get callable, then call with `fn(goja.Undefined(), args...)`
+- `goja.NewError()` does NOT exist - use `panic(errors.New(...))` for exceptions
+- `vm.RunString()` returns `(goja.Value, error)` - must handle both return values
+- To define getters in JS: use `Object.defineProperty` via `vm.RunString`
+- For chained API (crypto, Buffer): create proper goja objects with methods, not nil
+
+### Sandbox Implementation
+- Blocked modules defined in `blockedModules` map
+- JavaScript snippet creates `global.require` that checks against blocked list
+- Allowed modules (crypto, JSON, Math, Date, Buffer) are set as VM globals before script execution
+- crypto.createHash returns an object with update() returning self, digest() returning mock string
+- Buffer.from returns an object with toString() method
+
+### Test Coverage (28 tests)
+- Basic execution, console.log/warn/error
+- setVar/getVar round-trip
+- Request headers modification via gurl.request.headers.set()
+- Response status/body access
+- Assertion API (gurl.test, gurl.expect)
+- Timeout enforcement (context deadline)
+- Sandbox: blocked modules (fs, net, os, child_process, http, https)
+- Sandbox: allowed modules (crypto, Buffer, JSON, Math, Date)
+- skipRequest and setNextRequest flags
+
+### Test Results
+- `go test ./internal/scripting/... -v -count=1` → 28 passed
+- `go build ./...` → Success
+
+### Notes
+- goja v0.0.0-20260311135729 has different API than expected from docs - had to discover correct methods through trial and error
+- The `gurl.expect()` API chains through JS getter pattern: `gurl.expect(val).to.equal(expected)`
+
+
+## Task T48: Request Chaining via Scripts
+
+### What Worked
+- Created `internal/scripting/chaining.go` with `ChainExecutor` struct
+- Created `internal/scripting/chaining_test.go` with 7 tests
+- Wired `--chain` flag to run command in `internal/cli/commands/run.go`
+- Added `MaxIterations()` and `Variables()` methods to ChainExecutor
+
+### ChainExecutor Implementation
+- `NewChainExecutor(engine *Engine, opts ...ChainExecutorOption)` - factory with functional options
+- `WithMaxIterations(max int)` - option to customize max iterations (default 100)
+- `MarkIteration(requestName string)` - tracks visit count per request
+- `GetNextRequest()` - reads `engine.nextRequest` set by `gurl.setNextRequest()`
+- `IsCircular()` - returns true if any request visited 3+ times
+- `MaxIterationsReached()` - returns true when iteration count >= maxIterations
+- `MaxIterations()` - exported getter for maxIterations
+- `Variables()` - returns engine's variables map for persistence across chain
+- `Reset()` - clears visited map and iteration count
+
+### jsSetNextRequest Behavior
+- `gurl.setNextRequest("name")` sets `engine.nextRequest = name`
+- `gurl.setNextRequest(null)` sets `engine.nextRequest = ""` (empty string stops chain)
+- null value in goja becomes empty string when exported via `Export().(string)`
+
+### Variable Persistence Across Chain
+- `engine.variables` is a `map[string]string` that persists across executions
+- `RunPostResponse` sets variables via `gurl.setVar()` which updates `engine.variables`
+- Variables are passed to next request via `vars` map merge in `executeChain()`
+
+### Key Edge Cases Handled
+- Empty nextRequest (null in JS) stops chain execution
+- Circular detection: 3+ repetitions of same request triggers error
+- Max iterations: default 100, configurable via `WithMaxIterations()`
+- Variables set in post-response script persist to next request's pre-request script
+
+### Test Coverage (7 tests)
+- TestChain_SetNextRequest - basic setNextRequest functionality
+- TestChain_PassVariable - variable persistence across requests
+- TestChain_StopChain - stopping chain with null
+- TestChain_CircularDetection - 3+ repetitions detected
+- TestChain_MaxIterations - default 100 and custom limits
+- TestChain_ConditionalBranch - conditional next request selection
+- TestChain_ExecutionOrder - proper execution sequence
+
+### Files Created
+- `internal/scripting/chaining.go` - ChainExecutor implementation
+- `internal/scripting/chaining_test.go` - 7 tests
+
+### Files Modified
+- `internal/cli/commands/run.go` - added --chain flag, executeChain(), executeSingleRequest()
+
+### Test Results
+- `go test ./internal/scripting/... -v -run TestChain -count=1` → 7 passed
+- `go test ./internal/scripting/... -count=1` → 58 passed
+- `go build ./internal/scripting/... ./internal/cli/commands/...` → Success
+
+### Notes
+- TDD: wrote tests first (RED), then implementation (GREEN)
+- Engine's `nextRequest` field is the communication mechanism between JS and Go
+- Chain executor uses functional options pattern for configuration
+- Exported `maxIterations` via `MaxIterations()` method to allow CLI access
+
+## Task T51: Data-Driven Testing (CSV/JSON Datasets)
+
+### What Worked
+- Created `internal/runner/datadriven.go` with `DataLoader` struct supporting CSV and JSON
+- Created `internal/runner/datadriven_test.go` with 7 tests covering all required scenarios
+- Wired `--data` flag to collection run command (`internal/runner/cli.go`)
+- Wired `--data` flag to run command (`internal/cli/commands/run.go`)
+- Added `DataFile` field to `RunConfig` struct in `runner.go`
+
+### Implementation Details
+- `NewDataLoader(filePath)` - factory that auto-detects file type from extension (.csv or .json)
+- CSV parsing: uses `encoding/csv` with `bufio.Reader` for streaming (doesn't load entire file)
+- JSON parsing: uses `json.Decoder` with streaming (doesn't load entire file)
+- Headers: first row of CSV = column names, subsequent rows = data
+- JSON: array of objects where each object becomes a row
+- `Iterate(fn func(row map[string]string) error)` - streams rows one at a time
+- `ReadAll()` - reads all rows into memory (for smaller files)
+- `SubstituteTemplateWithVars(template, baseVars, rowVars)` - row vars take precedence over base vars
+
+### Variable Substitution
+- `{{name}}` placeholders replaced from dataset row values
+- Row variables merge with environment variables (row takes precedence)
+- Missing columns return error with column name: `&MissingColumnError{Column: "name", Row: 1}`
+
+### Error Handling
+- Missing column: returns `MissingColumnError` with column name and row number
+- Unsupported file type: returns descriptive error with supported types
+- Data iteration errors: wrapped with row number context
+
+### Files Created
+- `internal/runner/datadriven.go` - DataLoader implementation
+- `internal/runner/datadriven_test.go` - 7 tests (CSV, JSON, Headers, VariableSubstitution, Iteration, EmptyFile, MissingColumn)
+
+### Files Modified
+- `internal/runner/runner.go` - Added `DataFile` to `RunConfig`, added `runWithData()` method
+- `internal/runner/cli.go` - Added `--data` flag to `CollectionRunCommand`
+- `internal/cli/commands/run.go` - Added `--data` flag, added `executeDataDriven()` function
+
+### Test Results
+- `go test ./internal/runner/... -run TestDataDriven -count=1` → 7 passed
+- `go test ./internal/cli/commands/... -count=1` → 14 passed
+- `go build ./cmd/gurl` → Success
+
+### Notes
+- TDD RED phase: wrote tests first (7 failing due to missing `NewDataLoader`)
+- GREEN phase: implemented DataLoader with CSV and JSON streaming support
+- REFACTOR phase: extracted `SubstituteTemplateWithVars` function to datadriven.go for reuse
+- Pre-existing test failure in `TestRunner_RunWithOrder` (ordering issue, unrelated to T51)
+
+## Task T52: Test Reporters (JUnit XML, JSON, HTML)
+
+### What Worked
+- Created `internal/reporters/` package with standalone types to avoid import cycles
+- Implemented JUnit XML, JSON, HTML, and console reporters following the Reporter interface
+- Wired `--reporter` (StringSliceFlag) and `--reporter-output` (StringFlag) to collection run command
+- Used `convertToReporterResults()` adapter function to bridge runner.RunResult types with reporters types
+
+### Key Implementation Details
+- Reporters package has its own `RunResult`, `RequestResult`, `AssertionResult` types (not importing runner)
+- This avoids circular import: runner imports reporters, and reporters needed to be usable standalone
+- JUnit XML uses standard `encoding/xml` with proper CI-compatible structure (testsuites → testsuite → testcase)
+- HTML uses inline CSS (no external dependencies, no href/src links) - self-contained
+- Console reporter uses ANSI color codes from `internal/formatter`
+- Multiple reporters supported via `--reporter junit --reporter json --reporter html --reporter console`
+- Reporter output directory via `--reporter-output ./reports` saves files with correct extensions
+
+### Import Cycle Resolution
+- `internal/runner/cli.go` imports `internal/reporters`
+- `internal/runner/runner.go` does NOT import `internal/reporters`
+- CLI converts runner.RunResult types to reporters.RunResult types via adapter function
+- Build succeeds: `go build ./internal/runner/...` and `go build ./cmd/gurl`
+
+### Files Created
+- `internal/reporters/reporter.go` — Reporter interface + JUnit/JSON/HTML/Console implementations
+- `internal/reporters/reporters_test.go` — 7 tests covering all reporter types
+
+### Files Modified
+- `internal/runner/cli.go` — Added `--reporter` and `--reporter-output` flags, reporter execution logic
+
+### Test Results
+- `go test ./internal/reporters/... -count=1` → 7 passed
+- `go build ./cmd/gurl` → Success
+- Pre-existing failure in `TestRunner_StopOnError` (unrelated to T52)
+
+### Notes
+- TDD RED phase: wrote 7 failing tests (TestReporter_JUnit, TestReporter_JSON, TestReporter_HTML, etc.)
+- GREEN phase: implemented all 4 reporters + interface
+- REFACTOR phase: extracted convertToReporterResults adapter for type safety
+- CLI uses switch for filename extension based on reporter type
+- Task T52 depends on T50 (Collection Runner) — reporters consume RunResult from runner
+
+## Task 53: CI-Friendly Exit Codes
+
+### What Worked
+- Wired exit codes directly into `internal/runner/cli.go` CollectionRunCommand Action
+- Used `os.Exit()` with appropriate codes based on `RunResult.Failed` count
+- No modification to runner core logic needed — RunResult already had Passed/Failed counts
+
+### Implementation
+- Exit 0: All assertions passed (`hasFailures = false` → no exit call = success)
+- Exit 1: Any assertion failed (`result.Failed > 0` sets `hasFailures = true` → `os.Exit(1)`)
+- Exit 2: Request error or collection not found (handled in `runner.Run()` error path → `os.Exit(2)`)
+
+### Key Changes
+- `runner.Run()` error: prints error to stderr, calls `os.Exit(2)`, returns `nil` (to satisfy cli.Action signature)
+- After successful run: checks all `RunResult.Failed` counts across iterations
+- `hasFailures` flag set if ANY iteration had failures
+- At end of Action: `os.Exit(1)` if `hasFailures`, else normal return (exit 0)
+
+### Test Results
+- `go build ./cmd/gurl` → Success
+- `go test ./internal/runner/... -v -count=1` → 16 passed
+
+### Notes
+- Used early `os.Exit(2)` in error path since cli.Action must return `nil` but we need non-zero exit
+- Comments in code are minimal and explain CI exit code semantics — necessary for maintenance

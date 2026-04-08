@@ -1,0 +1,201 @@
+package sse
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type Event struct {
+	ID    string
+	Type  string
+	Data  string
+	Retry int
+}
+
+type Option func(*options)
+
+type options struct {
+	headers     map[string]string
+	eventTypes  []string
+	lastEventID string
+	timeout     time.Duration
+}
+
+func WithHeader(key, value string) Option {
+	return func(o *options) {
+		if o.headers == nil {
+			o.headers = make(map[string]string)
+		}
+		o.headers[key] = value
+	}
+}
+
+func WithEventType(eventType string) Option {
+	return func(o *options) {
+		o.eventTypes = append(o.eventTypes, eventType)
+	}
+}
+
+func WithLastEventID(id string) Option {
+	return func(o *options) {
+		o.lastEventID = id
+	}
+}
+
+func WithTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.timeout = timeout
+	}
+}
+
+type Client struct {
+	httpClient *http.Client
+}
+
+func NewClient() *Client {
+	return &Client{
+		httpClient: &http.Client{},
+	}
+}
+
+func (c *Client) Connect(ctx context.Context, url string, opts ...Option) (<-chan Event, <-chan error, error) {
+	o := &options{
+		timeout: 30 * time.Second,
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	if c.httpClient == nil {
+		c.httpClient = &http.Client{}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "text/event-stream")
+
+	if o.lastEventID != "" {
+		req.Header.Set("Last-Event-ID", o.lastEventID)
+	}
+
+	for k, v := range o.headers {
+		req.Header.Set(k, v)
+	}
+
+	if o.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, o.timeout)
+		defer cancel()
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	eventChan := make(chan Event, 100)
+	errorChan := make(chan error, 1)
+
+	go c.readEvents(resp.Body, eventChan, errorChan, o.eventTypes, o.lastEventID)
+
+	return eventChan, errorChan, nil
+}
+
+func (c *Client) readEvents(body io.Reader, eventChan chan<- Event, errorChan chan<- error, filterTypes []string, lastEventID string) {
+	defer close(eventChan)
+	defer close(errorChan)
+
+	scanner := bufio.NewScanner(body)
+
+	const maxScanTokenSize = 1024 * 1024
+	buf := make([]byte, maxScanTokenSize)
+	scanner.Buffer(buf, maxScanTokenSize)
+
+	var currentEvent Event
+	currentEvent.ID = lastEventID
+	var dataBuilder strings.Builder
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if line == "" {
+			if dataBuilder.Len() > 0 {
+				currentEvent.Data = dataBuilder.String()
+				dataBuilder.Reset()
+
+				if len(filterTypes) == 0 || contains(filterTypes, currentEvent.Type) {
+					eventChan <- currentEvent
+				}
+
+				if currentEvent.ID != "" {
+					lastEventID = currentEvent.ID
+				}
+				currentEvent = Event{ID: lastEventID}
+			}
+			continue
+		}
+
+		var field, value string
+		if idx := strings.Index(line, ":"); idx != -1 {
+			field = strings.TrimSpace(line[:idx])
+			value = strings.TrimSpace(line[idx+1:])
+		} else {
+			continue
+		}
+
+		switch field {
+		case "data":
+			if dataBuilder.Len() > 0 {
+				dataBuilder.WriteString("\n")
+			}
+			dataBuilder.WriteString(value)
+
+		case "event":
+			currentEvent.Type = value
+
+		case "id":
+			currentEvent.ID = value
+
+		case "retry":
+			if retryMs, err := strconv.ParseInt(value, 10, 64); err == nil {
+				currentEvent.Retry = int(retryMs)
+			}
+		}
+	}
+
+	if dataBuilder.Len() > 0 || currentEvent.Data != "" {
+		if dataBuilder.Len() > 0 {
+			currentEvent.Data = dataBuilder.String()
+		}
+		if currentEvent.Data != "" && (len(filterTypes) == 0 || contains(filterTypes, currentEvent.Type)) {
+			eventChan <- currentEvent
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		errorChan <- fmt.Errorf("error reading SSE stream: %w", err)
+	}
+}
+
+func contains(slice []string, val string) bool {
+	for _, s := range slice {
+		if s == val {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Client) ConnectWithTimeout(ctx context.Context, url string, timeout time.Duration, opts ...Option) (<-chan Event, <-chan error, error) {
+	opts = append(opts, WithTimeout(timeout))
+	return c.Connect(ctx, url, opts...)
+}

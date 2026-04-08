@@ -5,16 +5,32 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/sreeram/gurl/internal/cli/commands"
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/plugins"
 	"github.com/sreeram/gurl/internal/protocols/graphql"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/urfave/cli/v3"
 )
 
 var version = "dev"
+
+// Global plugin registry - initialized at startup
+var pluginRegistry *plugins.Registry
+
+func getPluginDir() string {
+	if dir := os.Getenv("GURL_PLUGIN_DIR"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".gurl", "plugins")
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -34,6 +50,11 @@ func run() error {
 	if err := db.Open(); err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
+
+	// Initialize plugin registry
+	pluginDir := getPluginDir()
+	loader := plugins.NewLoader(pluginDir, nil)
+	pluginRegistry, _ = loader.LoadAll()
 
 	app := &cli.Command{
 		Name:    "gurl",
@@ -62,8 +83,11 @@ Quick Start:
 			commands.ExportCommand(db),
 			commands.ImportCommand(db),
 			commands.PasteCommand(db),
-			commands.CollectionCommand(db),
+			commands.CollectionCommand(db, env.NewEnvStorage(db)),
+			commands.SequenceCommand(db),
 			commands.UpdateCommand(),
+			commands.TUICommand(db),
+			commands.CodegenCommand(db),
 			graphql.GraphQLCommand(db),
 		},
 	}

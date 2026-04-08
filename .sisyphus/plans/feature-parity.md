@@ -2976,9 +2976,119 @@ Max Concurrent: 7 (Waves 1, 3, 4)
 
   - Pre-commit: `go test ./internal/protocols/graphql/... -count=1`
 
-### Wave 6: Remaining Protocols + JavaScript Scripting (Tasks 42-48)
+- [x] 42. gRPC Client
 
-- [ ] 42. gRPC Client
+  **What to do**:
+  - **RED**: Write tests in `internal/protocols/grpc/grpc_test.go`:
+    - `TestGRPC_UnaryCall` — sends unary request, receives response
+    - `TestGRPC_ServerStreaming` — receives stream of messages
+    - `TestGRPC_ClientStreaming` — sends stream, receives single response
+    - `TestGRPC_BidirectionalStreaming` — full duplex streaming
+    - `TestGRPC_Reflection` — discovers services via server reflection
+    - `TestGRPC_ProtoFromFile` — loads .proto file for request/response types
+    - `TestGRPC_Metadata` — sends/receives gRPC metadata (headers)
+    - `TestGRPC_ErrorCodes` — gRPC status codes mapped to readable names
+    - `TestGRPC_TLS` — connects with TLS credentials
+  - **GREEN**: Create `internal/protocols/grpc/`:
+    - `grpc.go`:
+      - `type Client struct` — wraps `google.golang.org/grpc` connection
+      - `Dial(target string, opts ...grpc.DialOption) error`
+      - `Invoke(ctx context.Context, method string, req, resp proto.Message) error` — unary
+      - `InvokeServerStream(ctx, method, req) (stream, error)` — server streaming
+      - `InvokeClientStream(ctx, method) (stream, error)` — client streaming
+      - `InvokeBidiStream(ctx, method) (stream, error)` — bidirectional
+    - `reflection.go`:
+      - `DiscoverServices(ctx, conn) ([]ServiceInfo, error)` — via gRPC server reflection
+      - `BuildMessage(serviceInfo, methodName, jsonPayload) (proto.Message, error)` — dynamic message from JSON
+    - `cli.go`:
+      - `gurl grpc "target" --service "UserService" --method "GetUser" --data '{"id": 1}'`
+      - `gurl grpc "target" --list` — list services via reflection
+      - `gurl grpc "target" --proto ./user.proto --method "GetUser" --data '{"id": 1}'`
+  - **REFACTOR**: Format gRPC responses as JSON for display (reuse formatter), display metadata separately
+
+  **Must NOT do**:
+  - Do NOT implement custom protobuf compilation — use dynamic messages or pre-compiled proto
+  - Do NOT require .proto file if server supports reflection
+  - Do NOT use if-else for call type dispatch — use switch on call type enum
+
+  **Recommended Agent Profile**:
+  - **Category**: `deep`
+    - Reason: gRPC is complex — streaming, reflection, proto handling, TLS. Needs careful implementation.
+  - **Skills**: [`golang-pro`]
+    - `golang-pro`: gRPC with Go patterns, concurrent streaming, channel handling
+  - **Skills Evaluated but Omitted**:
+    - `golang-testing`: Covered by TDD approach in task spec
+
+  **Parallelization**:
+  - **Can Run In Parallel**: YES
+  - **Parallel Group**: Wave 6 (with Tasks 43, 44, 45)
+  - **Blocks**: None directly (gRPC is standalone protocol)
+  - **Blocked By**: Task 4 (HTTP client patterns), Task 33 (TLS config reuse)
+
+  **References**:
+
+  **Pattern References**:
+  - `internal/protocols/graphql/graphql.go` (Task 41) — Protocol handler pattern to follow
+  - `internal/client/tls.go` (Task 33) — TLS config to reuse for gRPC TLS connections
+
+  **API/Type References**:
+  - `google.golang.org/grpc` — `grpc.Dial()`, `grpc.WithTransportCredentials()`
+  - `google.golang.org/grpc/reflection/grpc_reflection_v1alpha` — Server reflection
+  - `google.golang.org/protobuf/types/dynamicpb` — Dynamic protobuf messages (no .proto file needed)
+  - `github.com/jhump/protoreflect` — Dynamic gRPC invocation with reflection
+
+  **External References**:
+  - gRPC Go quickstart: https://grpc.io/docs/languages/go/quickstart/
+  - jhump/protoreflect: https://github.com/jhump/protoreflect — Used by grpcurl, battle-tested
+  - grpcurl (reference impl): https://github.com/fullstorydev/grpcurl — CLI gRPC client to model after
+
+  **WHY Each Reference Matters**:
+  - protoreflect is how grpcurl works — proven approach for dynamic gRPC without proto files
+  - GraphQL handler establishes the protocol handler pattern (Client + CLI wiring)
+  - grpcurl source shows the correct way to handle reflection + dynamic invocation
+
+  **Acceptance Criteria**:
+  - [ ] `go test ./internal/protocols/grpc/... -v -count=1` → PASS (9 tests)
+  - [ ] `gurl grpc "localhost:50051" --list` discovers services
+  - [ ] `gurl grpc "localhost:50051" --method "GetUser" --data '{"id":1}'` returns formatted response
+  - [ ] `go mod tidy` → clean (grpc deps added)
+
+  **QA Scenarios**:
+
+  ```
+  Scenario: gRPC unary call with reflection
+    Tool: Bash (go test)
+    Steps:
+      1. Run: go test ./internal/protocols/grpc/... -v -run TestGRPC_UnaryCall -count=1
+      2. Assert: exit code 0
+      3. Run: go test ./internal/protocols/grpc/... -v -run TestGRPC_Reflection -count=1
+      4. Assert: exit code 0
+    Expected Result: Unary call succeeds, reflection discovers services
+    Evidence: .sisyphus/evidence/task-42-grpc-unary.txt
+
+  Scenario: gRPC error codes readable
+    Tool: Bash (go test)
+    Steps:
+      1. Run: go test ./internal/protocols/grpc/... -v -run TestGRPC_ErrorCodes -count=1
+      2. Assert: exit code 0, status codes mapped to names (NOT_FOUND, PERMISSION_DENIED, etc.)
+    Expected Result: gRPC status codes shown as human-readable names
+    Evidence: .sisyphus/evidence/task-42-grpc-errors.txt
+
+  Scenario: Server streaming receives all messages
+    Tool: Bash (go test)
+    Steps:
+      1. Run: go test ./internal/protocols/grpc/... -v -run TestGRPC_ServerStreaming -count=1
+      2. Assert: exit code 0, all stream messages collected
+    Expected Result: Multiple messages received and displayed sequentially
+    Evidence: .sisyphus/evidence/task-42-grpc-streaming.txt
+  ```
+
+  **Commit**: YES
+  - Message: `protocols: add gRPC client with reflection, streaming, and dynamic messages — second protocol handler`
+  - Files: `internal/protocols/grpc/grpc.go`, `internal/protocols/grpc/reflection.go`, `internal/protocols/grpc/grpc_test.go`, `internal/protocols/grpc/cli.go`, `go.mod`, `go.sum`
+  - Pre-commit: `go test ./internal/protocols/grpc/... -count=1`
+
+- [ ] 43. WebSocket Client
 
   **What to do**:
   - **RED**: Write tests in `internal/protocols/grpc/grpc_test.go`:
@@ -3298,7 +3408,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
 
   - Pre-commit: `go test ./internal/protocols/sse/... -count=1`
 
-- [ ] 45. JavaScript Scripting Engine (goja Runtime)
+- [x] 45. JavaScript Scripting Engine (goja Runtime)
 
   **What to do**:
   - **RED**: Write tests in `internal/scripting/engine_test.go`:
@@ -3415,7 +3525,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/scripting/engine.go`, `internal/scripting/globals.go`, `internal/scripting/sandbox.go`, `internal/scripting/engine_test.go`, `go.mod`, `go.sum`
   - Pre-commit: `go test ./internal/scripting/... -count=1`
 
-- [ ] 46. Pre-Request Scripts
+- [x] 46. Pre-Request Scripts
 
   **What to do**:
   - **RED**: Write tests in `internal/scripting/prerequest_test.go`:
@@ -3498,7 +3608,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/scripting/prerequest.go`, `internal/scripting/prerequest_test.go`, `internal/cli/commands/run.go`
   - Pre-commit: `go test ./internal/scripting/... -count=1`
 
-- [ ] 47. Post-Response Scripts
+- [x] 47. Post-Response Scripts
 
   **What to do**:
   - **RED**: Write tests in `internal/scripting/postresponse_test.go`:
@@ -3588,7 +3698,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/scripting/postresponse.go`, `internal/scripting/postresponse_test.go`, `internal/cli/commands/run.go`
   - Pre-commit: `go test ./internal/scripting/... -count=1`
 
-- [ ] 48. Request Chaining via Scripts
+- [x] 48. Request Chaining via Scripts
 
   **What to do**:
   - **RED**: Write tests in `internal/scripting/chaining_test.go`:
@@ -3690,7 +3800,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
 
 ### Wave 7: Assertions + Collection Runner + Advanced CLI (Tasks 49-56)
 
-- [ ] 49. Assertion Engine (Declarative TOML-Based)
+- [x] 49. Assertion Engine (Declarative TOML-Based)
 
   **What to do**:
   - **RED**: Write tests in `internal/assertions/engine_test.go`:
@@ -3788,7 +3898,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/assertions/engine.go`, `internal/assertions/parser.go`, `internal/assertions/engine_test.go`, `pkg/types/types.go`, `internal/cli/commands/run.go`
   - Pre-commit: `go test ./internal/assertions/... -count=1`
 
-- [ ] 50. Collection Runner
+- [x] 50. Collection Runner
 
   **What to do**:
   - **RED**: Write tests in `internal/runner/runner_test.go`:
@@ -3889,7 +3999,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/runner/runner.go`, `internal/runner/runner_test.go`, `internal/runner/cli.go`
   - Pre-commit: `go test ./internal/runner/... -count=1`
 
-- [ ] 51. Data-Driven Testing (CSV/JSON Datasets)
+- [x] 51. Data-Driven Testing (CSV/JSON Datasets)
 
   **What to do**:
   - **RED**: Write tests in `internal/runner/datadriven_test.go`:
@@ -3969,7 +4079,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/runner/datadriven.go`, `internal/runner/datadriven_test.go`, `internal/cli/commands/run.go`
   - Pre-commit: `go test ./internal/runner/... -count=1`
 
-- [ ] 52. Test Reporters (JUnit XML, JSON, HTML)
+- [x] 52. Test Reporters (JUnit XML, JSON, HTML)
 
   **What to do**:
   - **RED**: Write tests in `internal/runner/reporters_test.go`:
@@ -4063,7 +4173,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
 
   - Pre-commit: `go test ./internal/runner/reporters/... -count=1`
 
-- [ ] 53. CI-Friendly Exit Codes
+- [x] 53. CI-Friendly Exit Codes
 
   **What to do**:
   - **RED**: Write tests in `internal/runner/exitcode_test.go`:
@@ -4135,7 +4245,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/runner/exitcode.go`, `internal/runner/exitcode_test.go`, `cmd/gurl/main.go`
   - Pre-commit: `go test ./internal/runner/... -count=1`
 
-- [ ] 54. Edit Command (Full Implementation)
+- [x] 54. Edit Command (Full Implementation)
 
   **What to do**:
   - **RED**: Write tests in `internal/cli/commands/edit_test.go`:
@@ -4223,7 +4333,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/cli/commands/edit.go`, `internal/cli/commands/edit_test.go`
   - Pre-commit: `go test ./internal/cli/commands/... -count=1`
 
-- [ ] 55. Nested Folders (Hierarchical Organization)
+- [x] 55. Nested Folders (Hierarchical Organization)
 
   **What to do**:
   - **RED**: Write tests in `internal/storage/folders_test.go`:
@@ -4315,7 +4425,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/storage/db.go`, `internal/storage/folders_test.go`, `pkg/types/types.go`, `internal/cli/commands/list.go`, `internal/cli/commands/save.go`
   - Pre-commit: `go test ./internal/storage/... -count=1`
 
-- [ ] 56. Request Sequencing (Execution Order)
+- [x] 56. Request Sequencing (Execution Order)
 
   **What to do**:
   - **RED**: Write tests in `internal/runner/sequence_test.go`:
@@ -4395,7 +4505,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
 
 ### Wave 8: Terminal UI — bubbletea (Tasks 57-62)
 
-- [ ] 57. TUI Foundation (bubbletea App Shell)
+- [x] 57. TUI Foundation (bubbletea App Shell)
 
   **What to do**:
   - **RED**: Write tests in `internal/tui/app_test.go`:
@@ -4509,7 +4619,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/tui/app.go`, `internal/tui/layout.go`, `internal/tui/styles.go`, `internal/tui/statusbar.go`, `internal/tui/keys.go`, `internal/tui/app_test.go`, `cmd/gurl/main.go`, `go.mod`, `go.sum`
   - Pre-commit: `go test ./internal/tui/... -count=1`
 
-- [ ] 58. TUI: Request List Panel (Sidebar)
+- [x] 58. TUI: Request List Panel (Sidebar)
 
   **What to do**:
   - **RED**: Write tests in `internal/tui/requestlist_test.go`:
@@ -4887,7 +4997,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/tui/envswitcher.go`, `internal/tui/popup.go`, `internal/tui/envswitcher_test.go`
   - Pre-commit: `go test ./internal/tui/... -count=1`
 
-- [ ] 62. TUI: Keyboard Shortcuts and Help
+- [x] 62. TUI: Keyboard Shortcuts and Help
 
   **What to do**:
   - **RED**: Write tests in `internal/tui/help_test.go`:
@@ -4983,7 +5093,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/tui/help.go`, `internal/tui/help_test.go`, `internal/tui/keys.go`
   - Pre-commit: `go test ./internal/tui/... -count=1`
 
-- [ ] 63. Plugin System Architecture
+- [x] 63. Plugin System Architecture
 
   **What to do**:
   - **RED**: Write tests in `internal/plugins/loader_test.go`:
@@ -5125,7 +5235,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/plugins/interfaces.go`, `internal/plugins/registry.go`, `internal/plugins/loader.go`, `internal/plugins/loader_test.go`
   - Pre-commit: `go test ./internal/plugins/... -count=1`
 
-- [ ] 64. Template Function Plugins (Output Plugins)
+- [x] 64. Template Function Plugins (Output Plugins)
 
   **What to do**:
   - **RED**: Write tests in `internal/plugins/builtins/output_test.go`:
@@ -5233,7 +5343,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/plugins/builtins/slack.go`, `internal/plugins/builtins/markdown.go`, `internal/plugins/builtins/csv.go`, `internal/plugins/builtins/minimal.go`, `internal/plugins/builtins/register.go`, `internal/plugins/builtins/output_test.go`
   - Pre-commit: `go test ./internal/plugins/builtins/... -count=1`
 
-- [ ] 65. Auth Plugins (Middleware Plugins)
+- [x] 65. Auth Plugins (Middleware Plugins)
 
   **What to do**:
   - **RED**: Write tests in `internal/plugins/builtins/auth_middleware_test.go`:
@@ -5335,7 +5445,7 @@ Max Concurrent: 7 (Waves 1, 3, 4)
   - Files: `internal/plugins/builtins/timing.go`, `internal/plugins/builtins/useragent.go`, `internal/plugins/builtins/logging.go`, `internal/plugins/builtins/retry401.go`, `internal/plugins/builtins/auth_middleware_test.go`
   - Pre-commit: `go test ./internal/plugins/builtins/... -count=1`
 
-- [ ] 66. Multi-Language Code Generation
+- [x] 66. Multi-Language Code Generation
 
   **What to do**:
   - **RED**: Write tests in `internal/codegen/codegen_test.go`:

@@ -80,6 +80,10 @@ func (m *mockDB) UpdateRequest(req *types.SavedRequest) error {
 	m.names[req.Name] = req.ID
 	return nil
 }
+func (m *mockDB) ListFolder(path string) ([]*types.SavedRequest, error)          { return nil, nil }
+func (m *mockDB) ListFolderRecursive(path string) ([]*types.SavedRequest, error) { return nil, nil }
+func (m *mockDB) DeleteFolder(path string) error                                 { return nil }
+func (m *mockDB) GetAllFolders() ([]string, error)                               { return nil, nil }
 func (m *mockDB) SaveHistory(history *types.ExecutionHistory) error {
 	return nil
 }

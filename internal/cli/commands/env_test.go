@@ -125,7 +125,7 @@ func TestEnvCreate(t *testing.T) {
 
 			cmd := EnvCommand(db)
 
-			err := cmd.Run(context.Background(), tt.args)
+			err := cmd.Run(context.Background(), append([]string{"env"}, tt.args...))
 
 			if tt.wantErr && err == nil {
 				t.Error("expected error but got nil")
@@ -180,7 +180,7 @@ func TestEnvList(t *testing.T) {
 
 			cmd := EnvCommand(db)
 
-			err := cmd.Run(context.Background(), tt.args)
+			err := cmd.Run(context.Background(), append([]string{"env"}, tt.args...))
 
 			if tt.wantErr && err == nil {
 				t.Error("expected error but got nil")
@@ -233,7 +233,7 @@ func TestEnvSwitch(t *testing.T) {
 
 			cmd := EnvCommand(db)
 
-			err := cmd.Run(context.Background(), tt.args)
+			err := cmd.Run(context.Background(), append([]string{"env"}, tt.args...))
 
 			if tt.wantErr && err == nil {
 				t.Error("expected error but got nil")
@@ -283,7 +283,7 @@ func TestEnvDelete(t *testing.T) {
 
 			cmd := EnvCommand(db)
 
-			err := cmd.Run(context.Background(), tt.args)
+			err := cmd.Run(context.Background(), append([]string{"env"}, tt.args...))
 
 			if tt.wantErr && err == nil {
 				t.Error("expected error but got nil")
@@ -336,7 +336,7 @@ func TestEnvShow(t *testing.T) {
 
 			cmd := EnvCommand(db)
 
-			err := cmd.Run(context.Background(), tt.args)
+			err := cmd.Run(context.Background(), append([]string{"env"}, tt.args...))
 
 			if tt.wantErr && err == nil {
 				t.Error("expected error but got nil")
@@ -394,7 +394,7 @@ func TestEnvSet(t *testing.T) {
 
 			cmd := EnvCommand(db)
 
-			err := cmd.Run(context.Background(), tt.args)
+			err := cmd.Run(context.Background(), append([]string{"env"}, tt.args...))
 
 			if tt.wantErr && err == nil {
 				t.Error("expected error but got nil")
@@ -444,7 +444,7 @@ func TestEnvUnset(t *testing.T) {
 
 			cmd := EnvCommand(db)
 
-			err := cmd.Run(context.Background(), tt.args)
+			err := cmd.Run(context.Background(), append([]string{"env"}, tt.args...))
 
 			if tt.wantErr && err == nil {
 				t.Error("expected error but got nil")

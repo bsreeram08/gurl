@@ -26,6 +26,11 @@ func SaveCommand(db storage.DB) *cli.Command {
 				Aliases: []string{"c"},
 				Usage:   "Assign to collection",
 			},
+			&cli.StringFlag{
+				Name:    "folder",
+				Aliases: []string{"F"},
+				Usage:   "Assign to folder (e.g., api/v2/users)",
+			},
 			&cli.StringSliceFlag{
 				Name:    "tag",
 				Aliases: []string{"t"},
@@ -84,6 +89,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.OutputFormat = c.String("format")
 				req.Tags = c.StringSlice("tag")
 				req.Collection = c.String("collection")
+				req.Folder = c.String("folder")
 				req.CreatedAt = time.Now().Unix()
 				req.UpdatedAt = time.Now().Unix()
 
@@ -131,6 +137,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 					OutputFormat: c.String("format"),
 					Tags:         c.StringSlice("tag"),
 					Collection:   c.String("collection"),
+					Folder:       c.String("folder"),
 					CreatedAt:    time.Now().Unix(),
 					UpdatedAt:    time.Now().Unix(),
 				}
@@ -166,6 +173,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.OutputFormat = c.String("format")
 				req.Tags = c.StringSlice("tag")
 				req.Collection = c.String("collection")
+				req.Folder = c.String("folder")
 				req.CreatedAt = time.Now().Unix()
 				req.UpdatedAt = time.Now().Unix()
 
@@ -190,6 +198,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				Method:       "GET",
 				OutputFormat: c.String("format"),
 				Tags:         c.StringSlice("tag"),
+				Folder:       c.String("folder"),
 				CreatedAt:    time.Now().Unix(),
 				UpdatedAt:    time.Now().Unix(),
 			}
