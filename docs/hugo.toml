@@ -1,4 +1,4 @@
-baseURL = 'https://sreeram.github.io/terminal-curl/'
+baseURL = 'https://bsreeram08.github.io/gurl/'
 languageCode = 'en-us'
 title = 'Gurl CLI'
 theme = 'PaperMod'
@@ -27,7 +27,7 @@ Works great with AI agents — they never touch your credentials.
 
 [[params.socialIcons]]
 name = "github"
-url = "https://github.com/sreeram/terminal-curl"
+url = "https://github.com/bsreeram08/gurl"
 
 [params.assets]
 favicon = "/favicon.ico"
