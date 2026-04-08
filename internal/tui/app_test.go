@@ -72,10 +72,10 @@ func TestTUI_Init(t *testing.T) {
 	// App should implement tea.Model
 	var _ tea.Model = app
 
-	// Init should return nil (no initial command needed)
+	// Init should return a command that loads requests from DB
 	cmd := app.Init()
-	if cmd != nil {
-		t.Error("Init should return nil command for initial load")
+	if cmd == nil {
+		t.Error("Init should return a command for initial load")
 	}
 }
 

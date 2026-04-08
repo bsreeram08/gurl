@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
+	"golang.org/x/term"
 )
 
 // ListCommand creates the list command
@@ -130,8 +132,34 @@ func buildFolderTree(folders []string) map[string]*folderNode {
 	return tree
 }
 
+func termWidth() int {
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
+		return w
+	}
+	return 80
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	if max <= 3 {
+		return s[:max]
+	}
+	return s[:max-3] + "..."
+}
+
 func displayTree(tree map[string]*folderNode, requests []*types.SavedRequest) {
-	fmt.Println("┌─ Saved Requests ─────────────────────────────────────────┐")
+	width := termWidth()
+	// Row layout: "│  " (3) + name + "  " (2) + collection (12) + "  " (2) + tags (10) + "  " (2) + date (16) = 47 fixed
+	fixedCols := 47
+	nameWidth := width - fixedCols
+	if nameWidth < 20 {
+		nameWidth = 20
+	}
+
+	border := strings.Repeat("─", width-2)
+	fmt.Printf("┌%s┐\n", border)
 
 	rootRequests := []*types.SavedRequest{}
 	byFolder := make(map[string][]*types.SavedRequest)
@@ -149,15 +177,15 @@ func displayTree(tree map[string]*folderNode, requests []*types.SavedRequest) {
 	})
 
 	for _, req := range rootRequests {
-		printRequestRow(req, "")
+		printRequestRow(req, "", nameWidth)
 	}
 
-	displayFolderTree(tree, byFolder, "")
+	displayFolderTree(tree, byFolder, "", nameWidth)
 
-	fmt.Println("└─────────────────────────────────────────────────────────┘")
+	fmt.Printf("└%s┘\n", border)
 }
 
-func displayFolderTree(tree map[string]*folderNode, byFolder map[string][]*types.SavedRequest, prefix string) {
+func displayFolderTree(tree map[string]*folderNode, byFolder map[string][]*types.SavedRequest, prefix string, nameWidth int) {
 	sortedKeys := make([]string, 0, len(tree))
 	for k := range tree {
 		sortedKeys = append(sortedKeys, k)
@@ -175,37 +203,36 @@ func displayFolderTree(tree map[string]*folderNode, byFolder map[string][]*types
 				return reqs[i].Name < reqs[j].Name
 			})
 			for _, req := range reqs {
-				printRequestRow(req, prefix+"  ")
+				printRequestRow(req, prefix+"  ", nameWidth)
 			}
 		}
 
 		if len(node.children) > 0 {
-			displayFolderTree(node.children, byFolder, prefix+"  ")
+			displayFolderTree(node.children, byFolder, prefix+"  ", nameWidth)
 		}
 	}
 }
 
-func printRequestRow(req *types.SavedRequest, indent string) {
-	name := req.Name
-	if len(name) > 20 {
-		name = name[:17] + "..."
+func printRequestRow(req *types.SavedRequest, indent string, nameWidth int) {
+	availName := nameWidth - len(indent)
+	if availName < 10 {
+		availName = 10
 	}
+	name := truncate(req.Name, availName)
+
 	collection := req.Collection
 	if collection == "" {
 		collection = "-"
 	}
-	if len(collection) > 10 {
-		collection = collection[:7] + "..."
-	}
+	collection = truncate(collection, 12)
+
 	tags := strings.Join(req.Tags, ",")
 	if tags == "" {
 		tags = "-"
 	}
-	if len(tags) > 10 {
-		tags = tags[:7] + "..."
-	}
+	tags = truncate(tags, 10)
 
 	updated := time.Unix(req.UpdatedAt, 0).Format("2006-01-02 15:04")
 
-	fmt.Printf("│  %s%-20s %-12s %-10s %s\n", indent, name, collection, tags, updated)
+	fmt.Printf("│  %s%-*s  %-12s  %-10s  %s\n", indent, availName, name, collection, tags, updated)
 }

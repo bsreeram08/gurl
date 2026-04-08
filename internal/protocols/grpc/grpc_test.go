@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -389,6 +390,136 @@ func TestClientDialInsecure(t *testing.T) {
 	}
 	// Just verify it doesn't panic
 	_ = err
+}
+
+func TestClientDialDefaultInsecure(t *testing.T) {
+	client := NewClient()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	conn, err := client.dial(ctx, "localhost:99999")
+	if conn != nil {
+		conn.Close()
+	}
+	_ = err
+}
+
+func TestClientDialWithTLSCertError(t *testing.T) {
+	client := NewClientWithTLS(TLSConfig{
+		Insecure:   false,
+		CertFile:   "/nonexistent/cert.pem",
+		KeyFile:    "/nonexistent/key.pem",
+		ServerName: "test.example.com",
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	conn, err := client.dial(ctx, "localhost:50051")
+	if conn != nil {
+		conn.Close()
+	}
+	if err == nil {
+		t.Error("expected error when TLS cert files don't exist")
+	}
+	if !strings.Contains(err.Error(), "failed to build TLS credentials") {
+		t.Errorf("expected 'failed to build TLS credentials' in error, got: %v", err)
+	}
+}
+
+// TestClientDialWithTLSNoCerts tests dial with TLS config but no cert files (just TLS without client certs)
+func TestClientDialWithTLSNoCerts(t *testing.T) {
+	client := NewClientWithTLS(TLSConfig{
+		Insecure:   false,
+		ServerName: "test.example.com",
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	conn, err := client.dial(ctx, "localhost:99999")
+	if conn != nil {
+		conn.Close()
+	}
+	_ = err
+}
+
+func TestNewReflectionClientConstructor(t *testing.T) {
+	rc := NewReflectionClient(nil)
+	if rc == nil {
+		t.Fatal("NewReflectionClient(nil) returned nil")
+	}
+	if rc.conn != nil {
+		t.Error("expected conn to be nil")
+	}
+}
+
+func TestNewReflectionClientWithConn(t *testing.T) {
+	conn, err := grpc.NewClient("localhost:99999", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("failed to create grpc client: %v", err)
+	}
+	defer conn.Close()
+
+	rc := NewReflectionClient(conn)
+	if rc == nil {
+		t.Fatal("NewReflectionClient returned nil")
+	}
+	if rc.conn == nil {
+		t.Error("expected conn to be set")
+	}
+}
+
+func TestCheckReflectionSupportedWithConn(t *testing.T) {
+	conn, err := grpc.NewClient("localhost:99999", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("failed to create grpc client: %v", err)
+	}
+	defer conn.Close()
+
+	rc := NewReflectionClient(conn)
+	ctx := context.Background()
+	err = rc.CheckReflectionSupported(ctx)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestGetAllMethodsForServiceWithConn(t *testing.T) {
+	conn, err := grpc.NewClient("localhost:99999", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("failed to create grpc client: %v", err)
+	}
+	defer conn.Close()
+
+	rc := NewReflectionClient(conn)
+	ctx := context.Background()
+	methods, err := rc.GetAllMethodsForService(ctx, "TestService")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if methods == nil {
+		t.Error("expected methods slice to be non-nil")
+	}
+}
+
+func TestListServicesWithConn(t *testing.T) {
+	conn, err := grpc.NewClient("localhost:99999", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("failed to create grpc client: %v", err)
+	}
+	defer conn.Close()
+
+	rc := NewReflectionClient(conn)
+	ctx := context.Background()
+	services, err := rc.ListServices(ctx)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if services == nil {
+		t.Error("expected services slice to be non-nil")
+	}
 }
 
 // Test reflection client creation

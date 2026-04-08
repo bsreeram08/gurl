@@ -100,10 +100,17 @@ func (db *LMDB) Close() error {
 	return nil
 }
 
-// SaveRequest saves a request to the database atomically
+// SaveRequest saves a request to the database atomically.
+// If a request with the same name already exists, it is updated in-place (upsert).
 func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
 	if req.ID == "" {
-		req.ID = uuid.New().String()
+		// Check if a request with this name already exists
+		nameKey := fmt.Sprintf("idx:name:%s", req.Name)
+		if existingID, err := db.DB.Get([]byte(nameKey), nil); err == nil && len(existingID) > 0 {
+			req.ID = string(existingID)
+		} else {
+			req.ID = uuid.New().String()
+		}
 	}
 
 	data, err := json.Marshal(req)
@@ -272,13 +279,25 @@ func (db *LMDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, error) {
 		}
 	}
 
-	// Fetch and filter requests
+	// Fetch and filter requests, deduplicating by name (keep only the canonical entry)
+	seen := make(map[string]bool)
 	var results []*types.SavedRequest
 	for _, id := range requestIDs {
 		req, err := db.GetRequest(id)
 		if err != nil {
 			continue // Skip requests that can't be retrieved
 		}
+
+		// Deduplicate: skip orphans (entries whose name index doesn't point to this ID)
+		if seen[req.Name] {
+			continue
+		}
+		nameKey := fmt.Sprintf("idx:name:%s", req.Name)
+		canonicalID, err := db.DB.Get([]byte(nameKey), nil)
+		if err != nil || string(canonicalID) != id {
+			continue // orphaned entry — no name index or index points elsewhere
+		}
+		seen[req.Name] = true
 
 		// Apply pattern filter
 		if opts.Pattern != "" {

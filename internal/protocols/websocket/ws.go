@@ -281,19 +281,14 @@ func (c *Client) IsConnected() bool {
 
 // Reconnect attempts to reconnect to the WebSocket server
 func (c *Client) Reconnect(ctx context.Context) error {
-	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
-		return fmt.Errorf("client is closed")
-	}
-	c.mu.Unlock()
-
 	// Close existing connection if any
 	c.mu.Lock()
 	if c.conn != nil {
 		c.conn.Close()
 		c.conn = nil
 	}
+	// Reconnect is allowed after Close() — reset closed flag
+	c.closed = false
 	c.mu.Unlock()
 
 	return c.connectWithRetry(ctx, 0)

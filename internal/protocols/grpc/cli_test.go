@@ -5,143 +5,341 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/sreeram/gurl/internal/formatter"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/pkg/types"
+	"github.com/urfave/cli/v3"
 )
 
-// mockDB implements storage.DB interface for testing
 type mockDB struct{}
 
-func (m *mockDB) SaveRequest(req *storage.SavedRequest) error {
-	return nil
-}
-
-func (m *mockDB) GetRequest(name string) (*storage.SavedRequest, error) {
+func (m *mockDB) Open() error                               { return nil }
+func (m *mockDB) Close() error                              { return nil }
+func (m *mockDB) SaveRequest(req *types.SavedRequest) error { return nil }
+func (m *mockDB) GetRequest(id string) (*types.SavedRequest, error) {
 	return nil, nil
 }
-
-func (m *mockDB) ListRequests() ([]storage.SavedRequest, error) {
+func (m *mockDB) GetRequestByName(name string) (*types.SavedRequest, error) {
 	return nil, nil
 }
-
-func (m *mockDB) DeleteRequest(name string) error {
-	return nil
-}
-
-func (m *mockDB) UpdateRequest(req *storage.SavedRequest) error {
-	return nil
-}
-
-func (m *mockDB) GetRequestByID(id string) (*storage.SavedRequest, error) {
+func (m *mockDB) ListRequests(opts *storage.ListOptions) ([]*types.SavedRequest, error) {
 	return nil, nil
 }
-
-func (m *mockDB) ListCollections() ([]storage.Collection, error) {
+func (m *mockDB) DeleteRequest(id string) error               { return nil }
+func (m *mockDB) UpdateRequest(req *types.SavedRequest) error { return nil }
+func (m *mockDB) SaveHistory(history *types.ExecutionHistory) error {
+	return nil
+}
+func (m *mockDB) GetHistory(requestID string, limit int) ([]*types.ExecutionHistory, error) {
 	return nil, nil
 }
-
-func (m *mockDB) SaveCollection(col *storage.Collection) error {
-	return nil
+func (m *mockDB) ListFolder(path string) ([]*types.SavedRequest, error) { return nil, nil }
+func (m *mockDB) ListFolderRecursive(path string) ([]*types.SavedRequest, error) {
+	return nil, nil
 }
+func (m *mockDB) DeleteFolder(path string) error   { return nil }
+func (m *mockDB) GetAllFolders() ([]string, error) { return nil, nil }
 
-func (m *mockDB) DeleteCollection(name string) error {
-	return nil
-}
-
-// mockCommand creates a cli.Command for testing with the given args and flags
-func mockCommand(args []string, flags map[string]interface{}) *cli.Command {
+func runGRPCCommand(t *testing.T, args []string) error {
+	t.Helper()
 	cmd := GRPCCommand(&mockDB{})
-
-	// Create a test command context
-	return cmd
+	root := &cli.Command{
+		Name:     "test",
+		Commands: []*cli.Command{cmd},
+	}
+	return root.Run(context.Background(), append([]string{"test", "grpc"}, args...))
 }
 
-// captureOutput captures stdout and stderr during test execution
-func captureOutput(f func()) (stdout, stderr string) {
-	stdoutBuf := &bytes.Buffer{}
-	stderrBuf := &bytes.Buffer{}
+func TestGRPCCommandMissingTarget(t *testing.T) {
+	err := runGRPCCommand(t, []string{})
+	if err == nil {
+		t.Fatal("expected error for missing target")
+	}
+	if !strings.Contains(err.Error(), "target") {
+		t.Errorf("expected 'target' in error, got: %v", err)
+	}
+}
 
+func TestGRPCCommandMissingServiceAndMethod(t *testing.T) {
+	err := runGRPCCommand(t, []string{"localhost:50051"})
+	if err == nil {
+		t.Fatal("expected error for missing service/method")
+	}
+	if !strings.Contains(err.Error(), "--service and --method are required") {
+		t.Errorf("expected '--service and --method are required' in error, got: %v", err)
+	}
+}
+
+func TestGRPCCommandMissingMethod(t *testing.T) {
+	err := runGRPCCommand(t, []string{"--service", "TestService", "localhost:50051"})
+	if err == nil {
+		t.Fatal("expected error for missing method")
+	}
+	if !strings.Contains(err.Error(), "--service and --method are required") {
+		t.Errorf("expected '--service and --method are required' in error, got: %v", err)
+	}
+}
+
+func TestGRPCCommandInvalidCallTypeViaRun(t *testing.T) {
+	err := runGRPCCommand(t, []string{
+		"--service", "Svc",
+		"--method", "Method",
+		"--call-type", "garbage",
+		"localhost:50051",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid call type")
+	}
+	if !strings.Contains(err.Error(), "invalid call type") {
+		t.Errorf("expected 'invalid call type' in error, got: %v", err)
+	}
+}
+
+func TestGRPCCommandListFlag(t *testing.T) {
 	oldStdout := os.Stdout
-	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stdout = w
 
-	os.Stdout = stdoutBuf
-	os.Stderr = stderrBuf
+	err := runGRPCCommand(t, []string{"--list", "localhost:50051"})
 
-	f()
-
+	w.Close()
 	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "Listing services on localhost:50051") {
+		t.Errorf("expected listing output, got: %v", buf.String())
+	}
+}
+
+func TestGRPCCommandUnaryCallErrorPath(t *testing.T) {
+	oldStderr := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := runGRPCCommand(t, []string{
+		"--service", "TestService",
+		"--method", "TestMethod",
+		"--data", `{"key":"value"}`,
+		"localhost:50051",
+	})
+
+	w.Close()
 	os.Stderr = oldStderr
 
-	return stdoutBuf.String(), stderrBuf.String()
-}
-
-// testCommandContext creates a minimal cli.Command for testing
-func createTestCommand(target string, flags map[string]string) *cli.Command {
-	cmd := &cli.Command{
-		Name: "grpc",
-		Action: func(ctx context.Context, c *cli.Command) error {
-			return nil
-		},
+	if err != nil {
+		t.Errorf("action should return nil (errors written to stderr), got: %v", err)
 	}
-
-	// Set args
-	args := &testArgs{target: target}
-	_ = args
-
-	return cmd
 }
 
-// testArgs is a minimal implementation for testing
-type testArgs struct {
-	target string
-}
+func TestGRPCCommandServerStreamingCallErrorPath(t *testing.T) {
+	oldStderr := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
 
-func (a *testArgs) Get(i int) string {
-	if i == 0 {
-		return a.target
+	err := runGRPCCommand(t, []string{
+		"--service", "TestService",
+		"--method", "StreamMethod",
+		"--call-type", "server-streaming",
+		"localhost:50051",
+	})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	if err != nil {
+		t.Errorf("action should return nil, got: %v", err)
 	}
-	return ""
 }
 
-func (a *testArgs) Len() int {
-	if a.target != "" {
-		return 1
+func TestGRPCCommandClientStreamingCallErrorPath(t *testing.T) {
+	oldStderr := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := runGRPCCommand(t, []string{
+		"--service", "TestService",
+		"--method", "StreamMethod",
+		"--call-type", "client-streaming",
+		"localhost:50051",
+	})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	if err != nil {
+		t.Errorf("action should return nil, got: %v", err)
 	}
-	return 0
 }
 
-// TestGRPCCommandMissingTarget tests that GRPCCommand returns error when no target is provided
-func TestGRPCCommandMissingTarget(t *testing.T) {
+func TestGRPCCommandBidirectionalCallErrorPath(t *testing.T) {
+	oldStderr := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := runGRPCCommand(t, []string{
+		"--service", "TestService",
+		"--method", "StreamMethod",
+		"--call-type", "bidirectional",
+		"localhost:50051",
+	})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	if err != nil {
+		t.Errorf("action should return nil, got: %v", err)
+	}
+}
+
+func TestGRPCCommandWithDataFileFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	dataFile := filepath.Join(tmpDir, "req.json")
+	os.WriteFile(dataFile, []byte(`{"name":"test"}`), 0644)
+
+	oldStderr := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := runGRPCCommand(t, []string{
+		"--service", "TestService",
+		"--method", "TestMethod",
+		"--data-file", dataFile,
+		"localhost:50051",
+	})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestGRPCCommandWithMissingDataFileFlag(t *testing.T) {
+	err := runGRPCCommand(t, []string{
+		"--service", "TestService",
+		"--method", "TestMethod",
+		"--data-file", "/nonexistent/data.json",
+		"localhost:50051",
+	})
+
+	if err == nil {
+		t.Fatal("expected error for missing data file")
+	}
+	if !strings.Contains(err.Error(), "failed to read data file") {
+		t.Errorf("expected 'failed to read data file' in error, got: %v", err)
+	}
+}
+
+func TestGRPCCommandWithInsecureFlag(t *testing.T) {
+	oldStderr := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := runGRPCCommand(t, []string{
+		"--service", "TestService",
+		"--method", "TestMethod",
+		"--insecure",
+		"localhost:50051",
+	})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestGRPCCommandWithCertFlag(t *testing.T) {
+	oldStderr := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := runGRPCCommand(t, []string{
+		"--service", "TestService",
+		"--method", "TestMethod",
+		"--cert", "/some/cert.pem",
+		"--key", "/some/key.pem",
+		"localhost:50051",
+	})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestGRPCCommandWithMetadataFlag(t *testing.T) {
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := runGRPCCommand(t, []string{
+		"--service", "TestService",
+		"--method", "TestMethod",
+		"--metadata", "auth:token123,trace-id:abc",
+		"localhost:50051",
+	})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "Metadata sent:") {
+		t.Errorf("expected metadata info in stderr, got: %v", buf.String())
+	}
+}
+
+func TestGRPCCommandWithCACertFlag(t *testing.T) {
+	oldStderr := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := runGRPCCommand(t, []string{
+		"--service", "TestService",
+		"--method", "TestMethod",
+		"--cacert", "/some/ca.pem",
+		"localhost:50051",
+	})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestGRPCCommandCreation(t *testing.T) {
 	cmd := GRPCCommand(&mockDB{})
-
-	// Create command with no args
-	command := &cli.Command{
-		Name:  "grpc",
-		Flags: cmd.Flags,
-		Action: func(ctx context.Context, c *cli.Command) error {
-			target := c.Args().Get(0)
-			if target == "" {
-				return fmt.Errorf("target (host:port) is required")
-			}
-			return nil
-		},
+	if cmd == nil {
+		t.Fatal("GRPCCommand returned nil")
 	}
-
-	// Create context with empty args
-	args := &cliargs{nil}
-	_ = args
-
-	// We need to test the actual error path in GRPCCommand
-	// The action function checks c.Args().Get(0) and returns error if empty
+	if cmd.Name != "grpc" {
+		t.Errorf("Name = %v, want grpc", cmd.Name)
+	}
+	if len(cmd.Flags) == 0 {
+		t.Error("expected flags to be defined")
+	}
 }
 
-// TestGRPCCommandInvalidCallType tests that GRPCCommand handles invalid call type
 func TestGRPCCommandInvalidCallType(t *testing.T) {
-	cmd := GRPCCommand(&mockDB{})
-
-	// The parseCallType function is already tested
-	// Here we just verify the error path
 	_, err := parseCallType("invalid-type")
 	if err == nil {
 		t.Error("expected error for invalid call type")
@@ -151,9 +349,7 @@ func TestGRPCCommandInvalidCallType(t *testing.T) {
 	}
 }
 
-// TestGRPCCommandWithDataFile tests GRPCCommand with data-file flag
 func TestGRPCCommandWithDataFile(t *testing.T) {
-	// Create a temp file with test data
 	tmpDir := t.TempDir()
 	dataFile := filepath.Join(tmpDir, "test_data.json")
 	testData := `{"key":"value"}`
@@ -161,7 +357,6 @@ func TestGRPCCommandWithDataFile(t *testing.T) {
 		t.Fatalf("failed to write temp data file: %v", err)
 	}
 
-	// Verify file content
 	content, err := os.ReadFile(dataFile)
 	if err != nil {
 		t.Fatalf("failed to read data file: %v", err)
@@ -171,18 +366,14 @@ func TestGRPCCommandWithDataFile(t *testing.T) {
 	}
 }
 
-// TestGRPCCommandMissingDataFile tests GRPCCommand with non-existent data file
 func TestGRPCCommandMissingDataFile(t *testing.T) {
-	// Test that reading a non-existent file returns error
 	_, err := os.ReadFile("/nonexistent/path/to/data.json")
 	if err == nil {
 		t.Error("expected error for non-existent data file")
 	}
 }
 
-// TestGRPCCommandWithMetadata tests GRPCCommand metadata parsing
 func TestGRPCCommandWithMetadata(t *testing.T) {
-	// Test metadata string parsing
 	metaStr := "key1:value1,key2:value2"
 	pairs := strings.Split(metaStr, ",")
 
@@ -197,71 +388,58 @@ func TestGRPCCommandWithMetadata(t *testing.T) {
 	}
 }
 
-// TestGRPCCommandWithEmptyMetadata tests GRPCCommand with empty metadata string
 func TestGRPCCommandWithEmptyMetadata(t *testing.T) {
 	metaStr := ""
 	pairs := strings.Split(metaStr, ",")
 
-	// Empty string split gives single empty element
 	if len(pairs) != 1 || pairs[0] != "" {
 		t.Errorf("expected single empty pair for empty metadata, got %v", pairs)
 	}
 }
 
-// TestListServices tests the listServices function
 func TestListServices(t *testing.T) {
 	ctx := context.Background()
 	client := NewClient()
 
-	// Capture stdout
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
 	err := listServices(ctx, client, "localhost:50051")
 
-	// Restore stdout
 	w.Close()
 	os.Stdout = oldStdout
 
-	// Read captured output
 	var output bytes.Buffer
 	_, _ = output.ReadFrom(r)
 	outputStr := output.String()
 
-	// listServices should print something about listing services
 	if outputStr == "" {
 		t.Error("expected output from listServices")
 	}
 
-	// Error should be nil (placeholder implementation)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
-// TestListServicesWithTarget tests listServices with different target
 func TestListServicesWithTarget(t *testing.T) {
 	ctx := context.Background()
 	client := NewClient()
 
-	// Capture stdout
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
 	err := listServices(ctx, client, "example.com:8080")
 
-	// Restore stdout
 	w.Close()
 	os.Stdout = oldStdout
 
-	// Read captured output
 	var output bytes.Buffer
 	_, _ = output.ReadFrom(r)
 	outputStr := output.String()
 
-	// Should mention the target
 	if !strings.Contains(outputStr, "example.com:8080") {
 		t.Errorf("expected target in output, got: %v", outputStr)
 	}
@@ -271,7 +449,6 @@ func TestListServicesWithTarget(t *testing.T) {
 	}
 }
 
-// TestParseCallTypeVariants tests parseCallType with various formats
 func TestParseCallTypeVariants(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -310,9 +487,7 @@ func TestParseCallTypeVariants(t *testing.T) {
 	}
 }
 
-// TestGRPCCommandTLSFlags tests GRPCCommand TLS flag handling
 func TestGRPCCommandTLSFlags(t *testing.T) {
-	// Test that TLS config is built correctly from flags
 	tlsCfg := &TLSConfig{
 		Insecure:   true,
 		CAFile:     "",
@@ -326,9 +501,7 @@ func TestGRPCCommandTLSFlags(t *testing.T) {
 	}
 }
 
-// TestGRPCCommandFormatOutput tests output formatting
 func TestGRPCCommandFormatOutput(t *testing.T) {
-	// Test formatter.Format call with JSON
 	testJSON := []byte(`{"message":"hello","status":"ok"}`)
 	formatted := formatter.Format(testJSON, "application/json", formatter.FormatOptions{
 		Indent: "  ",
@@ -339,13 +512,11 @@ func TestGRPCCommandFormatOutput(t *testing.T) {
 		t.Error("expected formatted output")
 	}
 
-	// Should contain the JSON content
 	if !strings.Contains(formatted, "message") {
 		t.Errorf("expected 'message' in formatted output, got: %v", formatted)
 	}
 }
 
-// TestGRPCCommandFormatOutputWithColor tests output formatting with color
 func TestGRPCCommandFormatOutputWithColor(t *testing.T) {
 	testJSON := []byte(`{"key":"value"}`)
 	formatted := formatter.Format(testJSON, "application/json", formatter.FormatOptions{
@@ -356,13 +527,9 @@ func TestGRPCCommandFormatOutputWithColor(t *testing.T) {
 	if formatted == "" {
 		t.Error("expected formatted output")
 	}
-
-	// With color, output will have ANSI codes
-	// Just verify it doesn't panic
 }
 
-// BenchmarkParseCallType tests parseCallType performance
-func BenchmarkParseCallType(b *testing.B) {
+func BenchmarkParseCallTypeCLI(b *testing.B) {
 	types := []string{"unary", "server-streaming", "client-streaming", "bidirectional", "bidi"}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
