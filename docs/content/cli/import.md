@@ -5,7 +5,7 @@ description: "Import from external formats"
 
 # gurl import
 
-Import requests from external formats like Insomnia, Postman, Bruno, HAR, or OpenAPI.
+Import requests from external formats including HAR, OpenAPI, and common collection formats.
 
 ## Usage
 
@@ -15,14 +15,14 @@ gurl import [flags]
 
 ## Description
 
-The `import` command converts requests from other HTTP clients and API formats into gurl's format. It supports Insomnia, Postman, Bruno collections, HAR files, and OpenAPI specifications.
+The `import` command converts requests from common API formats into gurl's format. It supports HAR files, OpenAPI specifications, and several collection formats.
 
 ## Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--force` | `-f` | `false` | Overwrite existing requests with the same name |
-| `--format` | | none | Specify format explicitly (insomnia, postman, bruno, har, openapi) |
+| `--format` | | none | Specify format explicitly (har, openapi, insomnia, postman, bruno) |
 | `--list` | `-l` | `false` | List available collections/requests before importing |
 
 ## Aliases
@@ -34,15 +34,15 @@ The `import` command converts requests from other HTTP clients and API formats i
 ### Import from file
 
 ```bash
-gurl import --format postman ./collection.json
+gurl import --format openapi ./api.yaml
 ```
 
-Imports a Postman collection.
+Imports all endpoints from an OpenAPI spec.
 
 ### Import with overwrite
 
 ```bash
-gurl import --format insomnia ./insomnia-export.json --force
+gurl import --format har ./requests.har --force
 ```
 
 Imports and overwrites existing requests with the same names.

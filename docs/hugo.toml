@@ -4,7 +4,7 @@ title = 'Gurl CLI'
 theme = 'PaperMod'
 
 [params]
-description = "The terminal-first API client. Like Postman, for your terminal."
+description = "curl for the AI era — secure, logged, and agent-friendly"
 author = "Sreeram"
 defaultTheme = "dark"
 ShowReadingTime = false
@@ -16,13 +16,12 @@ ShowToc = true
 TocOpen = false
 
 [params.homeInfoParams]
-Title = "Gurl CLI"
+Title = "Gurl"
 Content = """
-**The terminal-first API client.**
+**curl for the AI era.**
 
-Save, run, and manage API requests from your terminal.
-9 auth handlers, 4 protocols, scripting, assertions, collection runner, TUI, and plugin system.
-Works great with AI agents — they never touch your credentials.
+Give AI agents a secure, observable tool for HTTP — credentials stay out of context, every request is logged, collections are easily configurable.
+Works just as well for humans at the terminal.
 """
 
 [[params.socialIcons]]

@@ -1,14 +1,14 @@
 ---
 title: "Gurl CLI"
-description: "The terminal-first API client"
+description: "curl for the AI era — secure, logged, and agent-friendly"
 layout: home
 ---
 
-Gurl is the API client that lives in your terminal. Built for developers who prefer the command line, it handles every auth type, every protocol, and every workflow without leaving the terminal.
+Gurl is curl for the AI era. It gives AI agents a secure, observable, and easily configurable tool for making HTTP requests — with built-in credential isolation, request logging, auth handling, and scripting.
 
-## The terminal-first API client. Like Postman, for your terminal.
+## curl for the AI era.
 
-Whether you are debugging an API at 2am or scripting a CI pipeline, Gurl gives you the full power of an API client without leaving your terminal.
+AI agents need to call APIs. Gurl makes that safe and auditable — credentials never touch agent context, every request is logged, and collections are trivially configurable. Works just as well for humans at the terminal.
 
 ## Features
 
@@ -94,11 +94,9 @@ Gurl is designed for AI agent workflows where security matters. Credentials neve
 
 See the [AI integration page](/ai/) for how Gurl works with AI agents.
 
-## What Gurl Replaces
+## Why Gurl
 
-| Paid Tool | Gurl |
-|-----------|------|
-| Postman | Local-first, no account required |
-| Insomnia | Open source, lighter weight |
-| Bruno | Git-friendly collection format |
-| Yaak | Faster, scriptable |
+- **Local-first** — no account, no cloud sync, no lock-in
+- **Git-friendly** — collections are just data, export and version them
+- **Scriptable** — JavaScript pre/post-request hooks, chain requests, CI-ready exit codes
+- **Open source** — inspect and extend everything
