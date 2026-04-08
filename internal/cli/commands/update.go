@@ -69,9 +69,10 @@ func updateGurl() error {
 
 	fmt.Printf("Latest version: %s\n", latestVersion)
 
-	// Compare versions (strip v prefix from both for consistent comparison)
+	// Compare versions (strip v prefix and -dirty suffix for consistent comparison)
 	currentVersion = strings.TrimPrefix(currentVersion, "v")
-	if latestVersion == currentVersion || currentVersion == "dev" {
+	currentVersion = strings.SplitN(currentVersion, "-dirty", 2)[0]
+	if latestVersion == currentVersion || currentVersion == "dev" || strings.HasPrefix(currentVersion, "dev-") {
 		fmt.Println("Already up to date!")
 		return nil
 	}

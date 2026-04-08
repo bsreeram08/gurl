@@ -474,3 +474,138 @@ func TestSequence_Display(t *testing.T) {
 		}
 	}
 }
+
+func TestSetSortOrder(t *testing.T) {
+	db := newSeqMockDB()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "test-request",
+		URL:        "http://localhost/test",
+		Method:     "GET",
+		Collection: "test-col",
+	})
+
+	err := SetSortOrder(db, "test-request", 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req, _ := db.GetRequest("req-1")
+	if req.SortOrder != 5 {
+		t.Errorf("expected SortOrder=5, got %d", req.SortOrder)
+	}
+}
+
+func TestSetSortOrder_NotFound(t *testing.T) {
+	db := newSeqMockDB()
+
+	err := SetSortOrder(db, "nonexistent", 1)
+	if err == nil {
+		t.Error("expected error for nonexistent request, got nil")
+	}
+}
+
+type seqMockDBWithError struct {
+	*seqMockDB
+}
+
+func (m *seqMockDBWithError) ListRequests(opts *storage.ListOptions) ([]*types.SavedRequest, error) {
+	return nil, errors.New("list requests error")
+}
+
+func TestGetSequence_Error(t *testing.T) {
+	db := &seqMockDBWithError{seqMockDB: newSeqMockDB()}
+
+	_, err := GetSequence(db, "test-col")
+	if err == nil {
+		t.Error("expected error from ListRequests, got nil")
+	}
+}
+
+func TestGetSequence_EmptyCollection(t *testing.T) {
+	db := newSeqMockDB()
+
+	seq, err := GetSequence(db, "nonexistent-col")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(seq) != 0 {
+		t.Errorf("expected 0 requests for nonexistent collection, got %d", len(seq))
+	}
+}
+
+func TestSequence_TiesBrokenByName(t *testing.T) {
+	db := newSeqMockDB()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "banana",
+		URL:        "http://localhost/1",
+		Method:     "GET",
+		Collection: "ties-col",
+		SortOrder:  1,
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-2",
+		Name:       "apple",
+		URL:        "http://localhost/2",
+		Method:     "GET",
+		Collection: "ties-col",
+		SortOrder:  1,
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-3",
+		Name:       "cherry",
+		URL:        "http://localhost/3",
+		Method:     "GET",
+		Collection: "ties-col",
+		SortOrder:  1,
+	})
+
+	seq, err := GetSequence(db, "ties-col")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(seq) != 3 {
+		t.Fatalf("expected 3 requests, got %d", len(seq))
+	}
+
+	if seq[0].Name != "apple" {
+		t.Errorf("expected first (alphabetical) to be 'apple', got '%s'", seq[0].Name)
+	}
+	if seq[1].Name != "banana" {
+		t.Errorf("expected second to be 'banana', got '%s'", seq[1].Name)
+	}
+	if seq[2].Name != "cherry" {
+		t.Errorf("expected third to be 'cherry', got '%s'", seq[2].Name)
+	}
+}
+
+func TestSequence_SortBySequence(t *testing.T) {
+	reqs := []*types.SavedRequest{
+		{Name: "c", SortOrder: 2},
+		{Name: "a", SortOrder: 1},
+		{Name: "e", SortOrder: 0},
+		{Name: "d", SortOrder: 2},
+		{Name: "b", SortOrder: 1},
+	}
+
+	sorted := sortBySequence(reqs)
+
+	if sorted[0].Name != "e" {
+		t.Errorf("expected first to be 'e' (SortOrder=0, alphabetical), got '%s'", sorted[0].Name)
+	}
+	if sorted[1].Name != "a" {
+		t.Errorf("expected second to be 'a' (SortOrder=1, alphabetical), got '%s'", sorted[1].Name)
+	}
+	if sorted[2].Name != "b" {
+		t.Errorf("expected third to be 'b' (SortOrder=1, alphabetical), got '%s'", sorted[2].Name)
+	}
+	if sorted[3].Name != "c" {
+		t.Errorf("expected fourth to be 'c' (SortOrder=2, alphabetical), got '%s'", sorted[3].Name)
+	}
+	if sorted[4].Name != "d" {
+		t.Errorf("expected fifth to be 'd' (SortOrder=2, alphabetical), got '%s'", sorted[4].Name)
+	}
+}

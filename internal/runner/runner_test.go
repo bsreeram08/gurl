@@ -878,3 +878,396 @@ func TestRunner_MultipleIterations(t *testing.T) {
 		}
 	}
 }
+
+func TestRunner_ContextCancellation(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "slow-req",
+		URL:        ts.URL,
+		Method:     "GET",
+		Collection: "cancel-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "cancel-col",
+		Iterations:     1,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	results, err := runner.Run(ctx, config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Total != 1 {
+		t.Errorf("expected 1 total request, got %d", results[0].Total)
+	}
+}
+
+func TestRunner_ContextCancellationWithDelay(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "req-1",
+		URL:        ts.URL,
+		Method:     "GET",
+		Collection: "delay-cancel-col",
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-2",
+		Name:       "req-2",
+		URL:        ts.URL,
+		Method:     "GET",
+		Collection: "delay-cancel-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "delay-cancel-col",
+		Iterations:     1,
+		Delay:          100 * time.Millisecond,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	results, err := runner.Run(ctx, config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Total != 1 {
+		t.Errorf("expected 1 total request (cancelled mid-delay), got %d", results[0].Total)
+	}
+}
+
+func TestRunner_DataFileNotFound(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "data-test",
+		URL:        "http://localhost/test",
+		Method:     "GET",
+		Collection: "data-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "data-col",
+		DataFile:       "/nonexistent/path/data.csv",
+	}
+
+	_, err := runner.Run(context.Background(), config)
+	if err == nil {
+		t.Error("expected error for nonexistent data file, got nil")
+	}
+}
+
+func TestRunner_VarsOverrideEnv(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"path": r.URL.Path})
+	}))
+	defer ts.Close()
+
+	e := env.NewEnvironment("test-env", "")
+	e.SetVariable("baseUrl", "http://env-fallback")
+	envStorage.SaveEnv(e)
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "var-override",
+		URL:        "{{baseUrl}}/test",
+		Method:     "GET",
+		Collection: "override-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "override-col",
+		Environment:    "test-env",
+		Iterations:     1,
+		Vars:           map[string]string{"baseUrl": ts.URL},
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Passed != 1 {
+		t.Errorf("expected request to pass with var override")
+	}
+}
+
+func TestRunner_EnvNotFound(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "env-test",
+		URL:        ts.URL,
+		Method:     "GET",
+		Collection: "env-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "env-col",
+		Environment:    "nonexistent-env",
+		Iterations:     1,
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Passed != 1 {
+		t.Errorf("expected request to pass even with nonexistent env")
+	}
+}
+
+func TestRunner_IterationsZero(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "zero-iter",
+		URL:        ts.URL,
+		Method:     "GET",
+		Collection: "zero-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "zero-col",
+		Iterations:     0,
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Errorf("expected 1 iteration (default), got %d", len(results))
+	}
+}
+
+func TestRunner_BailOnPassedSkipsRemaining(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	order := []string{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		order = append(order, r.URL.Path)
+		if r.URL.Path == "/skip" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "first",
+		URL:        ts.URL + "/first",
+		Method:     "GET",
+		Collection: "bail-pass-col",
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-2",
+		Name:       "skip",
+		URL:        ts.URL + "/skip",
+		Method:     "GET",
+		Collection: "bail-pass-col",
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-3",
+		Name:       "third",
+		URL:        ts.URL + "/third",
+		Method:     "GET",
+		Collection: "bail-pass-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "bail-pass-col",
+		Iterations:     1,
+		Bail:           true,
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(order) != 2 {
+		t.Errorf("expected only 2 requests to run (bail after skip), got %d: %v", len(order), order)
+	}
+
+	result := results[0]
+	if result.Skipped != 1 {
+		t.Errorf("expected 1 skipped (after bail), got %d", result.Skipped)
+	}
+	if result.Failed != 1 {
+		t.Errorf("expected 1 failed, got %d", result.Failed)
+	}
+}
+
+func TestRunner_RequestExecutionError(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "bad-url",
+		URL:        "http://localhost:99999/no-connection",
+		Method:     "GET",
+		Collection: "error-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "error-col",
+		Iterations:     1,
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Failed != 1 {
+		t.Errorf("expected 1 failed request, got %d", results[0].Failed)
+	}
+	if results[0].RequestResults[0].Error == "" {
+		t.Errorf("expected error message for failed request")
+	}
+}
+
+func TestRunner_ConfigVarsMerged(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "vars-test",
+		URL:        ts.URL + "/{{path}}",
+		Method:     "GET",
+		Collection: "vars-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "vars-col",
+		Iterations:     1,
+		Vars:           map[string]string{"path": "/test"},
+	}
+
+	results, err := runner.Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Passed != 1 {
+		t.Errorf("expected request to pass")
+	}
+}
+
+func TestRunner_DataFileWithDelay(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	tmpDir := t.TempDir()
+	jsonPath := filepath.Join(tmpDir, "delay_data.json")
+	if err := os.WriteFile(jsonPath, []byte(`[{"name":"Alice"},{"name":"Bob"}]`), 0644); err != nil {
+		t.Fatalf("failed to write test data: %v", err)
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "data-delay-test",
+		URL:        ts.URL + "/{{name}}",
+		Method:     "GET",
+		Collection: "data-delay-col",
+	})
+
+	runner := NewRunner(db, envStorage)
+	config := RunConfig{
+		CollectionName: "data-delay-col",
+		DataFile:       jsonPath,
+		Delay:          20 * time.Millisecond,
+	}
+
+	start := time.Now()
+	results, err := runner.Run(context.Background(), config)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Errorf("expected 2 results, got %d", len(results))
+	}
+
+	if elapsed < 20*time.Millisecond {
+		t.Errorf("expected delay between data iterations, elapsed=%v", elapsed)
+	}
+}

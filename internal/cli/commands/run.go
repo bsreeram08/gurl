@@ -12,6 +12,7 @@ import (
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/formatter"
 	"github.com/sreeram/gurl/internal/plugins"
 	"github.com/sreeram/gurl/internal/plugins/builtins"
 	"github.com/sreeram/gurl/internal/runner"
@@ -426,11 +427,9 @@ func printResponse(out *os.File, method string, url string, resp client.Response
 		_, err := out.Write(resp.Body)
 		return err
 	case "table":
-		var data interface{}
-		if json.Unmarshal(resp.Body, &data) == nil {
-			enc := json.NewEncoder(out)
-			enc.SetIndent("  ", "")
-			return enc.Encode(data)
+		if tableOutput := formatter.FormatTableFromBytes(resp.Body); tableOutput != "" {
+			_, err := out.WriteString(tableOutput)
+			return err
 		}
 		_, err := out.Write(resp.Body)
 		return err

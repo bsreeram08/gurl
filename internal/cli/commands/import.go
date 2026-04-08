@@ -5,17 +5,17 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/urfave/cli/v3"
 	"github.com/sreeram/gurl/internal/importers"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/urfave/cli/v3"
 )
 
 // ImportCommand creates the import command
 func ImportCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
-		Name:    "import",
-		Aliases: []string{"imp"},
-		Usage:   "Import requests from external formats (OpenAPI, Insomnia, Bruno, Postman, HAR)",
+		Name:      "import",
+		Aliases:   []string{"imp"},
+		Usage:     "Import requests from external formats (OpenAPI, Insomnia, Bruno, Postman, HAR)",
 		ArgsUsage: "<path>",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
@@ -42,6 +42,7 @@ func ImportCommand(db storage.DB) *cli.Command {
 				fmt.Println("  .json        - Insomnia, Postman, OpenAPI, HAR")
 				fmt.Println("  .bru         - Bruno")
 				fmt.Println("  .har         - HAR (HTTP Archive)")
+				fmt.Println("  .gurl        - Native gurl export format")
 				return nil
 			}
 

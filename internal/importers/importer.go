@@ -116,6 +116,7 @@ func init() {
 	Register(&BrunoImporter{})
 	Register(&PostmanImporter{})
 	Register(&HARImporter{})
+	Register(&GurlImporter{})
 }
 
 // Helper to read file content

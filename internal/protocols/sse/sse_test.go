@@ -80,20 +80,12 @@ func TestSSE_EventTypes(t *testing.T) {
 	// Mock SSE server that sends events with different types
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			t.Fatal("Expected ResponseWriter to implement Flusher")
-		}
-
 		w.Write([]byte("event: update\n"))
 		w.Write([]byte("data: update data\n"))
 		w.Write([]byte("\n"))
-		flusher.Flush()
-
 		w.Write([]byte("event: message\n"))
 		w.Write([]byte("data: message data\n"))
 		w.Write([]byte("\n"))
-		flusher.Flush()
 	}))
 	defer server.Close()
 
@@ -108,19 +100,23 @@ func TestSSE_EventTypes(t *testing.T) {
 	var receivedData []string
 	timeout := time.After(5 * time.Second)
 
-	for i := 0; i < 2; i++ {
+	for len(receivedTypes) < 2 {
 		select {
-		case event := <-events:
+		case event, ok := <-events:
+			if !ok {
+				goto done
+			}
 			receivedTypes = append(receivedTypes, event.Type)
 			receivedData = append(receivedData, event.Data)
-		case err, ok := <-errors:
-			if ok && err != nil {
+		case err := <-errors:
+			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 		case <-timeout:
 			t.Fatal("Timeout waiting for events")
 		}
 	}
+done:
 
 	if len(receivedTypes) != 2 {
 		t.Fatalf("Expected 2 events, got %d", len(receivedTypes))
@@ -173,21 +169,25 @@ func TestSSE_EventTypeFilter(t *testing.T) {
 	var receivedData []string
 	timeout := time.After(5 * time.Second)
 
-	for i := 0; i < 2; i++ {
+	for len(receivedData) < 2 {
 		select {
-		case event := <-events:
+		case event, ok := <-events:
+			if !ok {
+				goto done
+			}
 			if event.Type != "update" {
 				t.Errorf("Expected type 'update', got '%s'", event.Type)
 			}
 			receivedData = append(receivedData, event.Data)
-		case err, ok := <-errors:
-			if ok && err != nil {
+		case err := <-errors:
+			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 		case <-timeout:
 			t.Fatal("Timeout waiting for events")
 		}
 	}
+done:
 
 	if len(receivedData) != 2 {
 		t.Fatalf("Expected 2 events (both updates), got %d", len(receivedData))

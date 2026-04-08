@@ -39,6 +39,12 @@ func ExportCommand(db storage.DB) *cli.Command {
 				Aliases: []string{"o"},
 				Usage:   "Output file (default: stdout)",
 			},
+			&cli.StringFlag{
+				Name:    "format",
+				Aliases: []string{"fmt"},
+				Usage:   "Export format (gurl)",
+				Value:   "gurl",
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			var requests []*types.SavedRequest
@@ -81,11 +87,12 @@ func ExportCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("failed to marshal export: %w", err)
 			}
 
-			if c.String("output") != "" {
-				if err := os.WriteFile(c.String("output"), data, 0644); err != nil {
+			outputPath := c.String("output")
+			if outputPath != "" {
+				if err := os.WriteFile(outputPath, data, 0644); err != nil {
 					return fmt.Errorf("failed to write output file: %w", err)
 				}
-				fmt.Printf("✓ Exported %d request(s) to %s\n", len(requests), c.String("output"))
+				fmt.Printf("✓ Exported %d request(s) to %s\n", len(requests), outputPath)
 			} else {
 				fmt.Println(string(data))
 			}

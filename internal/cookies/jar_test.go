@@ -2,9 +2,12 @@ package cookies
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -706,5 +709,299 @@ func TestCookieJar_ClearAllPersists(t *testing.T) {
 	got := jar2.Cookies(urlMustParse("https://example.com/"))
 	if len(got) != 0 {
 		t.Errorf("expected 0 cookies after clear and reopen, got %d", len(got))
+	}
+}
+
+type mockCookieDBOpenError struct {
+	mockCookieDB
+}
+
+func (m *mockCookieDBOpenError) Open() error {
+	return fmt.Errorf("open error")
+}
+
+type mockCookieDBGetAllError struct {
+	mockCookieDB
+}
+
+func (m *mockCookieDBGetAllError) GetAllCookies() ([]*cookieJarEntry, error) {
+	return nil, fmt.Errorf("get all cookies error")
+}
+
+func TestNewCookieJar_DBOpenError(t *testing.T) {
+	db := &mockCookieDBOpenError{}
+	_, err := NewCookieJar(db)
+	if err == nil {
+		t.Fatal("expected error when db.Open fails")
+	}
+	if got := err.Error(); !strings.Contains(got, "failed to open cookie db") {
+		t.Errorf("expected 'failed to open cookie db' in error, got: %v", err)
+	}
+}
+
+func TestNewCookieJar_LoadFromDBError(t *testing.T) {
+	db := &mockCookieDBGetAllError{}
+	_, err := NewCookieJar(db)
+	if err == nil {
+		t.Fatal("expected error when loadFromDB fails")
+	}
+	if got := err.Error(); !strings.Contains(got, "failed to load cookies from db") {
+		t.Errorf("expected 'failed to load cookies from db' in error, got: %v", err)
+	}
+}
+
+func TestLoadFromDB_EmptyDB(t *testing.T) {
+	db := newMockCookieDB()
+	jar, err := NewCookieJar(db)
+	if err != nil {
+		t.Fatalf("failed to create cookie jar: %v", err)
+	}
+
+	u, _ := url.Parse("https://example.com/")
+	got := jar.Cookies(u)
+	if len(got) != 0 {
+		t.Errorf("expected 0 cookies from empty DB, got %d", len(got))
+	}
+}
+
+func TestLoadFromDB_WithCookies(t *testing.T) {
+	db := newMockCookieDB()
+
+	u, _ := url.Parse("https://example.com/")
+	db.SetCookies([]*cookieJarEntry{
+		{Name: "session", Value: "abc123", Domain: "example.com", Path: "/", Secure: false, HttpOnly: false},
+	})
+
+	jar, err := NewCookieJar(db)
+	if err != nil {
+		t.Fatalf("failed to create cookie jar: %v", err)
+	}
+
+	got := jar.Cookies(u)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 cookie, got %d", len(got))
+	}
+	if got[0].Name != "session" || got[0].Value != "abc123" {
+		t.Errorf("unexpected cookie: %+v", got[0])
+	}
+}
+
+func TestNewLMDBCookieDB_WithEnvPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	envPath := filepath.Join(tmpDir, "test-cookies.db")
+
+	oldEnv := os.Getenv("GURL_COOKIE_DB_PATH")
+	os.Setenv("GURL_COOKIE_DB_PATH", envPath)
+	defer os.Setenv("GURL_COOKIE_DB_PATH", oldEnv)
+
+	db, err := NewLMDBCookieDB()
+	if err != nil {
+		t.Fatalf("NewLMDBCookieDB failed: %v", err)
+	}
+
+	if db.dbPath != envPath {
+		t.Errorf("expected dbPath %s, got %s", envPath, db.dbPath)
+	}
+
+	err = db.Open()
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer db.Close()
+}
+
+func TestNewLMDBCookieDB_CreatesDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	envPath := filepath.Join(tmpDir, "subdir", "test-cookies.db")
+
+	oldEnv := os.Getenv("GURL_COOKIE_DB_PATH")
+	os.Setenv("GURL_COOKIE_DB_PATH", envPath)
+	defer os.Setenv("GURL_COOKIE_DB_PATH", oldEnv)
+
+	db, err := NewLMDBCookieDB()
+	if err != nil {
+		t.Fatalf("NewLMDBCookieDB failed: %v", err)
+	}
+
+	err = db.Open()
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer db.Close()
+
+	_, err = os.Stat(envPath)
+	if err != nil {
+		t.Errorf("expected database file to exist: %v", err)
+	}
+}
+
+func TestLMDBCookieDB_SetCookies_Direct(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db := &LMDBCookieDB{dbPath: dbPath}
+	err := db.Open()
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer db.Close()
+
+	entries := []*cookieJarEntry{
+		{Name: "cookie1", Value: "val1", Domain: "example.com", Path: "/", Secure: false, HttpOnly: false},
+		{Name: "cookie2", Value: "val2", Domain: "example.com", Path: "/api", Secure: true, HttpOnly: true},
+	}
+
+	err = db.SetCookies(entries)
+	if err != nil {
+		t.Fatalf("SetCookies failed: %v", err)
+	}
+
+	saved, err := db.GetAllCookies()
+	if err != nil {
+		t.Fatalf("GetAllCookies failed: %v", err)
+	}
+	if len(saved) != 2 {
+		t.Errorf("expected 2 cookies, got %d", len(saved))
+	}
+}
+
+func TestLMDBCookieDB_GetAllCookies_EmptyDB_Direct(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db := &LMDBCookieDB{dbPath: dbPath}
+	err := db.Open()
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer db.Close()
+
+	saved, err := db.GetAllCookies()
+	if err != nil {
+		t.Fatalf("GetAllCookies failed: %v", err)
+	}
+	if len(saved) != 0 {
+		t.Errorf("expected 0 cookies, got %d", len(saved))
+	}
+}
+
+func TestLMDBCookieDB_DeleteCookie_Direct(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db := &LMDBCookieDB{dbPath: dbPath}
+	err := db.Open()
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer db.Close()
+
+	entries := []*cookieJarEntry{
+		{Name: "todelete", Value: "val", Domain: "example.com", Path: "/"},
+	}
+	db.SetCookies(entries)
+
+	err = db.DeleteCookie("example.com", "todelete")
+	if err != nil {
+		t.Fatalf("DeleteCookie failed: %v", err)
+	}
+
+	saved, err := db.GetAllCookies()
+	if err != nil {
+		t.Fatalf("GetAllCookies failed: %v", err)
+	}
+	if len(saved) != 0 {
+		t.Errorf("expected 0 cookies after delete, got %d", len(saved))
+	}
+}
+
+func TestLMDBCookieDB_DeleteCookie_NonExistent(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db := &LMDBCookieDB{dbPath: dbPath}
+	err := db.Open()
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer db.Close()
+
+	err = db.DeleteCookie("example.com", "nonexistent")
+	if err != nil {
+		t.Fatalf("DeleteCookie should not fail for nonexistent cookie: %v", err)
+	}
+}
+
+func TestLMDBCookieDB_ClearAllCookies_Direct(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db := &LMDBCookieDB{dbPath: dbPath}
+	err := db.Open()
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer db.Close()
+
+	entries := []*cookieJarEntry{
+		{Name: "cookie1", Value: "val1", Domain: "example.com", Path: "/"},
+		{Name: "cookie2", Value: "val2", Domain: "other.com", Path: "/"},
+	}
+	db.SetCookies(entries)
+
+	err = db.ClearAllCookies()
+	if err != nil {
+		t.Fatalf("ClearAllCookies failed: %v", err)
+	}
+
+	saved, err := db.GetAllCookies()
+	if err != nil {
+		t.Fatalf("GetAllCookies failed: %v", err)
+	}
+	if len(saved) != 0 {
+		t.Errorf("expected 0 cookies after clear, got %d", len(saved))
+	}
+}
+
+func TestLMDBCookieDB_GetAllCookies_KeyPrefixFiltering(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db := &LMDBCookieDB{dbPath: dbPath}
+	err := db.Open()
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer db.Close()
+
+	db.SetCookies([]*cookieJarEntry{
+		{Name: "good", Value: "val", Domain: "example.com", Path: "/"},
+	})
+
+	db.GetAllCookies()
+
+	saved, err := db.GetAllCookies()
+	if err != nil {
+		t.Fatalf("GetAllCookies failed: %v", err)
+	}
+	if len(saved) != 1 {
+		t.Errorf("expected 1 cookie with proper prefix, got %d", len(saved))
+	}
+}
+
+func TestLMDBCookieDB_Open_CreatesDirIfNeeded(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "newdir", "subdir", "test.db")
+
+	db := &LMDBCookieDB{dbPath: dbPath}
+	err := db.Open()
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer db.Close()
+
+	_, err = os.Stat(dbPath)
+	if err != nil {
+		t.Errorf("expected database file to exist: %v", err)
 	}
 }

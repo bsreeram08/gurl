@@ -10,6 +10,11 @@ import (
 	"github.com/sreeram/gurl/pkg/types"
 )
 
+// requestsLoadedMsg is sent when requests finish loading
+type requestsLoadedMsg struct {
+	requests []*types.SavedRequest
+}
+
 // Panel represents the focused panel in the TUI
 type Panel int
 
@@ -46,14 +51,13 @@ func NewApp(db storage.DB, config *types.Config) *App {
 
 // Init implements tea.Model.Init
 func (m *App) Init() tea.Cmd {
-	// Load initial data - request list
-	requests, err := m.db.ListRequests(nil)
-	if err != nil {
-		// Log error but continue - we can show welcome screen
-		requests = []*types.SavedRequest{}
+	return func() tea.Msg {
+		requests, _ := m.db.ListRequests(nil)
+		if requests == nil {
+			requests = []*types.SavedRequest{}
+		}
+		return requestsLoadedMsg{requests: requests}
 	}
-	m.requests = requests
-	return nil
 }
 
 // Update implements tea.Model.Update
@@ -63,6 +67,10 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
+		return m, nil
+
+	case requestsLoadedMsg:
+		m.requests = msg.requests
 		return m, nil
 
 	case tea.KeyMsg:
@@ -149,8 +157,8 @@ func (m *App) View() string {
 	layout := CalculateLayout(m.width, m.height)
 
 	// Build each panel
-	sidebar := m.renderSidebar(layout)
-	main := m.renderMain(layout)
+	sidebar := m.renderSidebar(layout, m.height)
+	main := m.renderMain(layout, m.height)
 	status := m.renderStatusBar(layout)
 
 	// Join sidebar and main horizontally
@@ -171,7 +179,7 @@ func (m *App) View() string {
 }
 
 // renderSidebar renders the request list panel
-func (m *App) renderSidebar(layout Layout) string {
+func (m *App) renderSidebar(layout Layout, totalHeight int) string {
 	var sb strings.Builder
 
 	// Sidebar header
@@ -196,12 +204,12 @@ func (m *App) renderSidebar(layout Layout) string {
 	sidebarContent := sb.String()
 	return Style.Sidebar.
 		Width(layout.SidebarWidth).
-		Height(layout.MainHeight()).
+		Height(layout.MainHeight(totalHeight)).
 		Render(sidebarContent)
 }
 
 // renderMain renders the main request/response panel
-func (m *App) renderMain(layout Layout) string {
+func (m *App) renderMain(layout Layout, totalHeight int) string {
 	var sb strings.Builder
 
 	// Main header
@@ -230,7 +238,7 @@ func (m *App) renderMain(layout Layout) string {
 	mainContent := sb.String()
 	return Style.Main.
 		Width(layout.MainWidth).
-		Height(layout.MainHeight()).
+		Height(layout.MainHeight(totalHeight)).
 		Render(mainContent)
 }
 

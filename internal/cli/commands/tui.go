@@ -29,8 +29,7 @@ and executing your saved API requests in a 3-panel layout.`,
 
 			// Run the bubbletea program
 			p := tea.NewProgram(app,
-				tea.WithAltScreen(),       // Use alternate screen buffer
-				tea.WithMouseCellMotion(), // Enable mouse support
+				tea.WithAltScreen(), // Use alternate screen buffer
 			)
 
 			if _, err := p.Run(); err != nil {

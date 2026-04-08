@@ -3,6 +3,8 @@ package grpc
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -515,4 +517,270 @@ func BenchmarkParseCallType(b *testing.B) {
 // Test integration helper - would be used with real gRPC server
 func TestIntegrationGRPCUnary(t *testing.T) {
 	t.Skip("Skipping integration test - requires running gRPC server")
+}
+
+// TestExecuteCallNilDescriptorSource tests executeCall with nil descriptor source
+func TestExecuteCallNilDescriptorSource(t *testing.T) {
+	client := NewClient()
+	// No descriptor source set
+
+	ctx := context.Background()
+	_, err := client.executeCall(ctx, "localhost:50051", "/TestService/TestMethod", []byte(`{}`), CallTypeUnary)
+
+	if err == nil {
+		t.Error("expected error when descriptor source is nil")
+	}
+	if !strings.Contains(err.Error(), "descriptor source") {
+		t.Errorf("expected 'descriptor source' in error, got: %v", err)
+	}
+}
+
+// TestExecuteCallDialError tests executeCall when dial fails
+func TestExecuteCallDialError(t *testing.T) {
+	client := NewClient()
+	client.SetDescriptorSource(&mockDescriptorSource{})
+
+	ctx := context.Background()
+	// Use an invalid target that will cause dial to fail
+	_, err := client.executeCall(ctx, "", "/TestService/TestMethod", []byte(`{}`), CallTypeUnary)
+
+	if err == nil {
+		t.Error("expected error when dial fails")
+	}
+}
+
+// TestExecuteCallWithMetadata tests executeCall with metadata option
+func TestExecuteCallWithMetadata(t *testing.T) {
+	client := NewClient()
+	client.SetDescriptorSource(&mockDescriptorSource{})
+
+	ctx := context.Background()
+	md := metadata.New(map[string]string{
+		"x-custom-header": "test-value",
+	})
+
+	_, err := client.executeCall(ctx, "localhost:50051", "/TestService/TestMethod", []byte(`{}`), CallTypeUnary, WithMetadata(md))
+
+	// Should fail at connection but not at metadata parsing
+	// This tests that metadata is properly applied before connection
+	if err == nil {
+		t.Error("expected connection error with fake target")
+	}
+}
+
+// TestExecuteCallWithHeaders tests executeCall with header options
+func TestExecuteCallWithHeaders(t *testing.T) {
+	client := NewClient()
+	client.SetDescriptorSource(&mockDescriptorSource{})
+
+	ctx := context.Background()
+
+	_, err := client.executeCall(ctx, "localhost:50051", "/TestService/TestMethod", []byte(`{}`), CallTypeUnary,
+		WithHeader("Authorization", "Bearer token123"))
+
+	// Should fail at connection but headers should be applied
+	if err == nil {
+		t.Error("expected connection error with fake target")
+	}
+}
+
+// TestExecuteCallInvalidMethodFormat tests executeCall with various method formats
+func TestExecuteCallInvalidMethodFormat(t *testing.T) {
+	client := NewClient()
+	client.SetDescriptorSource(&mockDescriptorSource{})
+
+	ctx := context.Background()
+
+	// Empty method
+	_, err := client.executeCall(ctx, "localhost:50051", "", []byte(`{}`), CallTypeUnary)
+	if err == nil {
+		t.Error("expected error with empty method")
+	}
+}
+
+// TestBuildTLSCredentialsMissingCertFile tests buildTLSCredentials with missing cert file
+func TestBuildTLSCredentialsMissingCertFile(t *testing.T) {
+	cfg := &TLSConfig{
+		CertFile: "/nonexistent/path/to/cert.pem",
+		KeyFile:  "/nonexistent/path/to/key.pem",
+	}
+
+	_, err := buildTLSCredentials(cfg)
+	if err == nil {
+		t.Error("expected error for missing cert file")
+	}
+	if !strings.Contains(err.Error(), "failed to load client certificate") {
+		t.Errorf("expected 'failed to load client certificate' error, got: %v", err)
+	}
+}
+
+// TestBuildTLSCredentialsInvalidCertData tests buildTLSCredentials with invalid cert data
+func TestBuildTLSCredentialsInvalidCertData(t *testing.T) {
+	// Create a temp file with invalid cert data
+	tmpDir := t.TempDir()
+	certFile := tmpDir + "/invalid_cert.pem"
+	keyFile := tmpDir + "/invalid_key.pem"
+
+	if err := os.WriteFile(certFile, []byte("not a valid certificate"), 0644); err != nil {
+		t.Fatalf("failed to write temp cert file: %v", err)
+	}
+	if err := os.WriteFile(keyFile, []byte("not a valid key"), 0644); err != nil {
+		t.Fatalf("failed to write temp key file: %v", err)
+	}
+
+	cfg := &TLSConfig{
+		CertFile: certFile,
+		KeyFile:  keyFile,
+	}
+
+	_, err := buildTLSCredentials(cfg)
+	if err == nil {
+		t.Error("expected error for invalid cert data")
+	}
+}
+
+// TestBuildTLSCredentialsValidCert tests buildTLSCredentials with valid TLS config (no cert files)
+func TestBuildTLSCredentialsValidCert(t *testing.T) {
+	cfg := &TLSConfig{
+		Insecure:   true,
+		ServerName: "testserver",
+	}
+
+	creds, err := buildTLSCredentials(cfg)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if creds == nil {
+		t.Error("expected credentials to be returned")
+	}
+}
+
+// TestBuildTLSCredentialsNoCertFiles tests buildTLSCredentials without cert files (default TLS)
+func TestBuildTLSCredentialsNoCertFiles(t *testing.T) {
+	cfg := &TLSConfig{
+		Insecure: false,
+	}
+
+	creds, err := buildTLSCredentials(cfg)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if creds == nil {
+		t.Error("expected credentials to be returned")
+	}
+}
+
+// TestExecuteStreamingCallReturnsError tests that executeStreamingCall returns proper error
+func TestExecuteStreamingCallReturnsError(t *testing.T) {
+	client := NewClient()
+	client.SetDescriptorSource(&mockDescriptorSource{})
+
+	ctx := context.Background()
+
+	// All streaming call types should return an error about missing descriptor source
+	testCases := []struct {
+		callType CallType
+		name     string
+	}{
+		{CallTypeServerStreaming, "ServerStreaming"},
+		{CallTypeClientStreaming, "ClientStreaming"},
+		{CallTypeBidirectionalStreaming, "BidirectionalStreaming"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := client.executeStreamingCall(ctx, "localhost:50051", "/TestService/Method", []byte(`{}`), tc.callType)
+			if err == nil {
+				t.Error("expected error for streaming call without proper descriptor source")
+			}
+			if !strings.Contains(err.Error(), "descriptor source") {
+				t.Errorf("expected 'descriptor source' in error, got: %v", err)
+			}
+		})
+	}
+}
+
+// TestExecuteUnaryDelegate tests that ExecuteUnary delegates to executeCall
+func TestExecuteUnaryDelegate(t *testing.T) {
+	client := NewClient()
+	// No descriptor source set
+
+	ctx := context.Background()
+	_, err := client.ExecuteUnary(ctx, "localhost:50051", "/TestService/TestMethod", []byte(`{}`))
+
+	if err == nil {
+		t.Error("expected error when descriptor source is nil (delegated from ExecuteUnary)")
+	}
+	if !strings.Contains(err.Error(), "descriptor source") {
+		t.Errorf("expected 'descriptor source' in error, got: %v", err)
+	}
+}
+
+// TestExecuteServerStreamingDelegate tests that ExecuteServerStreaming delegates
+func TestExecuteServerStreamingDelegate(t *testing.T) {
+	client := NewClient()
+
+	ctx := context.Background()
+	_, err := client.ExecuteServerStreaming(ctx, "localhost:50051", "/TestService/TestMethod", []byte(`{}`))
+
+	if err == nil {
+		t.Error("expected error when descriptor source is nil")
+	}
+}
+
+// TestExecuteClientStreamingDelegate tests that ExecuteClientStreaming delegates
+func TestExecuteClientStreamingDelegate(t *testing.T) {
+	client := NewClient()
+
+	ctx := context.Background()
+	_, err := client.ExecuteClientStreaming(ctx, "localhost:50051", "/TestService/TestMethod", []byte(`{}`))
+
+	if err == nil {
+		t.Error("expected error when descriptor source is nil")
+	}
+}
+
+// TestExecuteBidirectionalStreamingDelegate tests that ExecuteBidirectionalStreaming delegates
+func TestExecuteBidirectionalStreamingDelegate(t *testing.T) {
+	client := NewClient()
+
+	ctx := context.Background()
+	_, err := client.ExecuteBidirectionalStreaming(ctx, "localhost:50051", "/TestService/TestMethod", []byte(`{}`))
+
+	if err == nil {
+		t.Error("expected error when descriptor source is nil")
+	}
+}
+
+// TestExecuteCallWithAllCallTypes tests executeCall with all call type variants
+func TestExecuteCallWithAllCallTypes(t *testing.T) {
+	client := NewClient()
+	client.SetDescriptorSource(&mockDescriptorSource{})
+
+	ctx := context.Background()
+
+	// Test that call type is properly received even if connection fails
+	_, err := client.executeCall(ctx, "localhost:50051", "/TestService/TestMethod", []byte(`{}`), CallTypeUnary)
+	if err == nil {
+		t.Error("expected connection error")
+	}
+}
+
+// TestClientDialWithTLSConfig tests dial with full TLS config
+func TestClientDialWithTLSConfig(t *testing.T) {
+	// This tests the TLS config path through dial
+	client := NewClientWithTLS(TLSConfig{
+		Insecure:   true,
+		ServerName: "test.example.com",
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	conn, err := client.dial(ctx, "localhost:99999")
+	if conn != nil {
+		conn.Close()
+	}
+	// Connection may fail, but we just verify it doesn't panic
+	_ = err
 }

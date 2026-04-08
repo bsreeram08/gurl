@@ -160,9 +160,9 @@ func (e *Evaluator) extractJSONPath(body []byte, path string) (string, error) {
 // compare compares actual value with expected using the operator.
 func (e *Evaluator) compare(actual, op, expected string) bool {
 	switch op {
-	case "=":
+	case "=", "equals":
 		return actual == expected
-	case "!=":
+	case "!=", "not_equals":
 		return actual != expected
 	case "<":
 		return e.compareNumeric(actual, expected, func(a, b float64) bool { return a < b })

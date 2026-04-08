@@ -45,6 +45,11 @@ func CalculateLayout(width, height int) Layout {
 }
 
 // MainHeight returns the height available for the main content area
-func (l Layout) MainHeight() int {
-	return 0 // This will be determined by lipgloss
+// (total height minus status bar)
+func (l Layout) MainHeight(totalHeight int) int {
+	h := totalHeight - l.StatusHeight - 2 // 2 for border
+	if h < 1 {
+		return 1
+	}
+	return h
 }
