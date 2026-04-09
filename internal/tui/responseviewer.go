@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -8,11 +9,15 @@ import (
 	"time"
 
 	"github.com/atotto/clipboard"
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/formatter"
+	"github.com/sreeram/gurl/internal/protocols/sse"
+	"github.com/sreeram/gurl/internal/protocols/websocket"
 )
 
 // ResponseTab represents the active tab in the response viewer
@@ -23,19 +28,22 @@ const (
 	TabHeaders
 	TabCookies
 	TabTiming
+	TabDiff
 )
 
 // ResponseViewer is a bubbletea sub-model for displaying HTTP responses
 type ResponseViewer struct {
-	response   *client.Response
-	activeTab  ResponseTab
-	viewport   viewport.Model
-	filterText string
-	filtering  bool
-	width      int
-	height     int
-	copied     bool
-	saved      bool
+	response     *client.Response
+	prevResponse *client.Response
+	activeTab    ResponseTab
+	viewport     viewport.Model
+	filterText   string
+	filtering    bool
+	width        int
+	height       int
+	copied       bool
+	saved        bool
+	diffResult   string
 }
 
 // NewResponseViewer creates a new response viewer component
@@ -50,10 +58,29 @@ func NewResponseViewer() *ResponseViewer {
 
 // SetResponse sets the response to display
 func (rv *ResponseViewer) SetResponse(resp *client.Response) {
+	if rv.response != nil {
+		rv.prevResponse = rv.response
+	}
 	rv.response = resp
 	rv.copied = false
 	rv.saved = false
+	rv.diffResult = ""
+	if rv.prevResponse != nil && rv.response != nil && rv.activeTab == TabDiff {
+		rv.computeDiff()
+	}
 	rv.updateViewportContent()
+}
+
+func (rv *ResponseViewer) computeDiff() {
+	if rv.prevResponse == nil || rv.response == nil {
+		return
+	}
+	diff, err := formatter.DiffJSON([]byte(rv.prevResponse.Body), []byte(rv.response.Body))
+	if err != nil {
+		rv.diffResult = fmt.Sprintf("Diff error: %v", err)
+	} else {
+		rv.diffResult = diff
+	}
 }
 
 // updateViewportContent updates the viewport with current tab content
@@ -72,6 +99,11 @@ func (rv *ResponseViewer) updateViewportContent() {
 		content = rv.formatCookies()
 	case TabTiming:
 		content = rv.formatTiming()
+	case TabDiff:
+		content = rv.diffResult
+		if content == "" {
+			content = "  No previous response to diff against.\n  Send a request, then send another to compare."
+		}
 	}
 
 	rv.viewport.SetContent(content)
@@ -288,6 +320,10 @@ func (rv *ResponseViewer) handleKeyPress(msg tea.KeyMsg) bool {
 		case "t":
 			rv.SetTab(TabTiming)
 			return true
+		case "d":
+			rv.SetTab(TabDiff)
+			rv.computeDiff()
+			return true
 		case "y":
 			rv.copied = true
 			rv.CopyToClipboard()
@@ -350,7 +386,7 @@ func (rv *ResponseViewer) View() string {
 
 // renderTabBar renders the tab bar
 func (rv *ResponseViewer) renderTabBar() string {
-	tabs := []string{"Body", "Headers", "Cookies", "Timing"}
+	tabs := []string{"Body", "Headers", "Cookies", "Timing", "Diff"}
 	var sb strings.Builder
 
 	for i, tab := range tabs {
@@ -399,6 +435,244 @@ func (rv *ResponseViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // Init implements tea.Model.Init
 func (rv *ResponseViewer) Init() tea.Cmd {
 	return nil
+}
+
+type StreamingViewer struct {
+	url        string
+	protocol   string
+	headers    http.Header
+	messages   []StreamingMessage
+	connected  bool
+	connecting bool
+	errMsg     string
+	input      textinput.Model
+	width      int
+	height     int
+}
+
+type StreamingMessage struct {
+	Dir     string
+	Content string
+	Type    string
+	Time    string
+}
+
+func NewStreamingViewer(url, protocol string, headers http.Header, width, height int) *StreamingViewer {
+	ti := textinput.New()
+	ti.Placeholder = "Send message..."
+	ti.Prompt = "> "
+
+	return &StreamingViewer{
+		url:      url,
+		protocol: protocol,
+		headers:  headers,
+		input:    ti,
+		width:    width,
+		height:   height,
+	}
+}
+
+func (sv *StreamingViewer) Init() tea.Cmd {
+	return nil
+}
+
+func (sv *StreamingViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		if sv.connected {
+			if sv.protocol == "ws" || sv.protocol == "wss" {
+				if msg.String() == "enter" && sv.input.Value() != "" {
+					sv.sendMessage(sv.input.Value())
+					sv.input.SetValue("")
+					return sv, nil
+				}
+				sv.input, _ = sv.input.Update(msg)
+			}
+		}
+	}
+	return sv, nil
+}
+
+func (sv *StreamingViewer) View() string {
+	var sb strings.Builder
+
+	if !sv.connected && !sv.connecting {
+		connectingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("226"))
+		sb.WriteString(connectingStyle.Render("  Connecting to " + sv.url + "..."))
+		sb.WriteString("\n")
+		sb.WriteString("\n")
+	}
+
+	if sv.connecting {
+		sp := spinner.New()
+		sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+		sb.WriteString(fmt.Sprintf("  %s Connecting...\n\n", sp.View()))
+	}
+
+	if sv.errMsg != "" {
+		errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+		sb.WriteString(errStyle.Render("  Error: " + sv.errMsg))
+		sb.WriteString("\n\n")
+	}
+
+	if sv.protocol == "ws" || sv.protocol == "wss" {
+		if sv.connected {
+			sb.WriteString(Style.Hint.Render("  [WS connected] Type message and press Enter to send\n\n"))
+		}
+	}
+
+	maxLines := sv.height - 8
+	if len(sv.messages) > maxLines {
+		sv.messages = sv.messages[len(sv.messages)-maxLines:]
+	}
+
+	for _, msg := range sv.messages {
+		dirColor := lipgloss.Color("39")
+		if msg.Dir == "sent" {
+			dirColor = lipgloss.Color("82")
+		}
+		dirStyle := lipgloss.NewStyle().Foreground(dirColor).Bold(true)
+		typeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+		timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+		if msg.Type != "" {
+			sb.WriteString(fmt.Sprintf("  %s %s %s %s\n", dirStyle.Render(msg.Dir+":"), typeStyle.Render("["+msg.Type+"]"), timeStyle.Render(msg.Time), msg.Content))
+		} else {
+			sb.WriteString(fmt.Sprintf("  %s %s %s\n", dirStyle.Render(msg.Dir+":"), timeStyle.Render(msg.Time), msg.Content))
+		}
+	}
+
+	if len(sv.messages) == 0 && sv.connected {
+		sb.WriteString(Style.Hint.Render("  No messages yet. Send one below."))
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("\n")
+
+	if sv.protocol == "ws" || sv.protocol == "wss" {
+		sb.WriteString(sv.input.View())
+	}
+
+	return sb.String()
+}
+
+func (sv *StreamingViewer) Connect() tea.Cmd {
+	return func() tea.Msg {
+		sv.connecting = true
+		sv.connected = false
+
+		if sv.protocol == "ws" || sv.protocol == "wss" {
+			sv.connectWS()
+		} else if sv.protocol == "sse" {
+			sv.connectSSE()
+		} else {
+			sv.errMsg = "Unknown protocol: " + sv.protocol
+			sv.connecting = false
+		}
+
+		return StreamingConnectedMsg{Viewer: sv}
+	}
+}
+
+func (sv *StreamingViewer) connectWS() {
+	wsClient := websocket.NewClient()
+	headers := make(http.Header)
+	for k, v := range sv.headers {
+		headers[k] = v
+	}
+
+	ctx := context.Background()
+	if err := wsClient.Connect(ctx, sv.url, headers); err != nil {
+		sv.errMsg = err.Error()
+		sv.connecting = false
+		return
+	}
+
+	sv.connected = true
+	sv.connecting = false
+
+	go func() {
+		for {
+			data, msgType, err := wsClient.Receive()
+			if err != nil {
+				sv.addMessage("recv", string(data), fmt.Sprintf("%v", err), time.Now().Format("15:04:05"))
+				break
+			}
+			typeStr := "text"
+			if msgType == websocket.MessageTypeBinary {
+				typeStr = "binary"
+			}
+			sv.addMessage("recv", string(data), typeStr, time.Now().Format("15:04:05"))
+		}
+	}()
+}
+
+func (sv *StreamingViewer) connectSSE() {
+	sseClient := sse.NewClient()
+	ctx := context.Background()
+
+	headers := make(map[string]string)
+	for k, v := range sv.headers {
+		if len(v) > 0 {
+			headers[k] = v[0]
+		}
+	}
+
+	eventChan, errorChan, err := sseClient.Connect(ctx, sv.url, sse.WithHeader("Accept", "text/event-stream"))
+	if err != nil {
+		sv.errMsg = err.Error()
+		sv.connecting = false
+		return
+	}
+
+	sv.connected = true
+	sv.connecting = false
+
+	go func() {
+		for {
+			select {
+			case event, ok := <-eventChan:
+				if !ok {
+					sv.addMessage("recv", event.Data, event.Type, time.Now().Format("15:04:05"))
+					break
+				}
+				sv.addMessage("recv", event.Data, event.Type, time.Now().Format("15:04:05"))
+			case err, ok := <-errorChan:
+				if !ok {
+					return
+				}
+				sv.addMessage("recv", "", fmt.Sprintf("error: %v", err), time.Now().Format("15:04:05"))
+			}
+		}
+	}()
+}
+
+func (sv *StreamingViewer) sendMessage(content string) {
+	if sv.protocol == "ws" || sv.protocol == "wss" {
+		wsClient := websocket.NewClient()
+		headers := make(http.Header)
+		for k, v := range sv.headers {
+			headers[k] = v
+		}
+		ctx := context.Background()
+		if err := wsClient.Connect(ctx, sv.url, headers); err == nil {
+			defer wsClient.Close()
+			wsClient.SendText(content)
+			sv.addMessage("sent", content, "", time.Now().Format("15:04:05"))
+		}
+	}
+}
+
+func (sv *StreamingViewer) addMessage(dir, content, msgType, time string) {
+	sv.messages = append(sv.messages, StreamingMessage{
+		Dir:     dir,
+		Content: content,
+		Type:    msgType,
+		Time:    time,
+	})
+}
+
+type StreamingConnectedMsg struct {
+	Viewer *StreamingViewer
 }
 
 // GetResponse returns the current response

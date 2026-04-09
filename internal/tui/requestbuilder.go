@@ -34,6 +34,11 @@ type RequestBuilder struct {
 	// URL input
 	urlInput textinput.Model
 
+	// URL autocomplete suggestions
+	suggestions     []string
+	suggestionIndex int
+	showSuggestions bool
+
 	// Headers editor
 	headerInputs []headerRow
 
@@ -422,7 +427,33 @@ func (rb *RequestBuilder) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return rb.handleMethodKey(msg)
 
 	case SectionURL:
+		if rb.showSuggestions {
+			switch msg.Type {
+			case tea.KeyUp:
+				if len(rb.suggestions) > 0 {
+					rb.suggestionIndex--
+					if rb.suggestionIndex < 0 {
+						rb.suggestionIndex = len(rb.suggestions) - 1
+					}
+				}
+				return rb, nil
+			case tea.KeyDown:
+				if len(rb.suggestions) > 0 {
+					rb.suggestionIndex = (rb.suggestionIndex + 1) % len(rb.suggestions)
+				}
+				return rb, nil
+			case tea.KeyEnter:
+				rb.selectSuggestion()
+				return rb, nil
+			case tea.KeyEscape:
+				rb.showSuggestions = false
+				rb.suggestions = nil
+				return rb, nil
+			}
+		}
+
 		rb.urlInput, _ = rb.urlInput.Update(msg)
+		rb.updateSuggestions()
 		return rb, nil
 
 	case SectionHeaders:
@@ -596,51 +627,35 @@ func (rb *RequestBuilder) handleAuthKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return rb, nil
 }
 
-// sendRequest sends the HTTP request
+// sendRequest sends the HTTP request asynchronously via a tea.Cmd.
 func (rb *RequestBuilder) sendRequest() tea.Cmd {
 	rb.sending = true
-
-	// Build request from form
-	go func() {
-		req := rb.buildClientRequest()
-		resp, err := client.Execute(req)
-
-		// Send response back via message
-		rb.msgs = append(rb.msgs, RequestSentMsg{
-			Response: &resp,
-			Error:    err,
-		})
-		rb.sending = false
-	}()
-
-	return nil
+	clientReq := rb.buildClientRequest()
+	return func() tea.Msg {
+		resp, err := client.Execute(clientReq)
+		return RequestSentMsg{Response: &resp, Error: err}
+	}
 }
 
-// saveRequest saves the current request to the database
+// saveRequest saves the current request to the database via a tea.Cmd.
 func (rb *RequestBuilder) saveRequest() tea.Cmd {
-	// Build request from form
 	rb.syncEditingFromForm()
-
 	if rb.editing == nil {
 		return nil
 	}
-
-	var err error
-	if rb.request != nil && rb.request.ID != "" {
-		// Update existing
-		err = rb.db.UpdateRequest(rb.editing)
-	} else {
-		// Create new
-		rb.editing.ID = "" // Force new ID
-		err = rb.db.SaveRequest(rb.editing)
+	editing := rb.editing
+	isUpdate := rb.request != nil && rb.request.ID != ""
+	db := rb.db
+	return func() tea.Msg {
+		var err error
+		if isUpdate {
+			err = db.UpdateRequest(editing)
+		} else {
+			editing.ID = ""
+			err = db.SaveRequest(editing)
+		}
+		return RequestSavedMsg{Request: editing, Error: err}
 	}
-
-	rb.msgs = append(rb.msgs, RequestSavedMsg{
-		Request: rb.editing,
-		Error:   err,
-	})
-
-	return nil
 }
 
 // syncEditingFromForm syncs form data back to editing request
@@ -783,6 +798,87 @@ func encodeBase64(data []byte) string {
 	return string(result)
 }
 
+func (rb *RequestBuilder) updateSuggestions() {
+	if rb.db == nil {
+		rb.suggestions = nil
+		return
+	}
+
+	requests, err := rb.db.ListRequests(&storage.ListOptions{Limit: 100})
+	if err != nil || len(requests) == 0 {
+		rb.suggestions = nil
+		return
+	}
+
+	urlMap := make(map[string]bool)
+	var uniqueURLs []string
+	for _, req := range requests {
+		if req.URL == "" {
+			continue
+		}
+		if !urlMap[req.URL] {
+			urlMap[req.URL] = true
+			uniqueURLs = append(uniqueURLs, req.URL)
+		}
+	}
+
+	input := rb.urlInput.Value()
+	if input == "" {
+		rb.suggestions = nil
+		return
+	}
+
+	var matches []string
+	for _, url := range uniqueURLs {
+		if fuzzyMatch(input, url) {
+			matches = append(matches, url)
+		}
+	}
+
+	rb.suggestions = matches
+	rb.suggestionIndex = 0
+	rb.showSuggestions = len(matches) > 0
+}
+
+func fuzzyMatch(input, target string) bool {
+	input = strings.ToLower(input)
+	target = strings.ToLower(target)
+
+	if strings.Contains(target, input) {
+		return true
+	}
+
+	if strings.HasPrefix(target, "http://") {
+		target = target[7:]
+	} else if strings.HasPrefix(target, "https://") {
+		target = target[8:]
+	}
+	if idx := strings.Index(target, "/"); idx > 0 {
+		target = target[:idx]
+	}
+	if strings.Contains(target, input) {
+		return true
+	}
+
+	inputIdx := 0
+	for _, ch := range target {
+		if inputIdx < len(input) && strings.ToLower(string(ch)) == strings.ToLower(string(rune(input[inputIdx]))) {
+			inputIdx++
+		}
+	}
+	return inputIdx == len(input)
+}
+
+func (rb *RequestBuilder) selectSuggestion() {
+	if !rb.showSuggestions || rb.suggestionIndex < 0 || rb.suggestionIndex >= len(rb.suggestions) {
+		return
+	}
+	rb.urlInput.SetValue(rb.suggestions[rb.suggestionIndex])
+	rb.showSuggestions = false
+	rb.suggestions = nil
+	rb.suggestionIndex = 0
+}
+
 // detectContentType detects content type from headers or body
 func detectContentType(headers []types.Header, body string) string {
 	for _, h := range headers {
@@ -870,15 +966,27 @@ func (rb *RequestBuilder) renderMethodURL() string {
 
 	url := rb.urlInput.View()
 	if rb.activeSection == SectionURL {
-		// Show cursor
 	} else {
-		// Show static view
 		if rb.urlInput.Value() == "" {
 			url = Style.Hint.Render("Enter URL...")
 		}
 	}
 
-	return prefix + methodStyle.Render(method) + " " + url
+	var result strings.Builder
+	result.WriteString(prefix + methodStyle.Render(method) + " " + url)
+
+	if rb.showSuggestions && len(rb.suggestions) > 0 {
+		result.WriteString("\n")
+		for i, suggestion := range rb.suggestions {
+			rowPrefix := "  "
+			if i == rb.suggestionIndex {
+				rowPrefix = "▶ "
+			}
+			result.WriteString(rowPrefix + Style.PlainText.Render(suggestion) + "\n")
+		}
+	}
+
+	return result.String()
 }
 
 func (rb *RequestBuilder) renderHeaders() string {
