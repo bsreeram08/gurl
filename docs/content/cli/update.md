@@ -33,4 +33,4 @@ Checks for and installs the latest version.
 
 ## See also
 
-- [Gurl GitHub Repository](https://github.com/example/gurl) - Release notes and version information
+- [Gurl GitHub Repository](https://github.com/bsreeram08/gurl) - Release notes and version information
