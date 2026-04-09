@@ -60,7 +60,11 @@ func ImportCommand(db storage.DB) *cli.Command {
 			}
 
 			cleanPath := filepath.Clean(path)
-			if strings.Contains(cleanPath, "..") {
+			resolvedPath, err := filepath.EvalSymlinks(cleanPath)
+			if err != nil {
+				resolvedPath = cleanPath
+			}
+			if strings.Contains(resolvedPath, "..") {
 				return fmt.Errorf("import path must not contain '..': %s", path)
 			}
 

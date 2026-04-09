@@ -2,8 +2,10 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -285,6 +287,51 @@ func TestOAuth2Handler_MissingTokenURL(t *testing.T) {
 			t.Error("expected no Authorization header when token_url missing")
 		}
 	}
+}
+
+func TestOAuth2Handler_TokenErrorMessageNoStatusCode(t *testing.T) {
+	// Server that returns 401 Unauthorized
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	handler := &OAuth2Handler{}
+
+	// fetchToken is unexported but accessible within the same package
+	token, err := handler.fetchToken(server.URL, "grant_type=client_credentials&client_id=test&client_secret=test", "application/x-www-form-urlencoded")
+
+	if token.accessToken != "" {
+		t.Errorf("expected empty access token on error, got %q", token.accessToken)
+	}
+	if err == nil {
+		t.Fatal("expected error when server returns 401")
+	}
+
+	errMsg := err.Error()
+	// Verify error message does NOT contain the status code
+	if containsStatusCode(errMsg) {
+		t.Errorf("error message should not contain HTTP status code, got %q", errMsg)
+	}
+}
+
+// containsStatusCode checks if a string contains any numeric status code pattern
+func containsStatusCode(s string) bool {
+	// Check for common HTTP status codes
+	statusCodes := []string{"400", "401", "403", "404", "500", "502", "503"}
+	for _, code := range statusCodes {
+		if strings.Contains(s, code) {
+			return true
+		}
+	}
+	// Also check for generic 3-digit numbers that look like status codes
+	for i := 100; i <= 599; i++ {
+		if strings.Contains(s, fmt.Sprintf("%d", i)) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestOAuth2Handler_RegistryIntegration(t *testing.T) {

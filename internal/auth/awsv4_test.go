@@ -156,7 +156,6 @@ func TestAWSv4Handler(t *testing.T) {
 		for _, hdr := range req.Headers {
 			if hdr.Key == "Authorization" {
 				hasAuth = true
-				// Should include signed query params
 				if hdr.Key == "" {
 					t.Error("Authorization should include signed query params")
 				}
@@ -165,6 +164,44 @@ func TestAWSv4Handler(t *testing.T) {
 
 		if !hasAuth {
 			t.Error("Authorization header not set")
+		}
+	})
+
+	t.Run("Injects host header from URL when not provided", func(t *testing.T) {
+		h := &AWSv4Handler{}
+		req := &client.Request{
+			Method: "GET",
+			URL:    "https://examplebucket.s3.amazonaws.com/test.txt",
+			Headers: []client.Header{
+				{Key: "X-Custom-Header", Value: "custom-value"},
+			},
+		}
+
+		params := map[string]string{
+			"access_key": "AKIAIOSFODNN7EXAMPLE",
+			"secret_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			"region":     "us-east-1",
+			"service":    "s3",
+		}
+
+		h.Apply(req, params)
+
+		var hasAuth bool
+		var hostFound bool
+		for _, hdr := range req.Headers {
+			if hdr.Key == "Authorization" {
+				hasAuth = true
+			}
+			if strings.EqualFold(hdr.Key, "Host") && hdr.Value == "examplebucket.s3.amazonaws.com" {
+				hostFound = true
+			}
+		}
+
+		if !hasAuth {
+			t.Error("Authorization header not set when Host header not provided")
+		}
+		if !hostFound {
+			t.Error("Host header was not injected from URL")
 		}
 	})
 }

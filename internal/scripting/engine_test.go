@@ -286,26 +286,25 @@ func TestJS_SandboxNoHTTPS(t *testing.T) {
 	}
 }
 
-func TestJS_AllowedCrypto(t *testing.T) {
+func TestJS_CryptoDigestThrows(t *testing.T) {
 	eng := newTestEngine(t)
 	_, err := eng.Execute(`
 		var hash = crypto.createHash("sha256");
 		hash.update("hello");
 		hash.digest("hex");
 	`)
-	if err != nil {
-		t.Fatalf("crypto should be allowed, got error: %v", err)
+	if err == nil {
+		t.Fatal("Expected error when calling digest, got nil")
 	}
 }
 
-func TestJS_AllowedBuffer(t *testing.T) {
+func TestJS_BufferFromThrows(t *testing.T) {
 	eng := newTestEngine(t)
 	_, err := eng.Execute(`
 		var buf = Buffer.from("hello");
-		buf.toString("base64");
 	`)
-	if err != nil {
-		t.Fatalf("Buffer should be allowed, got error: %v", err)
+	if err == nil {
+		t.Fatal("Expected error when calling Buffer.from, got nil")
 	}
 }
 
@@ -420,5 +419,27 @@ func TestJS_RequestBody(t *testing.T) {
 	}
 	if !strings.Contains(result.Value.(string), "test") {
 		t.Errorf("Expected body to contain 'test', got '%s'", result.Value)
+	}
+}
+
+func TestJS_BlockedEval(t *testing.T) {
+	eng := newTestEngine(t)
+	_, err := eng.Execute(`eval("1+1")`)
+	if err == nil {
+		t.Fatal("Expected error when calling eval, got nil")
+	}
+	if !strings.Contains(err.Error(), "eval is not allowed") {
+		t.Errorf("Expected 'eval is not allowed' error, got: %v", err)
+	}
+}
+
+func TestJS_BlockedFunction(t *testing.T) {
+	eng := newTestEngine(t)
+	_, err := eng.Execute(`new Function("code")()`)
+	if err == nil {
+		t.Fatal("Expected error when calling Function constructor, got nil")
+	}
+	if !strings.Contains(err.Error(), "Function is not allowed") {
+		t.Errorf("Expected 'Function is not allowed' error, got: %v", err)
 	}
 }

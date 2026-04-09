@@ -134,7 +134,7 @@ func (h *OAuth2Handler) fetchToken(tokenURL, body, contentType string) (cachedTo
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return cachedToken{}, fmt.Errorf("token request failed with status %d", resp.StatusCode)
+		return cachedToken{}, fmt.Errorf("token request failed")
 	}
 
 	var tokenResp struct {

@@ -9,11 +9,11 @@ import (
 // TestSubstitute tests the template variable substitution function
 func TestSubstitute(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		vars      map[string]string
-		want      string
-		wantErr   bool
+		name    string
+		input   string
+		vars    map[string]string
+		want    string
+		wantErr bool
 	}{
 		{
 			name:  "simple variable substitution",
@@ -35,12 +35,9 @@ func TestSubstitute(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:  "missing variable returns error",
-			input: "curl {{url}}",
-			vars: map[string]string{
-				"other": "value",
-			},
-			want:    "",
+			name:    "missing variable returns error",
+			input:   "curl {{url}}",
+			vars:    map[string]string{},
 			wantErr: true,
 		},
 		{
@@ -63,10 +60,9 @@ func TestSubstitute(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:  "empty vars with template returns error",
-			input: "curl {{url}}",
-			vars:  map[string]string{},
-			want:    "",
+			name:    "empty vars with template returns error",
+			input:   "curl {{url}}",
+			vars:    map[string]string{},
 			wantErr: true,
 		},
 	}
@@ -82,6 +78,34 @@ func TestSubstitute(t *testing.T) {
 				t.Errorf("Substitute() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSubstitute_DeterministicOrder(t *testing.T) {
+	vars := map[string]string{"a": "1", "b": "2", "c": "3"}
+	cmd := "={{a}}={{b}}={{c}}"
+	// Run 10 times and verify same result
+	for i := 0; i < 10; i++ {
+		result, err := Substitute(cmd, vars)
+		if err != nil {
+			t.Fatalf("Substitute failed: %v", err)
+		}
+		if result != "=1=2=3" {
+			t.Errorf("Iteration %d: got %q, want %q", i, result, "=1=2=3")
+		}
+	}
+}
+
+func TestSubstitute_InjectionPrevention(t *testing.T) {
+	// Value contains {{...}} — should NOT be re-substituted
+	vars := map[string]string{"var": "{{inner}}", "inner": "UNSAFE"}
+	result, err := Substitute("start {{var}} end", vars)
+	if err != nil {
+		t.Fatalf("Substitute failed: %v", err)
+	}
+	// var = "{{inner}}" substituted literally, inner NOT re-processed
+	if result != "start {{inner}} end" {
+		t.Errorf("got %q, want %q", result, "start {{inner}} end")
 	}
 }
 

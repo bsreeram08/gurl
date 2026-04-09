@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,20 +22,24 @@ func TestExportTimestamp(t *testing.T) {
 
 	cmd := ExportCommand(db)
 
-	tmpFile, err := os.CreateTemp("", "export-test-*.json")
-	if err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "export-test.json")
 
-	fullArgs := []string{"export", "--all", "--output", tmpFile.Name()}
-	err = cmd.Run(context.Background(), fullArgs)
+	cwd, _ := os.Getwd()
+	t.Logf("CWD: %s", cwd)
+	t.Logf("tmpFile: %s", tmpFile)
+	absFile, _ := filepath.Abs(tmpFile)
+	t.Logf("absFile: %s", absFile)
+	resolved, _ := filepath.EvalSymlinks(absFile)
+	t.Logf("resolved: %s", resolved)
+
+	fullArgs := []string{"export", "--all", "--output", tmpFile}
+	err := cmd.Run(context.Background(), fullArgs)
 	if err != nil {
 		t.Fatalf("ExportCommand.Run() error = %v", err)
 	}
 
-	data, err := os.ReadFile(tmpFile.Name())
+	data, err := os.ReadFile(tmpFile)
 	if err != nil {
 		t.Fatalf("failed to read temp file: %v", err)
 	}

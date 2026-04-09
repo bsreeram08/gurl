@@ -109,7 +109,11 @@ func ExportCommand(db storage.DB) *cli.Command {
 
 func validateOutputPath(outputPath string) error {
 	cleaned := filepath.Clean(outputPath)
-	if strings.Contains(cleaned, "..") {
+	resolvedPath, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		resolvedPath = cleaned
+	}
+	if strings.Contains(resolvedPath, "..") {
 		return fmt.Errorf("output path must not contain '..': %s", outputPath)
 	}
 	return nil

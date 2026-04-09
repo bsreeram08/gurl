@@ -2,7 +2,6 @@ package scripting
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 
 	"github.com/dop251/goja"
@@ -71,6 +70,30 @@ func restrictModules(vm *goja.Runtime) {
 		})();
 	`)
 
+	_, _ = vm.RunString(`
+		(function() {
+			var originalEval = eval;
+			eval = function() {
+				throw new Error("eval is not allowed in sandbox");
+			};
+			if (typeof window !== 'undefined') {
+				window.eval = eval;
+			}
+		})();
+	`)
+
+	_, _ = vm.RunString(`
+		(function() {
+			var originalFunction = Function;
+			Function = function() {
+				throw new Error("Function is not allowed in sandbox");
+			};
+			if (typeof window !== 'undefined') {
+				window.Function = Function;
+			}
+		})();
+	`)
+
 	cryptoObj := vm.NewObject()
 	cryptoObj.Set("createHash", func(call goja.FunctionCall) goja.Value {
 		hashObj := vm.NewObject()
@@ -78,7 +101,7 @@ func restrictModules(vm *goja.Runtime) {
 			return hashObj
 		})
 		hashObj.Set("digest", func(call goja.FunctionCall) (v goja.Value) {
-			panic(errors.New("crypto.createHash().digest() is not available in the scripting sandbox"))
+			panic(vm.NewTypeError("crypto.createHash().digest() is not available in the scripting sandbox"))
 		})
 		return hashObj
 	})
@@ -86,22 +109,7 @@ func restrictModules(vm *goja.Runtime) {
 
 	bufferObj := vm.NewObject()
 	bufferObj.Set("from", func(call goja.FunctionCall) goja.Value {
-		_ = call.Argument(0).Export()
-		bufObj := vm.NewObject()
-		bufObj.Set("toString", func(call goja.FunctionCall) goja.Value {
-			encoding := "utf8"
-			if len(call.Arguments) > 0 {
-				encVal := call.Argument(0).Export()
-				if encStr, ok := encVal.(string); ok {
-					encoding = encStr
-				}
-			}
-			if encoding == "base64" {
-				return vm.ToValue("aGVsbG8=")
-			}
-			return vm.ToValue("hello")
-		})
-		return bufObj
+		panic(vm.NewTypeError("Buffer.from is not available in the scripting sandbox"))
 	})
 	vm.Set("Buffer", bufferObj)
 }

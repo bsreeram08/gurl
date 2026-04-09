@@ -36,13 +36,19 @@ func (h *AWSv4Handler) Apply(req *client.Request, params map[string]string) {
 
 	payloadHash := hashSHA256([]byte(req.Body))
 
-	canonicalHeaders := buildCanonicalHeaders(req.Headers)
-	signedHeaders := buildSignedHeaders(req.Headers)
-
 	parsedURL, err := url.Parse(req.URL)
 	if err != nil {
 		return
 	}
+
+	// Inject Host header from URL if not explicitly provided
+	if !hasHostHeader(req.Headers) {
+		req.Headers = append(req.Headers, client.Header{Key: "Host", Value: parsedURL.Host})
+	}
+
+	canonicalHeaders := buildCanonicalHeaders(req.Headers)
+	signedHeaders := buildSignedHeaders(req.Headers)
+
 	canonicalURI := canonicalURI(parsedURL.Path)
 	canonicalQueryString := canonicalQueryString(parsedURL.RawQuery)
 
@@ -98,6 +104,17 @@ func (h *AWSv4Handler) Apply(req *client.Request, params map[string]string) {
 	}
 }
 
+func hasHostHeader(headers []client.Header) bool {
+	for _, h := range headers {
+		if strings.EqualFold(h.Key, "Host") {
+			return true
+		}
+	}
+	return false
+}
+
+// hashSHA256 computes the SHA256 hex digest of data.
+// Note: In Go, sha256 of nil slice and empty slice are identical — sha256(nil) == sha256([]byte("")).
 func hashSHA256(data []byte) string {
 	h := sha256.New()
 	h.Write(data)

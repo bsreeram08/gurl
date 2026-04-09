@@ -2,6 +2,9 @@ package commands
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -130,12 +133,62 @@ func updateGurl() error {
 	// Verify checksum
 	fmt.Println("Verifying checksum...")
 	checksumResp, err := http.Get(checksumURL)
-	if err == nil {
-		defer checksumResp.Body.Close()
-		if checksumResp.StatusCode == 200 {
-			// Checksum verification would go here
-			// For now, trust GitHub
+	if err != nil {
+		return fmt.Errorf("failed to download checksum file: %w", err)
+	}
+	defer checksumResp.Body.Close()
+
+	if checksumResp.StatusCode != 200 {
+		return fmt.Errorf("failed to download checksum file: HTTP %d", checksumResp.StatusCode)
+	}
+
+	checksumBody, err := io.ReadAll(checksumResp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read checksum file: %w", err)
+	}
+
+	// Parse SHA256SUMS — format: "<hash>  <binary-name>" per line
+	// e.g., "abc123def...  gurl-darwin-arm64"
+	expectedHash := ""
+	binaryName := fmt.Sprintf("gurl-%s-%s", osName, arch)
+	for _, line := range strings.Split(string(checksumBody), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
+		// Format: "<hash>  <name>" (two spaces between hash and name)
+		parts := strings.SplitN(line, "  ", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		hash := strings.TrimSpace(parts[0])
+		name := strings.TrimSpace(parts[1])
+		if name == binaryName {
+			expectedHash = hash
+			break
+		}
+	}
+
+	if expectedHash == "" {
+		return fmt.Errorf("checksum for %s not found in SHA256SUMS", binaryName)
+	}
+
+	// Compute SHA256 of downloaded binary
+	tmpFile, err = os.Open(tmpBin)
+	if err != nil {
+		return fmt.Errorf("failed to open temp file: %w", err)
+	}
+	defer tmpFile.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, tmpFile); err != nil {
+		return fmt.Errorf("failed to compute checksum: %w", err)
+	}
+	computedHash := hex.EncodeToString(hash.Sum(nil))
+
+	// Constant-time comparison to prevent timing attacks
+	if subtle.ConstantTimeCompare([]byte(computedHash), []byte(expectedHash)) != 1 {
+		os.Remove(tmpBin)
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", expectedHash, computedHash)
 	}
 
 	// Replace current binary

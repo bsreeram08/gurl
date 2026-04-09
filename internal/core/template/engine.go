@@ -11,43 +11,28 @@ import (
 // templatePattern matches {{variableName}}
 var templatePattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
-// Substitute replaces all {{varName}} placeholders with values from vars map
+// Substitute replaces all {{varName}} placeholders with values from vars map.
+// Returns an error if any variable is missing. Uses single-pass deterministic
+// substitution via regexp.ReplaceAllStringFunc.
 func Substitute(cmd string, vars map[string]string) (string, error) {
-	result := cmd
-
-	// Find all template variables in the command
-	matches := templatePattern.FindAllStringSubmatch(cmd, -1)
-	if len(matches) == 0 {
-		return cmd, nil
-	}
-
-	// Collect all variable names used
-	usedVars := make(map[string]bool)
-	for _, match := range matches {
-		if len(match) >= 2 {
-			usedVars[match[1]] = true
-		}
-	}
-
-	// Check for missing variables
+	// Check for missing variables first (deterministic order)
+	matches := templatePattern.FindAllStringSubmatchIndex(cmd, -1)
 	var missingVars []string
-	for varName := range usedVars {
+	for _, match := range matches {
+		varName := cmd[match[2]:match[3]]
 		if _, ok := vars[varName]; !ok {
 			missingVars = append(missingVars, varName)
 		}
 	}
-
 	if len(missingVars) > 0 {
 		return "", fmt.Errorf("missing required variables: %s", strings.Join(missingVars, ", "))
 	}
 
-	// Replace all placeholders
-	for varName := range usedVars {
-		if replacement, ok := vars[varName]; ok {
-			result = strings.ReplaceAll(result, "{{"+varName+"}}", replacement)
-		}
-	}
-
+	// Single-pass deterministic replacement (no re-substitution)
+	result := templatePattern.ReplaceAllStringFunc(cmd, func(match string) string {
+		varName := match[2 : len(match)-2] // strip {{ and }}
+		return vars[varName]
+	})
 	return result, nil
 }
 

@@ -204,6 +204,14 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 		}
 
 		if outputPath := c.String("output"); outputPath != "" {
+			if !c.Bool("force") {
+				cwd, err := os.Getwd()
+				if err == nil {
+					if err := ValidateSafePath(outputPath, cwd); err != nil {
+						return fmt.Errorf("output path escapes allowed directory: %w", err)
+					}
+				}
+			}
 			resp.URL = substitutedURL
 			force := c.Bool("force")
 			if err := client.SaveToFile(&resp, outputPath, force); err != nil {
@@ -304,6 +312,14 @@ func executeSingleRequest(db storage.DB, name string, vars map[string]string, c 
 	}
 
 	if outputPath := c.String("output"); outputPath != "" {
+		if !c.Bool("force") {
+			cwd, err := os.Getwd()
+			if err == nil {
+				if err := ValidateSafePath(outputPath, cwd); err != nil {
+					return fmt.Errorf("output path escapes allowed directory: %w", err)
+				}
+			}
+		}
 		resp.URL = substitutedURL
 		force := c.Bool("force")
 		if err := client.SaveToFile(&resp, outputPath, force); err != nil {
