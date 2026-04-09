@@ -13,12 +13,17 @@ import (
 	"github.com/sreeram/gurl/pkg/types"
 )
 
-// slowHandler returns a handler that sleeps for a specified duration
+// slowHandler returns a handler that sleeps for a specified duration.
+// It respects the request context so server.Close() doesn't block.
 func slowHandler(sleepDuration time.Duration) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(sleepDuration)
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"ok":true}`))
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(sleepDuration):
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"ok":true}`))
+		}
 	})
 }
 
