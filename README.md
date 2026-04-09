@@ -1,12 +1,33 @@
-# Gurl — Smart Curl Saver & API Companion
-
-**GURL** = **G**url's **U**niversal **R**equest **L**ibrary
+# Gurl — Your API Workspace, in the Terminal
 
 [![Latest Release](https://img.shields.io/github/v/release/bsreeram08/gurl)](https://github.com/bsreeram08/gurl/releases/latest)
 [![Go Version](https://img.shields.io/badge/go-1.21%2B-blue)](https://go.dev)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Save named curl requests, replay them with variable substitution, manage environments, assert on responses, and generate client code — all from the terminal.
+Import from Postman. Run with environments. Assert on responses. Generate client code. All without leaving your shell.
+
+**Gurl is not a curl wrapper.** It's a full API development environment — collections, environments, scripting, assertions, history, and multi-protocol support — built for the terminal. If Postman and httpie had a baby that grew up in a shell, this is it.
+
+### Why not just use...?
+
+| Feature | httpie / xh | Hurl | ATAC | Slumber | Bruno CLI | **gurl** |
+|---------|:-----------:|:----:|:----:|:-------:|:---------:|:--------:|
+| Save & replay named requests | ❌ | file | ✅ | ✅ | ✅ | ✅ |
+| Environments (dev/staging/prod) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Import from Postman/Insomnia/OpenAPI | ❌ | HAR | ❌ | Insomnia | ✅ | ✅ |
+| Scripting (pre/post-request hooks) | ❌ | ❌ | Rhai | ❌ | ❌ | **JS** |
+| Response assertions | ❌ | ✅ | ❌ | ❌ | ✅ | ✅ |
+| Collection runner (data-driven) | ❌ | ❌ | ❌ | ❌ | CSV | ✅ |
+| Multi-protocol (HTTP, GQL, gRPC, WS, SSE) | ❌ | HTTP | ❌ | HTTP | HTTP | **✅** |
+| Execution history + diff | session | ❌ | ❌ | SQLite | ❌ | ✅ |
+| Interactive TUI | ❌ | ❌ | ✅ | ✅ | ❌ | ✅ |
+| Code generation (curl/Go/Python/JS) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+- **httpie / xh** — beautiful one-shot requests. No persistence, no collections, no environments.
+- **Hurl** — excellent for CI testing with `.hurl` files. No TUI, no scripting, no environments, HTTP only.
+- **ATAC** — closest Postman-in-terminal experience. Rust TUI with collections. No JS scripting, no import from Postman, no codegen.
+- **Slumber** — YAML-based TUI REST client with profiles. No scripting, no assertions, HTTP only.
+- **Bruno CLI** — runs `.bru` collections. GUI needed for authoring. No interactive exploration.
 
 ## Features
 
@@ -41,7 +62,7 @@ curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/instal
 
 ### Pre-built Binaries
 
-Download from [GitHub Releases](https://github.com/bsreeram08/gurl/releases/latest) (v0.1.15):
+Download from [GitHub Releases](https://github.com/bsreeram08/gurl/releases/latest):
 
 ```bash
 # macOS (Apple Silicon)
@@ -90,6 +111,54 @@ gurl run "create-order" --var token=abc123 --var customerId=42
 gurl list
 ```
 
+## Real Workflows
+
+### Migrate from Postman, keep your terminal
+
+```bash
+# Import your existing collection
+gurl import postman ./my-collection.json
+
+# Everything is here — names, auth, variables
+gurl list
+gurl run "Get Users" --env staging
+```
+
+### Test APIs with scripting and assertions
+
+```bash
+# Pre-request script sets a timestamp header
+# Post-request script extracts the auth token
+# Assertion checks status is 200 and body has the expected shape
+gurl run "login" --env dev
+```
+
+### Run collections with data-driven inputs
+
+```bash
+# Run every request in a collection with CSV test data
+gurl collection run "checkout-flow" --data ./test-data.csv --env staging
+```
+
+### Compare responses over time
+
+```bash
+# See what changed between the last two runs
+gurl diff "get-user"
+
+# Or browse the full timeline
+gurl timeline --pattern "get-*"
+```
+
+### Generate client code from saved requests
+
+```bash
+gurl codegen "create-order" --lang python
+gurl codegen "create-order" --lang javascript
+gurl codegen "create-order" --lang go
+gurl codegen "create-order" --lang curl
+```
+
 ## All Commands
 
 | Command | Description |
@@ -131,25 +200,6 @@ gurl env use dev
 ```
 
 Secrets are encrypted at rest with AES-256-GCM and never appear in logs or generated code.
-
-## Import
-
-```bash
-gurl import openapi ./api.yaml --collection myapi
-gurl import insomnia ./insomnia.json
-gurl import bruno ./requests/
-gurl import postman ./collection.json
-gurl import har ./requests.har
-```
-
-## Code Generation
-
-```bash
-gurl codegen "create-order" --lang python
-gurl codegen "create-order" --lang javascript
-gurl codegen "create-order" --lang go
-gurl codegen "create-order" --lang curl
-```
 
 ## Configuration
 
