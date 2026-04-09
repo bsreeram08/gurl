@@ -75,20 +75,28 @@ func colorizeJSON(s string) string {
 	for i < len(s) {
 		c := s[i]
 
-		if c == '"' && (i == 0 || s[i-1] != '\\') {
-			if !inString {
-				inString = true
-				stringStart = i
-			} else {
-				inString = false
-				strContent := s[stringStart : i+1]
-				switch currentState {
-				case stateKey:
-					buf.WriteString(Cyan + strContent + Reset)
-				case stateAfterColon:
-					buf.WriteString(Green + strContent + Reset)
-				default:
-					buf.WriteString(strContent)
+		if c == '"' {
+			// Count preceding backslashes
+			backslashes := 0
+			for j := i - 1; j >= 0 && s[j] == '\\'; j-- {
+				backslashes++
+			}
+			// If even number of backslashes (including 0), the quote is unescaped
+			if backslashes%2 == 0 {
+				if !inString {
+					inString = true
+					stringStart = i
+				} else {
+					inString = false
+					strContent := s[stringStart : i+1]
+					switch currentState {
+					case stateKey:
+						buf.WriteString(Cyan + strContent + Reset)
+					case stateAfterColon:
+						buf.WriteString(Green + strContent + Reset)
+					default:
+						buf.WriteString(strContent)
+					}
 				}
 			}
 			buf.WriteByte(c)

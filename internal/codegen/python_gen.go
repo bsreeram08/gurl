@@ -23,11 +23,11 @@ import json
 {{- end }}
 
 def make_request():
-    url = "{{ .URL }}"
+    url = {{ .URL | escapePython }}
 {{- if .HasHeaders }}
     headers = {
 {{- range .Headers }}
-        "{{ .Key }}": "{{ .Value }}",
+        {{ .Key | escapePython }}: {{ .Value | escapePython }},
 {{- end }}
     }
 {{- end }}
@@ -108,7 +108,7 @@ func (g *PythonGenerator) Generate(req *types.SavedRequest, opts *GenOptions) (s
 		data.Body = req.Body
 	}
 
-	tmpl, err := template.New("python").Parse(pythonTemplate)
+	tmpl, err := template.New("python").Funcs(pythonFuncMap()).Parse(pythonTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -119,4 +119,19 @@ func (g *PythonGenerator) Generate(req *types.SavedRequest, opts *GenOptions) (s
 	}
 
 	return buf.String(), nil
+}
+
+func escapePythonString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	s = strings.ReplaceAll(s, "\t", `\t`)
+	return `"` + s + `"`
+}
+
+func pythonFuncMap() template.FuncMap {
+	return template.FuncMap{
+		"escapePython": escapePythonString,
+	}
 }

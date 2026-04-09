@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -220,11 +221,16 @@ type DataConfig struct {
 	FilePath string
 }
 
-func substituteTemplate(template string, row map[string]string) string {
-	result := template
-	for k, v := range row {
+func substituteTemplate(tmpl string, row map[string]string) string {
+	keys := make([]string, 0, len(row))
+	for k := range row {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	result := tmpl
+	for _, k := range keys {
 		placeholder := "{{" + k + "}}"
-		result = strings.ReplaceAll(result, placeholder, v)
+		result = strings.ReplaceAll(result, placeholder, row[k])
 	}
 	return result
 }

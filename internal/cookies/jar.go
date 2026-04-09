@@ -253,13 +253,20 @@ func (c *LMDBCookieDB) GetAllCookies() ([]*cookieJarEntry, error) {
 }
 
 func (c *LMDBCookieDB) DeleteCookie(host, name string) error {
+	var toDelete [][]byte
 	iter := c.db.NewIterator(nil, nil)
 	defer iter.Release()
 	for iter.Next() {
-		key := string(iter.Key())
+		key := make([]byte, len(iter.Key()))
+		copy(key, iter.Key())
 		var entry cookieJarEntry
 		if json.Unmarshal(iter.Value(), &entry) == nil && entry.Domain == host && entry.Name == name {
-			c.db.Delete([]byte(key), nil)
+			toDelete = append(toDelete, key)
+		}
+	}
+	for _, key := range toDelete {
+		if err := c.db.Delete(key, nil); err != nil {
+			return err
 		}
 	}
 	return nil

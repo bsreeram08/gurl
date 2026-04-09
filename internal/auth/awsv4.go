@@ -39,7 +39,10 @@ func (h *AWSv4Handler) Apply(req *client.Request, params map[string]string) {
 	canonicalHeaders := buildCanonicalHeaders(req.Headers)
 	signedHeaders := buildSignedHeaders(req.Headers)
 
-	parsedURL, _ := url.Parse(req.URL)
+	parsedURL, err := url.Parse(req.URL)
+	if err != nil {
+		return
+	}
 	canonicalURI := canonicalURI(parsedURL.Path)
 	canonicalQueryString := canonicalQueryString(parsedURL.RawQuery)
 

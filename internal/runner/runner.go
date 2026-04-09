@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/sreeram/gurl/internal/assertions"
@@ -86,7 +87,9 @@ func (r *Runner) Run(ctx context.Context, config RunConfig) ([]RunResult, error)
 	baseVars := make(map[string]string)
 	if config.Environment != "" && r.envStorage != nil {
 		env, err := r.envStorage.GetEnvByName(config.Environment)
-		if err == nil {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: environment %q not found: %v\n", config.Environment, err)
+		} else {
 			for k, v := range env.Variables {
 				baseVars[k] = v
 			}
@@ -222,7 +225,11 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 		return result
 	}
 
-	substitutedBody, _ := template.Substitute(req.Body, vars)
+	substitutedBody, err := template.Substitute(req.Body, vars)
+	if err != nil {
+		result.Error = fmt.Sprintf("variable substitution failed for body: %v", err)
+		return result
+	}
 
 	clientReq := client.Request{
 		Method:  req.Method,
@@ -231,15 +238,13 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 		Body:    substitutedBody,
 	}
 
-	var timeout time.Duration
 	if req.Timeout != "" {
-		timeout, _ = time.ParseDuration(req.Timeout)
-	}
-	if timeout > 0 {
-		clientReq.Timeout = timeout
+		if d, err := time.ParseDuration(req.Timeout); err == nil && d > 0 {
+			clientReq.Timeout = d
+		}
 	}
 
-	resp, err := client.Execute(clientReq)
+	resp, err := r.client.ExecuteWithContext(ctx, clientReq)
 	if err != nil {
 		result.Error = fmt.Sprintf("request failed: %v", err)
 		return result

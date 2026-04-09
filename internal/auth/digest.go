@@ -133,14 +133,15 @@ func sha256Hash(input string) string {
 	return hex.EncodeToString(hash[:])
 }
 
+var wwwAuthHeaderRegex = regexp.MustCompile(`(\w+)="([^"]*)"`)
+
 func parseWWWAuthenticate(header string) map[string]string {
 	params := make(map[string]string)
 
 	header = strings.TrimPrefix(header, "Digest ")
 	header = strings.TrimSpace(header)
 
-	re := regexp.MustCompile(`(\w+)="([^"]*)"`)
-	matches := re.FindAllStringSubmatch(header, -1)
+	matches := wwwAuthHeaderRegex.FindAllStringSubmatch(header, -1)
 
 	for _, match := range matches {
 		params[match[1]] = match[2]

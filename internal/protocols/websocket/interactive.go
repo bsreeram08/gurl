@@ -45,7 +45,7 @@ func (r *InteractiveRunner) Run(ctx context.Context) error {
 	defer cancel()
 
 	// Set up signal handling for graceful shutdown
-	sigChan := make(chan os.Signal, 1)
+	sigChan := make(chan os.Signal, 2)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Start receive goroutine

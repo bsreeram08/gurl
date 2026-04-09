@@ -3,6 +3,7 @@ package scripting
 import (
 	"errors"
 	"fmt"
+	"net/url"
 
 	"github.com/dop251/goja"
 )
@@ -75,6 +76,9 @@ func (e *Engine) jsGetVar(call goja.FunctionCall) goja.Value {
 		if envName, err := e.envStorage.GetActiveEnv(); err == nil && envName != "" {
 			if envObj, err := e.envStorage.GetEnvByName(envName); err == nil {
 				if val, ok := envObj.GetVariable(name); ok {
+					if !e.AllowSecretAccess && envObj.IsSecret(name) {
+						panic(errors.New("access to secret variable '" + name + "' is denied"))
+					}
 					return e.vm.ToValue(val)
 				}
 			}
@@ -166,6 +170,10 @@ func (e *Engine) jsRequestHeadersRemove(call goja.FunctionCall) goja.Value {
 func (e *Engine) jsSetRequestURL(call goja.FunctionCall) goja.Value {
 	val := call.Argument(0).Export()
 	if v, ok := val.(string); ok && e.request != nil {
+		parsed, err := url.Parse(v)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			panic(errors.New("invalid URL: must be a valid http/https URL"))
+		}
 		e.request.URL = v
 	}
 	return goja.Undefined()

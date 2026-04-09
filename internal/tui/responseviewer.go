@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/atotto/clipboard"
@@ -448,6 +449,7 @@ type StreamingViewer struct {
 	input      textinput.Model
 	width      int
 	height     int
+	mu         sync.Mutex
 }
 
 type StreamingMessage struct {
@@ -663,12 +665,14 @@ func (sv *StreamingViewer) sendMessage(content string) {
 }
 
 func (sv *StreamingViewer) addMessage(dir, content, msgType, time string) {
+	sv.mu.Lock()
 	sv.messages = append(sv.messages, StreamingMessage{
 		Dir:     dir,
 		Content: content,
 		Type:    msgType,
 		Time:    time,
 	})
+	sv.mu.Unlock()
 }
 
 type StreamingConnectedMsg struct {

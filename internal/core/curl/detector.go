@@ -17,22 +17,29 @@ var (
 		// UUID pattern: 8-4-4-4-12 hex digits
 		{
 			name:    "uuid",
-			pattern: regexp.MustCompile(`([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`),
+			pattern: uuidPattern,
 			replace: func(match string) string { return "{{uuid}}" },
 		},
 		// Long numeric IDs
 		{
 			name:    "id",
-			pattern: regexp.MustCompile(`/(\d{5,})`),
+			pattern: longIdPattern,
 			replace: func(match string) string { return "/{{id}}" },
 		},
 		// Shorter numeric IDs - pattern without lookahead, match trailing char
 		{
 			name:    "numericId",
-			pattern: regexp.MustCompile(`/\d{3,4}([/$\?]|/[a-z]|$|\?)`),
+			pattern: shortIdPattern,
 			replace: func(match string) string { return "/{{numericId}}" + string(match[len(match)-1]) },
 		},
 	}
+)
+
+// Package-level regex patterns for variable detection
+var (
+	uuidPattern    = regexp.MustCompile(`([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`)
+	longIdPattern  = regexp.MustCompile(`/(\d{5,})`)
+	shortIdPattern = regexp.MustCompile(`/\d{3,4}([/$\?]|/[a-z]|$|\?)`)
 )
 
 // ExtractVariables extracts variables from URL and body, replacing patterns with template placeholders
@@ -54,7 +61,6 @@ func extractVarsFromString(input string, vars *[]types.Var, seenVars map[string]
 	result := input
 
 	// Extract UUIDs
-	uuidPattern := regexp.MustCompile(`([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`)
 	for _, match := range uuidPattern.FindAllStringSubmatch(result, -1) {
 		if len(match) >= 2 {
 			uuid := match[1]
@@ -71,7 +77,6 @@ func extractVarsFromString(input string, vars *[]types.Var, seenVars map[string]
 	}
 
 	// Extract long numeric IDs (5+ digits)
-	longIdPattern := regexp.MustCompile(`/(\d{5,})`)
 	for _, match := range longIdPattern.FindAllStringSubmatch(result, -1) {
 		if len(match) >= 2 {
 			id := match[1]
@@ -88,7 +93,6 @@ func extractVarsFromString(input string, vars *[]types.Var, seenVars map[string]
 	}
 
 	// Extract shorter numeric IDs (3-4 digits in path segments) - no lookahead in Go
-	shortIdPattern := regexp.MustCompile(`/\d{3,4}([/$\?]|/[a-z]|$|\?)`)
 	for _, match := range shortIdPattern.FindAllStringSubmatch(result, -1) {
 		if len(match) >= 2 {
 			id := match[1]
@@ -119,7 +123,6 @@ func ReplaceVariablesInURL(url string) (string, []types.Var) {
 	result := url
 
 	// UUID replacement
-	uuidPattern := regexp.MustCompile(`([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`)
 	for _, match := range uuidPattern.FindAllStringSubmatch(result, -1) {
 		if len(match) >= 2 {
 			uuid := match[1]
@@ -136,7 +139,6 @@ func ReplaceVariablesInURL(url string) (string, []types.Var) {
 	}
 
 	// Long ID replacement
-	longIdPattern := regexp.MustCompile(`/(\d{5,})`)
 	for _, match := range longIdPattern.FindAllStringSubmatch(result, -1) {
 		if len(match) >= 2 {
 			id := match[1]
@@ -153,11 +155,10 @@ func ReplaceVariablesInURL(url string) (string, []types.Var) {
 	}
 
 	// Short ID replacement - no lookahead in Go, match trailing char
-	shortIdPattern := regexp.MustCompile(`/\d{3,4}([/$\?]|/[a-z]|$|\?)`)
 	for _, match := range shortIdPattern.FindAllStringSubmatch(result, -1) {
 		if len(match) >= 1 {
 			fullMatch := match[0]
-			id := fullMatch[1 : len(fullMatch)-1] // Remove leading / and trailing char
+			id := fullMatch[1 : len(fullMatch)-1]
 			if !seenVars["numericId"] {
 				vars = append(vars, types.Var{
 					Name:    "numericId",

@@ -177,7 +177,10 @@ func (e *Evaluator) compare(actual, op, expected string) bool {
 	case "not_contains":
 		return !strings.Contains(actual, expected)
 	case "matches":
-		matched, _ := regexp.MatchString(expected, actual)
+		matched, err := regexp.MatchString(expected, actual)
+		if err != nil {
+			return false
+		}
 		return matched
 	case "exists":
 		// For exists: actual value must be non-empty

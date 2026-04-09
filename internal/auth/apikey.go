@@ -40,5 +40,9 @@ func (h *APIKeyHandler) Apply(req *client.Request, params map[string]string) {
 		} else {
 			req.URL = req.URL + "?" + paramName + "=" + key
 		}
+	default:
+		if in != "" {
+			return
+		}
 	}
 }

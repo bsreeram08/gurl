@@ -3,6 +3,7 @@ package codegen
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/sreeram/gurl/pkg/types"
@@ -33,12 +34,12 @@ func main() {
 {{- if .IncludeComments }}
 	// {{ .Comment }}
 {{- end }}
-	url := "{{ .URL }}"
-	method := "{{ .Method }}"
+	url := {{ .URL | escapeGo }}
+	method := {{ .Method | escapeGo }}
 {{- if .HasHeaders }}
 	headers := map[string]string{
 {{- range .Headers }}
-		"{{ .Key }}": "{{ .Value }}",
+		{{ .Key | escapeGo }}: {{ .Value | escapeGo }},
 {{- end }}
 	}
 {{- end }}
@@ -140,7 +141,7 @@ func (g *GoGenerator) Generate(req *types.SavedRequest, opts *GenOptions) (strin
 		data.Comment = fmt.Sprintf("Request: %s %s", req.Method, req.URL)
 	}
 
-	tmpl, err := template.New("go").Parse(goTemplate)
+	tmpl, err := template.New("go").Funcs(goFuncMap()).Parse(goTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -154,8 +155,16 @@ func (g *GoGenerator) Generate(req *types.SavedRequest, opts *GenOptions) (strin
 }
 
 func escapeGoString(s string) string {
-	// Escape backticks and dollar signs for Go template
-	s = string(bytes.Replace([]byte(s), []byte("`"), []byte("`+\"`\"+`"), -1))
-	s = string(bytes.Replace([]byte(s), []byte("$"), []byte("\\$"), -1))
-	return s
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	s = strings.ReplaceAll(s, "\t", `\t`)
+	return `"` + s + `"`
+}
+
+func goFuncMap() template.FuncMap {
+	return template.FuncMap{
+		"escapeGo": escapeGoString,
+	}
 }

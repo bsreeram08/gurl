@@ -126,7 +126,8 @@ func (h *OAuth2Handler) applyClientCredentialsFlow(req *client.Request, params m
 }
 
 func (h *OAuth2Handler) fetchToken(tokenURL, body, contentType string) (cachedToken, error) {
-	resp, err := http.Post(tokenURL, contentType, bytes.NewBufferString(body))
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Post(tokenURL, contentType, bytes.NewBufferString(body))
 	if err != nil {
 		return cachedToken{}, err
 	}

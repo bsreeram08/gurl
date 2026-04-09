@@ -223,8 +223,8 @@ type DialerConfig struct {
 }
 
 // NewDialerWithTLS creates a websocket.Dialer with TLS configuration
-func NewDialerWithTLS(cfg DialerConfig) websocket.Dialer {
-	dialer := websocket.Dialer{
+func NewDialerWithTLS(cfg DialerConfig) (*websocket.Dialer, error) {
+	dialer := &websocket.Dialer{
 		HandshakeTimeout: cfg.Timeout,
 	}
 
@@ -235,12 +235,13 @@ func NewDialerWithTLS(cfg DialerConfig) websocket.Dialer {
 		}
 		if cfg.CertFile != "" && cfg.KeyFile != "" {
 			cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
-			if err == nil {
-				tlsConfig.Certificates = []tls.Certificate{cert}
+			if err != nil {
+				return nil, fmt.Errorf("failed to load TLS certificate: %w", err)
 			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
 		}
 		dialer.TLSClientConfig = tlsConfig
 	}
 
-	return dialer
+	return dialer, nil
 }

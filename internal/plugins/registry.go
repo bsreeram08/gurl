@@ -3,6 +3,7 @@ package plugins
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 )
 
 // Registry manages plugins and provides dispatch for applying them to requests/responses.
@@ -73,8 +74,8 @@ func (r *Registry) ApplyBeforeRequest(ctx *RequestContext) *RequestContext {
 func (r *Registry) safeBeforeRequest(plugin MiddlewarePlugin, ctx *RequestContext) (result *RequestContext) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			fmt.Fprintf(os.Stderr, "Warning: middleware %s panicked in BeforeRequest: %v\n", plugin.Name(), rec)
-			result = ctx // Continue with original context on panic
+			fmt.Fprintf(os.Stderr, "Warning: middleware %s panicked in BeforeRequest: %v\n%s\n", plugin.Name(), rec, debug.Stack())
+			result = ctx
 		}
 	}()
 	return plugin.BeforeRequest(ctx)
@@ -103,8 +104,8 @@ func (r *Registry) ApplyAfterResponse(ctx *ResponseContext) *ResponseContext {
 func (r *Registry) safeAfterResponse(plugin MiddlewarePlugin, ctx *ResponseContext) (result *ResponseContext) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			fmt.Fprintf(os.Stderr, "Warning: middleware %s panicked in AfterResponse: %v\n", plugin.Name(), rec)
-			result = ctx // Continue with original context on panic
+			fmt.Fprintf(os.Stderr, "Warning: middleware %s panicked in AfterResponse: %v\n%s\n", plugin.Name(), rec, debug.Stack())
+			result = ctx
 		}
 	}()
 	return plugin.AfterResponse(ctx)

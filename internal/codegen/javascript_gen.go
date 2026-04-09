@@ -3,6 +3,7 @@ package codegen
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/sreeram/gurl/pkg/types"
@@ -17,11 +18,11 @@ func (g *JavaScriptGenerator) Language() string {
 }
 
 const javascriptTemplate = `async function makeRequest() {
-    const url = "{{ .URL }}";
+    const url = {{ .URL | escapeJS }};
 {{- if .HasHeaders }}
     const headers = {
 {{- range .Headers }}
-        "{{ .Key }}": "{{ .Value }}",
+        {{ .Key | escapeJS }}: {{ .Value | escapeJS }},
 {{- end }}
     };
 {{- end }}
@@ -29,7 +30,7 @@ const javascriptTemplate = `async function makeRequest() {
 {{- if .IsJSONBody }}
     const body = JSON.stringify({{ .Body }});
 {{- else }}
-    const body = ` + "`" + `{{ .Body }}` + "`" + `;
+    const body = ` + "`" + `{{ .Body | escapeJS }}` + "`" + `;
 {{- end }}
 {{- end }}
 {{- if .HasAuth }}
@@ -41,7 +42,7 @@ const javascriptTemplate = `async function makeRequest() {
 {{- end }}
 
     const options = {
-        method: "{{ .Method }}",
+        method: {{ .Method | escapeJS }},
 {{- if .HasHeaders }}
         headers,
 {{- end }}
@@ -110,7 +111,7 @@ func (g *JavaScriptGenerator) Generate(req *types.SavedRequest, opts *GenOptions
 		data.Body = req.Body
 	}
 
-	tmpl, err := template.New("javascript").Parse(javascriptTemplate)
+	tmpl, err := template.New("javascript").Funcs(javascriptFuncMap()).Parse(javascriptTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -125,4 +126,21 @@ func (g *JavaScriptGenerator) Generate(req *types.SavedRequest, opts *GenOptions
 
 func containsJSON(contentType string) bool {
 	return len(contentType) >= 16 && (contentType[:16] == "application/json" || contentType[:16] == "application/json;")
+}
+
+func escapeJSString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "'", `\'`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	s = strings.ReplaceAll(s, "<", `\x3c`)
+	s = strings.ReplaceAll(s, ">", `\x3e`)
+	return `"` + s + `"`
+}
+
+func javascriptFuncMap() template.FuncMap {
+	return template.FuncMap{
+		"escapeJS": escapeJSString,
+	}
 }

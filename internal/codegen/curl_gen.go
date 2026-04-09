@@ -3,6 +3,7 @@ package codegen
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/sreeram/gurl/pkg/types"
@@ -16,7 +17,7 @@ func (g *CurlGenerator) Language() string {
 	return "curl"
 }
 
-const curlTemplate = `curl -X {{ .Method }}{{ range .Headers }} -H '{{ .Key }}: {{ .Value }}'{{ end }}{{ if .HasBody }} -d '{{ .Body }}'{{ end }} '{{ .URL }}'`
+const curlTemplate = `curl -X {{ .Method }}{{ range .Headers }} -H {{ .Key | escapeCurl }}: {{ .Value | escapeCurl }}{{ end }}{{ if .HasBody }} -d {{ .Body | escapeCurl }}{{ end }} {{ .URL | escapeCurl }}`
 
 // CurlCodeGenData holds template data for curl generation
 type CurlCodeGenData struct {
@@ -55,7 +56,9 @@ func (g *CurlGenerator) Generate(req *types.SavedRequest, opts *GenOptions) (str
 		}
 	}
 
-	tmpl, err := template.New("curl").Parse(curlTemplate)
+	tmpl, err := template.New("curl").Funcs(template.FuncMap{
+		"escapeCurl": escapeCurlString,
+	}).Parse(curlTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -69,8 +72,7 @@ func (g *CurlGenerator) Generate(req *types.SavedRequest, opts *GenOptions) (str
 }
 
 func escapeCurlString(s string) string {
-	// Escape single quotes for shell
-	return string(bytes.Replace([]byte(s), []byte(`'`), []byte(`\'`), -1))
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // BuildCurlCommand builds a curl command array for safe execution
@@ -92,4 +94,8 @@ func BuildCurlCommand(req *types.SavedRequest) ([]string, error) {
 	cmd = append(cmd, req.URL)
 
 	return cmd, nil
+}
+
+func shellEscape(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

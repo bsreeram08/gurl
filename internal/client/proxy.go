@@ -64,10 +64,18 @@ func (c *Client) applyProxyConfig() {
 	}
 
 	if c.proxyConfig.socks5ProxyURL != nil {
+		var auth *proxy.Auth
+		if c.proxyConfig.socks5ProxyURL.User != nil {
+			password, _ := c.proxyConfig.socks5ProxyURL.User.Password()
+			auth = &proxy.Auth{
+				User:     c.proxyConfig.socks5ProxyURL.User.Username(),
+				Password: password,
+			}
+		}
 		dialer, err := proxy.SOCKS5(
 			c.proxyConfig.socks5ProxyURL.Scheme,
 			c.proxyConfig.socks5ProxyURL.Host,
-			nil,
+			auth,
 			proxy.Direct,
 		)
 		if err == nil {
@@ -149,7 +157,15 @@ func (c *Client) buildClientWithProxy(req Request) *http.Client {
 		proxyURL, err := url.Parse(req.ProxyURL)
 		if err == nil {
 			if proxyURL.Scheme == "socks5" {
-				dialer, err := proxy.SOCKS5("socks5", proxyURL.Host, nil, proxy.Direct)
+				var auth *proxy.Auth
+				if proxyURL.User != nil {
+					password, _ := proxyURL.User.Password()
+					auth = &proxy.Auth{
+						User:     proxyURL.User.Username(),
+						Password: password,
+					}
+				}
+				dialer, err := proxy.SOCKS5("socks5", proxyURL.Host, auth, proxy.Direct)
 				if err == nil {
 					transport.Dial = dialer.Dial
 				}

@@ -41,3 +41,15 @@ Gurl's security model separates concerns across three systems:
 | Request logging | Redacted output for auditability | Logs with `[REDACTED]` placeholders |
 
 This separation means that even if logs are compromised or an AI agent is inspecting the process, credentials remain protected.
+
+## Code Generation Safety
+
+All code generators (curl, Python, JavaScript, Go) properly escape string values before interpolation. This prevents shell injection when generating curl commands and code injection in generated scripts. Header values, request bodies, and URLs are sanitized for each target language's escaping rules.
+
+## Path Protection
+
+Export and import commands validate file paths to prevent directory traversal attacks. Paths containing `..` sequences are rejected. Temporary files used during self-update are created with `os.CreateTemp` for unpredictable names.
+
+## Scripting Sandbox
+
+The JavaScript scripting runtime restricts secret variable access by default. Scripts cannot read environment secrets unless explicitly granted access via the `AllowSecretAccess` flag. URL modifications in scripts are validated to only allow `http` and `https` schemes.

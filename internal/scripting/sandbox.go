@@ -1,6 +1,10 @@
 package scripting
 
 import (
+	"encoding/json"
+	"errors"
+	"strings"
+
 	"github.com/dop251/goja"
 )
 
@@ -73,8 +77,8 @@ func restrictModules(vm *goja.Runtime) {
 		hashObj.Set("update", func(call goja.FunctionCall) goja.Value {
 			return hashObj
 		})
-		hashObj.Set("digest", func(call goja.FunctionCall) goja.Value {
-			return vm.ToValue("mockdigest")
+		hashObj.Set("digest", func(call goja.FunctionCall) (v goja.Value) {
+			panic(errors.New("crypto.createHash().digest() is not available in the scripting sandbox"))
 		})
 		return hashObj
 	})
@@ -103,15 +107,10 @@ func restrictModules(vm *goja.Runtime) {
 }
 
 func generateBlockedArray() string {
-	result := "["
-	i := 0
+	parts := make([]string, 0, len(blockedModules))
 	for mod := range blockedModules {
-		if i > 0 {
-			result += ","
-		}
-		result += "\"" + mod + "\""
-		i++
+		encoded, _ := json.Marshal(mod)
+		parts = append(parts, string(encoded))
 	}
-	result += "]"
-	return result
+	return "[" + strings.Join(parts, ",") + "]"
 }

@@ -182,7 +182,10 @@ func (c *Client) readEvents(body io.Reader, eventChan chan<- Event, errorChan ch
 	}
 
 	if err := scanner.Err(); err != nil {
-		errorChan <- fmt.Errorf("error reading SSE stream: %w", err)
+		select {
+		case errorChan <- fmt.Errorf("error reading SSE stream: %w", err):
+		default:
+		}
 	}
 }
 

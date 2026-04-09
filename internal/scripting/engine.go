@@ -11,16 +11,17 @@ import (
 type EngineOption func(*Engine)
 
 type Engine struct {
-	vm           *goja.Runtime
-	envStorage   *env.EnvStorage
-	timeout      time.Duration
-	outputBuffer string
-	testResults  []TestResult
-	skipRequest  bool
-	nextRequest  string
-	request      *ScriptRequest
-	response     *ScriptResponse
-	variables    map[string]string
+	vm                *goja.Runtime
+	envStorage        *env.EnvStorage
+	timeout           time.Duration
+	outputBuffer      string
+	testResults       []TestResult
+	skipRequest       bool
+	nextRequest       string
+	request           *ScriptRequest
+	response          *ScriptResponse
+	variables         map[string]string
+	AllowSecretAccess bool
 }
 
 type ScriptRequest struct {
@@ -106,6 +107,11 @@ func (e *Engine) Execute(script string) (*Result, error) {
 		return result, execErr
 	case <-ctx.Done():
 		cancel()
+		vm.Interrupt("timeout exceeded")
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+		}
 		return &Result{Error: ctx.Err()}, ctx.Err()
 	}
 }

@@ -85,9 +85,16 @@ func (l *Loader) Load(path string) (interface{}, error) {
 	// switch in Registry.Register to match correctly.
 	deref, ok := symbol.(interface{ Elem() interface{} })
 	if ok {
-		return deref.Elem(), nil
+		symbol = deref.Elem()
 	}
-	return symbol, nil
+
+	// Validate that the symbol implements at least one plugin interface
+	switch symbol.(type) {
+	case MiddlewarePlugin, OutputPlugin, CommandPlugin:
+		return symbol, nil
+	default:
+		return nil, fmt.Errorf("plugin at %s does not implement any known plugin interface (MiddlewarePlugin, OutputPlugin, or CommandPlugin)", path)
+	}
 }
 
 // LoadAll discovers plugins, filters by enabled list, loads each .so, and

@@ -68,5 +68,9 @@ func (ce *ChainExecutor) Variables() map[string]string {
 	if ce.engine == nil {
 		return nil
 	}
-	return ce.engine.variables
+	cp := make(map[string]string, len(ce.engine.variables))
+	for k, v := range ce.engine.variables {
+		cp[k] = v
+	}
+	return cp
 }

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -53,7 +52,7 @@ func updateGurl() error {
 	}
 
 	bodyStr := string(body)
-	
+
 	// Extract tag_name
 	tagStart := strings.Index(bodyStr, `"tag_name":"`)
 	if tagStart == -1 {
@@ -80,7 +79,7 @@ func updateGurl() error {
 	// Determine OS and arch
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
-	
+
 	// Normalize names
 	switch osName {
 	case "darwin":
@@ -95,10 +94,10 @@ func updateGurl() error {
 
 	// Build download URL
 	downloadLink := fmt.Sprintf(downloadURL, owner, repo, latestVersion, osName, arch)
-	
+
 	// Get checksum file URL
 	checksumURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/v%s/SHA256SUMS", owner, repo, latestVersion)
-	
+
 	fmt.Printf("Downloading from: %s\n", downloadLink)
 
 	// Download new binary
@@ -113,18 +112,16 @@ func updateGurl() error {
 	}
 
 	// Create temp file
-	tmpDir := os.TempDir()
-	tmpBin := filepath.Join(tmpDir, "gurl-update")
-	
-	f, err := os.Create(tmpBin)
+	tmpFile, err := os.CreateTemp("", "gurl-update-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
+	tmpBin := tmpFile.Name()
 	defer os.Remove(tmpBin)
 
 	// Copy to temp
-	_, err = io.Copy(f, resp.Body)
-	f.Close()
+	_, err = io.Copy(tmpFile, resp.Body)
+	tmpFile.Close()
 	if err != nil {
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}

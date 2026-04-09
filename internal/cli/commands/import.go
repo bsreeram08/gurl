@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/sreeram/gurl/internal/importers"
 	"github.com/sreeram/gurl/internal/storage"
@@ -55,6 +57,11 @@ func ImportCommand(db storage.DB) *cli.Command {
 			// Check if file exists
 			if _, err := os.Stat(path); os.IsNotExist(err) {
 				return fmt.Errorf("file not found: %s", path)
+			}
+
+			cleanPath := filepath.Clean(path)
+			if strings.Contains(cleanPath, "..") {
+				return fmt.Errorf("import path must not contain '..': %s", path)
 			}
 
 			// Import requests

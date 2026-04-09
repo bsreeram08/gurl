@@ -10,6 +10,10 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+func shellEscape(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 // ShowCommand creates the show/inspect command
 func ShowCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
@@ -47,10 +51,10 @@ func ShowCommand(db storage.DB) *cli.Command {
 			case "curl":
 				curlParts := []string{"curl", "-X", req.Method}
 				for _, h := range req.Headers {
-					curlParts = append(curlParts, "-H", fmt.Sprintf("'%s: %s'", h.Key, h.Value))
+					curlParts = append(curlParts, "-H", fmt.Sprintf("%s: %s", shellEscape(h.Key), shellEscape(h.Value)))
 				}
 				if req.Body != "" {
-					curlParts = append(curlParts, "-d", fmt.Sprintf("'%s'", req.Body))
+					curlParts = append(curlParts, "-d", shellEscape(req.Body))
 				}
 				curlParts = append(curlParts, req.URL)
 				fmt.Println(strings.Join(curlParts, " \\\n  "))

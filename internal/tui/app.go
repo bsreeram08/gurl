@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -258,6 +259,7 @@ type RunnerModal struct {
 	total       int
 	width       int
 	height      int
+	mu          sync.Mutex
 }
 
 func NewRunnerModal(collections []string, envs []string, width, height int) *RunnerModal {
@@ -416,11 +418,15 @@ func (rm *RunnerModal) SetTotal(total int) {
 }
 
 func (rm *RunnerModal) AppendResult(result *runner.RequestResult) {
+	rm.mu.Lock()
 	rm.results = append(rm.results, result)
 	rm.current++
+	rm.mu.Unlock()
 }
 
 func (rm *RunnerModal) GetResults() []*runner.RequestResult {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
 	return rm.results
 }
 

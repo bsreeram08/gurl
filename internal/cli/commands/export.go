@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sreeram/gurl/internal/storage"
@@ -89,6 +91,9 @@ func ExportCommand(db storage.DB) *cli.Command {
 
 			outputPath := c.String("output")
 			if outputPath != "" {
+				if err := validateOutputPath(outputPath); err != nil {
+					return fmt.Errorf("invalid output path: %w", err)
+				}
 				if err := os.WriteFile(outputPath, data, 0644); err != nil {
 					return fmt.Errorf("failed to write output file: %w", err)
 				}
@@ -100,4 +105,12 @@ func ExportCommand(db storage.DB) *cli.Command {
 			return nil
 		},
 	}
+}
+
+func validateOutputPath(outputPath string) error {
+	cleaned := filepath.Clean(outputPath)
+	if strings.Contains(cleaned, "..") {
+		return fmt.Errorf("output path must not contain '..': %s", outputPath)
+	}
+	return nil
 }

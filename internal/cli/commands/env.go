@@ -316,14 +316,3 @@ func EnvCommand(db EnvStorage) *cli.Command {
 		},
 	}
 }
-
-func isSecretVariable(key string) bool {
-	lowerKey := strings.ToLower(key)
-	secretIndicators := []string{"key", "secret", "password", "token", "api_key", "apikey", "auth"}
-	for _, indicator := range secretIndicators {
-		if strings.Contains(lowerKey, indicator) {
-			return true
-		}
-	}
-	return false
-}

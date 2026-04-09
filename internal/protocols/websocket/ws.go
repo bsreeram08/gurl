@@ -36,6 +36,7 @@ type Client struct {
 	headers        http.Header
 	reconnect      ReconnectConfig
 	mu             sync.RWMutex
+	ioMu           sync.Mutex
 	closed         bool
 	messageHandler func([]byte, MessageType) // Optional handler for received messages
 }
@@ -106,10 +107,12 @@ func (c *Client) connectWithRetry(ctx context.Context, attempt int) error {
 		c.mu.RUnlock()
 
 		if retryEnabled && attempt < maxRetries {
+			timer := time.NewTimer(backoff)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				return ctx.Err()
-			case <-time.After(backoff):
+			case <-timer.C:
 				return c.connectWithRetry(ctx, attempt+1)
 			}
 		}
@@ -147,6 +150,8 @@ func (c *Client) Send(msg []byte, msgType MessageType) error {
 	conn := c.conn
 	c.mu.RUnlock()
 
+	c.ioMu.Lock()
+	defer c.ioMu.Unlock()
 	return conn.WriteMessage(int(msgType), msg)
 }
 
@@ -161,6 +166,8 @@ func (c *Client) Receive() ([]byte, MessageType, error) {
 	conn := c.conn
 	c.mu.RUnlock()
 
+	c.ioMu.Lock()
+	defer c.ioMu.Unlock()
 	msgType, data, err := conn.ReadMessage()
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to read message: %w", err)
@@ -190,8 +197,10 @@ func (c *Client) ReceiveMultiple(ctx context.Context) (<-chan Message, error) {
 			case <-ctx.Done():
 				return
 			default:
+				c.ioMu.Lock()
 				conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 				msgType, data, err := conn.ReadMessage()
+				c.ioMu.Unlock()
 				if err != nil {
 					// Check if it's a close error
 					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
@@ -202,7 +211,10 @@ func (c *Client) ReceiveMultiple(ctx context.Context) (<-chan Message, error) {
 
 						if retryEnabled {
 							if reconnectErr := c.connectWithRetry(ctx, 0); reconnectErr == nil {
-								continue // Successfully reconnected, continue reading
+								c.mu.Lock()
+								conn = c.conn
+								c.mu.Unlock()
+								continue
 							}
 						}
 					}
@@ -259,15 +271,17 @@ func (c *Client) Close() error {
 		return nil
 	}
 
-	// Send close frame
+	c.ioMu.Lock()
 	err := c.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	if err != nil {
 		c.conn.Close()
+		c.ioMu.Unlock()
 		c.closed = true
 		return fmt.Errorf("failed to send close frame: %w", err)
 	}
 
 	err = c.conn.Close()
+	c.ioMu.Unlock()
 	c.closed = true
 	return err
 }

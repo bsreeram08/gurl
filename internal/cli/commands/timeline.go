@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/urfave/cli/v3"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
+	"github.com/urfave/cli/v3"
 )
 
 type timelineEntry struct {
@@ -51,7 +52,7 @@ func TimelineCommand(db storage.DB) *cli.Command {
 
 			var entries []timelineEntry
 			for _, req := range requests {
-				if filter != "" && !contains(filter, req.Name) {
+				if filter != "" && !strings.Contains(req.Name, filter) {
 					continue
 				}
 				history, err := db.GetHistory(req.ID, limit)
@@ -102,16 +103,6 @@ func TimelineCommand(db storage.DB) *cli.Command {
 			return nil
 		},
 	}
-}
-
-// contains checks if a string contains a substring
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 // sortByTimestamp sorts entries by timestamp, most recent first
