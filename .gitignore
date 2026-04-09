@@ -19,3 +19,7 @@ coverage.txt
 PLAN.md
 PRD.md
 .sisyphus/
+
+# Local tooling
+.claude/
+.factory/
