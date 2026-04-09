@@ -5,6 +5,11 @@ on:
     tags: ['v*']
   pull_request:
     branches: [master]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to update Homebrew formula for (e.g. v0.1.16)'
+        required: true
 
 permissions:
   contents: write
@@ -93,3 +98,89 @@ jobs:
             SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve version
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "VERSION=$INPUT_TAG" >> $GITHUB_ENV
+          else
+            echo "VERSION=$REF_NAME" >> $GITHUB_ENV
+          fi
+
+      - name: Download release tarballs
+        run: |
+          curl -sLO "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-darwin-arm64.tar.gz"
+          curl -sLO "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-linux-amd64.tar.gz"
+          curl -sLO "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-linux-arm64.tar.gz"
+
+      - name: Compute checksums
+        run: |
+          echo "SHA_DARWIN_ARM64=$(sha256sum gurl-darwin-arm64.tar.gz | cut -d' ' -f1)" >> $GITHUB_ENV
+          echo "SHA_LINUX_AMD64=$(sha256sum gurl-linux-amd64.tar.gz | cut -d' ' -f1)" >> $GITHUB_ENV
+          echo "SHA_LINUX_ARM64=$(sha256sum gurl-linux-arm64.tar.gz | cut -d' ' -f1)" >> $GITHUB_ENV
+
+      - name: Update formula
+        run: |
+          VERSION_NUM="${VERSION#v}"
+          mkdir -p Formula
+          cat > Formula/gurl.rb << EOF
+          class Gurl < Formula
+            desc "Smart curl saver and API companion for the terminal"
+            homepage "https://github.com/bsreeram08/gurl"
+            version "${VERSION_NUM}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-darwin-arm64.tar.gz"
+                sha256 "${SHA_DARWIN_ARM64}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
+                url "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-linux-arm64.tar.gz"
+                sha256 "${SHA_LINUX_ARM64}"
+              elsif Hardware::CPU.intel?
+                url "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-linux-amd64.tar.gz"
+                sha256 "${SHA_LINUX_AMD64}"
+              end
+            end
+
+            def install
+              bin.install "gurl"
+            end
+
+            def post_install
+              (var/"gurl").mkpath
+            end
+
+            test do
+              system "#{bin}/gurl", "--version"
+            end
+          end
+          EOF
+
+      - name: Commit and push formula
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/gurl.rb
+          git diff --staged --quiet && echo "No changes" && exit 0
+          git commit -m "chore: update formula to ${VERSION}"
+          git push

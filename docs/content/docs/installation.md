@@ -7,7 +7,20 @@ weight: 1
 
 Gurl requires no runtime dependencies — it ships as a single static binary. Go is only needed if you are building from source (Go 1.21+).
 
-## One-liner Install (Recommended)
+## Homebrew (macOS / Linux)
+
+```bash
+brew tap bsreeram08/gurl https://github.com/bsreeram08/gurl
+brew install gurl
+```
+
+Update with:
+
+```bash
+brew upgrade gurl
+```
+
+## One-liner Install
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/install.sh | bash

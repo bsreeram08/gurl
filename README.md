@@ -26,7 +26,14 @@ Save named curl requests, replay them with variable substitution, manage environ
 
 ## Installation
 
-### One-liner (Recommended)
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap bsreeram08/gurl https://github.com/bsreeram08/gurl
+brew install gurl
+```
+
+### One-liner
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/install.sh | bash
