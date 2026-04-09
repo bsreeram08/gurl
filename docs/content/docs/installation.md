@@ -5,69 +5,89 @@ weight: 1
 
 ## Prerequisites
 
-Gurl requires Go 1.21 or later to build from source. Most users install via Homebrew or a pre-built binary.
+Gurl requires no runtime dependencies — it ships as a single static binary. Go is only needed if you are building from source (Go 1.21+).
 
-## Install via Homebrew
-
-The recommended installation method for macOS and Linux:
-
-```bash
-brew tap bsreeram08/gurl
-brew install gurl
-```
-
-Update with:
-
-```bash
-brew upgrade gurl
-```
-
-## Install via Script
-
-One-liner install using the official install script:
+## One-liner Install (Recommended)
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/install.sh | bash
 ```
 
-## Install from Source
+This detects your platform, downloads the correct binary from the [latest release](https://github.com/bsreeram08/gurl/releases/latest), and installs it to `/usr/local/bin`.
 
-Clone the repository and build:
+## Pre-built Binaries
+
+Download directly from [GitHub Releases](https://github.com/bsreeram08/gurl/releases/latest):
+
+### macOS (Apple Silicon)
+
+```bash
+curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-darwin-arm64.tar.gz
+tar -xzf gurl-darwin-arm64.tar.gz
+sudo mv gurl /usr/local/bin/gurl
+```
+
+### Linux (x86_64)
+
+```bash
+curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-amd64.tar.gz
+tar -xzf gurl-linux-amd64.tar.gz
+sudo mv gurl /usr/local/bin/gurl
+```
+
+### Linux (ARM64)
+
+```bash
+curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-arm64.tar.gz
+tar -xzf gurl-linux-arm64.tar.gz
+sudo mv gurl /usr/local/bin/gurl
+```
+
+## Install via Go
+
+For users with Go 1.21+ installed:
+
+```bash
+go install github.com/sreeram/gurl/cmd/gurl@latest
+```
+
+This installs the `gurl` binary to `$GOPATH/bin` or `$HOME/go/bin`.
+
+## Build from Source
 
 ```bash
 git clone https://github.com/bsreeram08/gurl.git
 cd gurl
 go build -o gurl ./cmd/gurl
+sudo mv gurl /usr/local/bin/gurl
 ```
 
-The binary is created as `./gurl` in the project root. Move it to a directory in your PATH:
+## Shell Completion
+
+Enable tab completion for faster command entry.
+
+### Bash
+
+Add to your `~/.bashrc`:
 
 ```bash
-sudo mv ./gurl /usr/local/bin/gurl
+source <(gurl completion bash)
 ```
 
-## Binary Releases
+### Zsh
 
-Download pre-built binaries from the [GitHub Releases page](https://github.com/bsreeram08/gurl/releases).
-
-Each release includes:
-
-- macOS (Apple Silicon and Intel)
-- Linux (amd64 and ARM)
-- Windows (amd64)
-
-Download the appropriate binary, make it executable, and move it to your PATH:
+Add to your `~/.zshrc`:
 
 ```bash
-# Linux (amd64)
-curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-amd64
-chmod +x gurl-linux-amd64
-sudo mv gurl-linux-amd64 /usr/local/bin/gurl
+source <(gurl completion zsh)
+```
 
-# macOS (Apple Silicon)
-curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-darwin-arm64
-chmod +x gurl-darwin-arm64
-sudo mv gurl-darwin-arm64 /usr/local/bin/gurl
+### Fish
+
+Add to your `~/.config/fish/config.fish`:
+
+```bash
+gurl completion fish | source
 ```
 
 ## First-run Setup
@@ -80,8 +100,8 @@ On first launch, Gurl creates the local data directory:
 
 This stores:
 
-- `gurl.db` - Request collections and environments (LevelDB)
-- `plugins/` - Custom middleware and formatters
+- `gurl.db` — Request collections, environments, and history (LevelDB)
+- `plugins/` — Custom middleware and formatters
 
 Configuration is loaded from the first file found in this order:
 
@@ -106,14 +126,20 @@ json_pretty = true
 
 ## Verify Installation
 
-Check that Gurl is installed correctly:
-
 ```bash
 gurl --version
 ```
 
 You should see the version number and build information.
 
+## Update
+
+Gurl can self-update to the latest release:
+
+```bash
+gurl update
+```
+
 ## Next Steps
 
-Now that Gurl is installed, continue to the [Quick Start guide](/docs/quickstart/) to save and run your first request.
+Continue to the [Quick Start guide](/docs/quickstart/) to save and run your first request.

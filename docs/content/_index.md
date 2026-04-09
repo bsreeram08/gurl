@@ -72,7 +72,7 @@ gurl codegen "my-request" --lang curl
 ## Quick Start
 
 ```bash
-brew install gurl
+curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/install.sh | bash
 gurl save "my-api" https://api.example.com/users -H "Authorization: Bearer $TOKEN"
 gurl run "my-api"
 ```
