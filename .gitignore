@@ -13,3 +13,8 @@ dist/
 # Test coverage
 *.out
 coverage.txt
+
+# Planning docs (local only)
+PLAN.md
+PRD.md
+.sisyphus/
