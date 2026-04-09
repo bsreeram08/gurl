@@ -13,6 +13,7 @@ dist/
 # Test coverage
 *.out
 coverage.txt
+*.test
 
 # Planning docs (local only)
 PLAN.md
