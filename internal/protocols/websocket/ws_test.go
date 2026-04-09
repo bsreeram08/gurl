@@ -180,13 +180,13 @@ func TestWS_ReceiveMultiple(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient()
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	err := client.Connect(ctx, server.URL(), nil)
 	if err != nil {
 		t.Fatalf("failed to connect: %v", err)
 	}
-	defer client.Close()
 
 	// Send multiple messages
 	for i := 0; i < 3; i++ {
@@ -203,15 +203,29 @@ func TestWS_ReceiveMultiple(t *testing.T) {
 	}
 
 	count := 0
-	for msg := range msgChan {
-		if msg.Type != MessageTypeText {
-			t.Fatalf("expected text message, got %v", msg.Type)
+	for {
+		select {
+		case msg, ok := <-msgChan:
+			if !ok {
+				// Channel closed — verify we got all 3 messages
+				if count < 3 {
+					t.Fatalf("expected 3 messages, got %d", count)
+				}
+				return
+			}
+			if msg.Type != MessageTypeText {
+				t.Fatalf("expected text message, got %v", msg.Type)
+			}
+			count++
+			if count == 3 {
+				// All 3 messages received; close the connection to stop ReceiveMultiple.
+				// CloseNormalClosure causes IsUnexpectedCloseError to return false,
+				// so the goroutine exits and closes msgChan.
+				client.Close()
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("timed out waiting for messages, got %d of 3", count)
 		}
-		count++
-	}
-
-	if count != 3 {
-		t.Fatalf("expected 3 messages, got %d", count)
 	}
 }
 

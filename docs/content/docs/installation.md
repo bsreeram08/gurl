@@ -5,13 +5,14 @@ weight: 1
 
 ## Prerequisites
 
-Gurl requires Go 1.21 or later. Most users install via Homebrew, but there are other options.
+Gurl requires Go 1.21 or later to build from source. Most users install via Homebrew or a pre-built binary.
 
 ## Install via Homebrew
 
 The recommended installation method for macOS and Linux:
 
 ```bash
+brew tap bsreeram08/gurl
 brew install gurl
 ```
 
@@ -21,70 +22,52 @@ Update with:
 brew upgrade gurl
 ```
 
-## Install via Go
+## Install via Script
 
-For users with Go installed:
+One-liner install using the official install script:
 
 ```bash
-go install github.com/sreeram/terminal-curl/cmd/gurl@latest
+curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/install.sh | bash
 ```
-
-This installs the `gurl` binary to `$GOPATH/bin` or `$HOME/go/bin`.
 
 ## Install from Source
 
 Clone the repository and build:
 
 ```bash
-git clone https://github.com/sreeram/terminal-curl.git
-cd terminal-curl
-go build ./cmd/gurl
+git clone https://github.com/bsreeram08/gurl.git
+cd gurl
+go build -o gurl ./cmd/gurl
 ```
 
 The binary is created as `./gurl` in the project root. Move it to a directory in your PATH:
 
 ```bash
-mv ./gurl /usr/local/bin/gurl
+sudo mv ./gurl /usr/local/bin/gurl
 ```
 
 ## Binary Releases
 
-Download pre-built binaries from the [GitHub Releases page](https://github.com/sreeram/terminal-curl/releases).
+Download pre-built binaries from the [GitHub Releases page](https://github.com/bsreeram08/gurl/releases).
 
 Each release includes:
 
 - macOS (Apple Silicon and Intel)
-- Linux (x86 and ARM)
-- Windows
+- Linux (amd64 and ARM)
+- Windows (amd64)
 
-Extract the archive and move the binary to your PATH.
-
-## Shell Completion
-
-Enable tab completion for faster command entry.
-
-### Bash
-
-Add to your `~/.bashrc`:
+Download the appropriate binary, make it executable, and move it to your PATH:
 
 ```bash
-source <(gurl completion bash)
-```
+# Linux (amd64)
+curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-amd64
+chmod +x gurl-linux-amd64
+sudo mv gurl-linux-amd64 /usr/local/bin/gurl
 
-### Zsh
-
-Add to your `~/.zshrc`:
-
-```bash
-source <(gurl completion zsh)
-```
-
-### Fish
-
-Add to your `~/.config/fish/config.fish`:
-
-```bash
-gurl completion fish | source
+# macOS (Apple Silicon)
+curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-darwin-arm64
+chmod +x gurl-darwin-arm64
+sudo mv gurl-darwin-arm64 /usr/local/bin/gurl
 ```
 
 ## First-run Setup
@@ -97,27 +80,28 @@ On first launch, Gurl creates the local data directory:
 
 This stores:
 
-- `gurl.db` - Request collections and environments (LMDB)
-- `logs/` - Request and response logs
+- `gurl.db` - Request collections and environments (LevelDB)
 - `plugins/` - Custom middleware and formatters
 
-Configuration is stored separately:
+Configuration is loaded from the first file found in this order:
 
-- `~/.config/gurl/config.toml` (preferred)
-- `~/.gurlrc` (fallback)
+1. Path set in `$GURL_CONFIG_PATH`
+2. `.gurlrc` (current directory)
+3. `~/.gurlrc`
+4. `~/.config/gurl/config.toml`
 
-> [!TIP]
-> Create a config file to set defaults for your environment:
+Example config file:
 
 ```toml
-[defaults]
-timeout = 30
-follow_redirects = true
-verify_ssl = true
+[general]
+history_depth = 100
+auto_template = true
+timeout = "30s"
 
 [output]
-format = "table"
-color = true
+default_format = "auto"
+syntax_highlight = true
+json_pretty = true
 ```
 
 ## Verify Installation

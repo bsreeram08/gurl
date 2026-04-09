@@ -271,11 +271,17 @@ func TestSSE_RetryField(t *testing.T) {
 }
 
 func TestSSE_Timeout(t *testing.T) {
-	// Mock SSE server that sends no data (would hang without timeout)
+	// Mock SSE server that establishes the SSE connection but sends no events.
+	// It flushes headers first so client.Connect() succeeds, then blocks
+	// until the request context is cancelled. This ensures server.Close() doesn't block.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		// Send nothing - server never closes connection
-		select {}
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		// Block until the client disconnects
+		<-r.Context().Done()
 	}))
 	defer server.Close()
 

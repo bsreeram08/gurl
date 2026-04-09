@@ -52,6 +52,7 @@ Gurl is a command-line HTTP client for saving, organizing, and executing curl re
 |---------|-------------|
 | [`tui`](tui) | Launch interactive TUI |
 | [`graphql`](graphql) | Execute a GraphQL query |
+| [`show`](show) | Show details of a saved request |
 | [`update`](update) | Update gurl to latest version |
 
 ## Quick Start

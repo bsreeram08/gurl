@@ -487,14 +487,25 @@ func TestLoader_IsEnabled(t *testing.T) {
 }
 
 func TestLoader_Load_UnsupportedPlatform(t *testing.T) {
+	// On platforms that support plugins (linux/amd64, linux/arm64), the error
+	// comes from plugin.Open failing (not the "not supported" guard). Skip the
+	// "not supported" check and instead verify that an error is returned.
 	loader := NewLoader("/some/path", nil)
 
 	_, err := loader.Load("/some/plugin.so")
 	if err == nil {
-		t.Error("expected error on unsupported platform")
+		t.Error("expected error loading a non-existent plugin")
 	}
-	if !strings.Contains(err.Error(), "not supported") {
-		t.Errorf("expected 'not supported' in error, got: %v", err)
+
+	// On supported platforms the error comes from the OS, not the guard.
+	// On unsupported platforms the error contains "not supported".
+	if supportsPlugins() {
+		// Any error is acceptable on a supported platform with a bad path
+		t.Logf("supported platform error (expected): %v", err)
+	} else {
+		if !strings.Contains(err.Error(), "not supported") {
+			t.Errorf("expected 'not supported' in error on unsupported platform, got: %v", err)
+		}
 	}
 }
 

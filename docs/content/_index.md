@@ -12,7 +12,7 @@ AI agents need to call APIs. Gurl makes that safe and auditable — credentials 
 
 ## Features
 
-### 17 CLI Commands
+### 21 CLI Commands
 
 Every command you need for API workflows: save, run, list, edit, delete, duplicate, export, import, and more.
 
@@ -32,7 +32,7 @@ Programmatic credential injection for every auth scheme:
 | NTLM | Windows integrated |
 | Hawk | Message authentication |
 
-### 4 Protocol Clients
+### 5 Protocol Clients
 
 Support for modern API protocols:
 

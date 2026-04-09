@@ -85,10 +85,17 @@ gurl list
 | edit | Edit a saved request |
 | delete | Delete a saved request |
 | rename | Rename a saved request |
+| show | Show details of a saved request |
 | export | Export requests to JSON |
 | import | Import from OpenAPI/Insomnia/etc |
 | paste | Copy as curl command |
 | collection | Manage collections |
+| env | Manage environment variables |
+| sequence | Manage request sequences |
+| codegen | Generate code from a request |
+| graphql | Execute a GraphQL query |
+| tui | Launch interactive TUI |
+| update | Update gurl to latest version |
 
 ## Configuration
 See `.gurlrc` or `~/.gurlrc`:
