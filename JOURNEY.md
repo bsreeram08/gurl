@@ -125,6 +125,15 @@ Why:
 - [x] Self-update command
 - [x] Comprehensive test coverage
 
+### v0.1.18 - Security Hardening II ✅
+- [x] AWSv4: inject host header from URL when missing
+- [x] OAuth2: remove HTTP status code from error message (info disclosure)
+- [x] Sandbox: block eval() and Function() constructor (sandbox escape prevention)
+- [x] Sandbox: make crypto.digest() and Buffer.from() throw uncatchable JS errors
+- [x] Template: single-pass regexp substitution (deterministic, prevents injection)
+- [x] Update: real SHA256 checksum verification with subtle.ConstantTimeCompare
+- [x] Path traversal: symlink-aware validation for import/export/run commands
+
 ### Next
 - [ ] OpenAPI request validation (not just import)
 - [ ] Git-friendly collection format (human-readable, diffs well)
@@ -156,4 +165,4 @@ Why:
 
 ---
 
-*Last updated: 2026-04-10*
+*Last updated: 2026-04-11*
