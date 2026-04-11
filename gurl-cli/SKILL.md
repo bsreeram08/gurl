@@ -16,6 +16,7 @@ Use when:
 - User wants to replay API calls
 - User wants to import from OpenAPI/Insomnia/Bruno
 - User wants to manage API collections
+- User wants to update gurl to the latest version
 - Agent needs to make HTTP requests programmatically
 
 ## Installation
@@ -43,33 +44,64 @@ gurl save "create order" -X POST https://api.example.com/orders \
   -H "Content-Type: application/json" \
   -d '{"customer_id": 123, "items": [{"sku": "ABC"}]}'
 
-# With headers
+# With headers and collection
 gurl save "get user" https://api.example.com/users/123 \
   -H "Authorization: Bearer $TOKEN" \
-  -H "Accept: application/json"
+  -H "Accept: application/json" \
+  --collection myapi \
+  --tag auth
+
+# Using --curl flag (full curl command as string)
+gurl save --curl 'curl -X POST https://api.example.com/orders -H "Content-Type: application/json" -d "{\"id\":1}"' \
+  --name "create order" \
+  --collection orders
+
+# Save with folder structure
+gurl save "list users" https://api.example.com/api/v2/users \
+  --folder api/v2 \
+  --collection myapi
 ```
 
-### run - Execute a request
+### run - Execute a saved request
 ```bash
 # By name
 gurl run "ping google"
-gurl "ping google"  # shorthand
 
 # With variables
 gurl run "create order" --var customerId=456
 gurl run "get user" --var userId=789
 
-# Force fresh response
-gurl run "ping google" --no-cache
+# With environment
+gurl run "get user" --env production --var userId=123
+
+# Use cached response (if available and fresh)
+gurl run "ping google" --cache
+
+# With timeout
+gurl run "slow endpoint" --timeout 30s
+
+# Data-driven iteration (CSV or JSON data file)
+gurl run "create order" --data ./orders.csv
+
+# Assertions
+gurl run "ping google" --assert status=200 --assert "body contains OK"
+
+# Request chaining (setNextRequest)
+gurl run "login" --chain
+
+# Output to file
+gurl run "get report" --output ./report.json
 ```
 
 ### list - Show saved requests
 ```bash
-gurl list                      # All requests
-gurl list --json               # JSON output for scripting
+gurl list                      # All requests (table format)
+gurl list --json              # JSON output for scripting
 gurl list --collection orders   # Filter by collection
 gurl list --tag auth           # Filter by tag
-gurl list "order*"             # Pattern match
+gurl list "order*"            # Pattern match
+gurl list --sort name          # Sort by name (name|updated|collection)
+gurl list --limit 10           # Limit results
 ```
 
 ### import - Import from external formats
@@ -88,6 +120,9 @@ gurl import postman ./collection.json
 
 # HAR (HTTP Archive)
 gurl import har ./requests.har
+
+# Import .env variables into environment
+gurl env import ./vars.env
 ```
 
 ## Advanced Commands
@@ -100,20 +135,80 @@ gurl timeline                     # Global execution timeline
 # Diff responses
 gurl diff "create order"         # Compare last 2 executions
 
-# Edit
-gurl edit "create order"         # Edit in TUI
+# Edit in TUI
+gurl edit "create order"
+
+# Show request details
+gurl show "create order"
+gurl info "create order"
 
 # Delete/Rename
 gurl delete "old request"
 gurl rename "old name" "new name"
 
-# Export/Import
-gurl export "create order" > order.json
-gurl export --collection orders > orders.json
-gurl import order.json
+# Export requests
+gurl export "create order"        # Export one request
+gurl export --collection orders  # Export entire collection
 
-# Copy as curl
-gurl paste "create order"        # Copy to clipboard
+# Copy as curl to clipboard
+gurl paste "create order"
+
+# Parse curl from stdin or file
+gurl detect < curl-command.txt
+gurl parse ./curl-commands.txt
+```
+
+### env - Environment management
+```bash
+gurl env list                    # List all environments
+gurl env create production        # Create environment
+gurl env set API_URL=https://...  # Set variable
+gurl env switch production        # Activate environment
+gurl env import .env             # Import from .env file
+gurl env delete staging          # Delete environment
+```
+
+### collection - Collection management
+```bash
+gurl collection list             # List all collections
+gurl collection run orders        # Run all requests in a collection
+gurl collection add payments       # Create collection
+gurl collection rename old new     # Rename
+gurl collection remove staging    # Delete
+```
+
+### sequence - Request execution order
+```bash
+gurl sequence set "req1" "req2" "req3"  # Define order
+gurl sequence list                       # Show current order
+```
+
+### update - Update gurl
+```bash
+gurl update    # Check and install latest version
+```
+
+### codegen - Generate code from a request
+```bash
+# Generate code in a language
+gurl codegen "get user" --lang python
+gurl codegen "create order" --lang go
+gurl codegen "api call" --lang javascript
+gurl codegen "api call" --lang curl
+
+# Copy to clipboard
+gurl codegen "api call" --lang python --clipboard
+```
+
+### graphql - Execute GraphQL queries
+```bash
+gurl graphql https://api.example.com/graphql --query '{ users { id name } }'
+```
+
+### tui - Interactive TUI
+```bash
+gurl tui    # Launch interactive UI
+gurl ui     # Same
 ```
 
 ## Common Workflows
@@ -133,6 +228,25 @@ gurl run "get product" --var id=456
 
 # 3. Check history
 gurl history "create product"
+```
+
+### Environment-based Workflow
+```bash
+# 1. Create environments
+gurl env create staging
+gurl env create production
+
+# 2. Set variables per environment
+gurl env switch staging
+gurl env set BASE_URL=https://staging.api.example.com
+gurl env set API_KEY=staging-key
+
+gurl env switch production
+gurl env set BASE_URL=https://api.example.com
+gurl env set API_KEY=prod-key
+
+# 3. Run with environment (use $VAR in saved requests)
+gurl run "api call" --env production
 ```
 
 ### Bulk Import from OpenAPI
@@ -215,6 +329,9 @@ ttl_seconds = 300
 5. **Use --format json**: For machine-readable output
 6. **Check history**: `gurl timeline` shows all executions
 7. **Paste for sharing**: `gurl paste` copies as curl command
+8. **Environments**: Use `--env` to switch between staging/prod
+9. **Assertions**: Use `--assert` to validate responses in tests
+10. **Update regularly**: Run `gurl update` to get latest version
 
 ## Error Handling
 
@@ -228,6 +345,9 @@ Usage: gurl run "name" --var userId=123
 
 # Network error
 gurl: Failed to connect: connection refused
+
+# Assertion failed
+gurl: Assertion failed: expected status=200, got 404
 ```
 
 ## Environment Variables
@@ -235,5 +355,4 @@ gurl: Failed to connect: connection refused
 ```bash
 GURL_DB_PATH=~/.local/share/gurl/gurl.db
 GURL_CONFIG_PATH=./.gurlrc
-GURL_TOKEN=your-api-token  # Use in requests with $VAR
 ```
