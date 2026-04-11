@@ -57,10 +57,8 @@ jobs:
             fi
 
             # Template injection in os/exec (data-dependent command construction)
-            # Look for patterns like: exec.Command(..., userInput) where userInput isn't validated
             TEMPLATE_INJECT=$(echo "$CHANGED_FILES" | xargs grep -rn 'exec\.Command(' 2>/dev/null | grep -v '_test.go' | grep -v 'shellJoin\|fieldQuote' || true)
             if [[ -n "$TEMPLATE_INJECT" ]]; then
-              # Only flag if there's string concat or template in the args
               TEMPLATE_CONCAT=$(echo "$TEMPLATE_INJECT" | grep -E '\+ |fmt\.Sprintf|`|\$\{?' 2>/dev/null || true)
               if [[ -n "$TEMPLATE_CONCAT" ]]; then
                 ISSUES_FOUND=true
@@ -78,7 +76,6 @@ jobs:
           fi
 
           # --- Build ---
-          BUILD_OUTPUT=""
           if ! go build -o /dev/null ./cmd/gurl 2>&1; then
             ISSUES_FOUND=true
             BUILD_OUTPUT=$(go build -o /dev/null ./cmd/gurl 2>&1)
@@ -86,10 +83,10 @@ jobs:
           fi
 
           # --- Tests ---
-          TEST_OUTPUT=""
-          if ! go test ./... 2>&1; then
+          # GURL_TLS_INSECURE_OK must be set for TLS verification disable tests
+          if ! GURL_TLS_INSECURE_OK=true go test ./... 2>&1; then
             ISSUES_FOUND=true
-            TEST_OUTPUT=$(go test ./... 2>&1)
+            TEST_OUTPUT=$(GURL_TLS_INSECURE_OK=true go test ./... 2>&1)
             REVIEW_OUTPUT+="❌ **Tests Failed:**\n\`\`\`\n$TEST_OUTPUT\n\`\`\`\n\n"
           fi
 

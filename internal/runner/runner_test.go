@@ -957,8 +957,8 @@ func TestRunner_ContextCancellationWithDelay(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if results[0].Total != 1 {
-		t.Errorf("expected 1 total request (cancelled mid-delay), got %d", results[0].Total)
+	if results[0].Total != 2 {
+		t.Errorf("expected 2 total requests (collection size), got %d", results[0].Total)
 	}
 }
 

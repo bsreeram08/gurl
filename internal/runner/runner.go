@@ -172,6 +172,7 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		CollectionName: config.CollectionName,
 		Iteration:      iteration,
 		RequestResults: make([]*RequestResult, 0, len(requests)),
+		Total:          len(requests), // Total = full collection size (includes skipped on bail)
 	}
 
 	for i, req := range requests {
@@ -185,7 +186,6 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		} else {
 			result.Failed++
 		}
-		result.Total++
 
 		if config.Delay > 0 && i < len(requests)-1 {
 			select {
@@ -198,9 +198,7 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		if config.Bail && !reqResult.Passed && !reqResult.Skipped {
 			remaining := len(requests) - i - 1
 			result.Skipped += remaining
-			// Note: do NOT add remaining to result.Total - those requests were never
-			// executed so they shouldn't be double-counted. result.Total already includes
-			// only requests that actually ran (up to and including the failed one).
+			// Add remaining requests as skipped (bail triggered).
 			for j := i + 1; j < len(requests); j++ {
 				result.RequestResults = append(result.RequestResults, &RequestResult{
 					RequestName: requests[j].Name,
