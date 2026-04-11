@@ -4,6 +4,8 @@
 [![Go Version](https://img.shields.io/badge/go-1.21%2B-blue)](https://go.dev)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+![gurl logo](assets/logo.jpg)
+
 Import from Postman. Run with environments. Assert on responses. Generate client code. All without leaving your shell.
 
 **Gurl is not a curl wrapper.** It's a full API development environment — collections, environments, scripting, assertions, history, and multi-protocol support — built for the terminal. If Postman and httpie had a baby that grew up in a shell, this is it.
@@ -29,6 +31,10 @@ Import from Postman. Run with environments. Assert on responses. Generate client
 - **Slumber** — YAML-based TUI REST client with profiles. No scripting, no assertions, HTTP only.
 - **Bruno CLI** — runs `.bru` collections. GUI needed for authoring. No interactive exploration.
 
+## What it looks like
+
+![gurl TUI](assets/tui-mockup.jpg)
+
 ## Features
 
 - **Named requests** — save any curl command with a memorable name, run it forever
@@ -44,6 +50,10 @@ Import from Postman. Run with environments. Assert on responses. Generate client
 - **Interactive TUI** — full bubbletea interface for browsing and running requests
 - **Execution history** — per-request history + global timeline + diff between runs
 - **Plugin system** — middleware and custom output formatters
+
+## Key capabilities
+
+![gurl features](assets/features.jpg)
 
 ## Installation
 
