@@ -65,7 +65,12 @@ jobs:
             *) os_name="${{ matrix.os }}" ;;
           esac
           name="gurl-${os_name}-${{ matrix.arch }}"
-          sha256sum "$name" > SHA256SUMS
+          # Use macOS-compatible sha256 command
+          if command -v shasum &>/dev/null; then
+            shasum -a 256 "$name" > "SHA256SUMS-${os_name}-${{ matrix.arch }}"
+          else
+            sha256sum "$name" > "SHA256SUMS-${os_name}-${{ matrix.arch }}"
+          fi
           tar -czf "${name}.tar.gz" "$name"
 
       - name: Upload Artifacts
@@ -74,7 +79,7 @@ jobs:
           name: gurl-${{ matrix.os }}-${{ matrix.arch }}
           path: |
             gurl-*
-            SHA256SUMS
+            SHA256SUMS-*  # unique per job to avoid overwrite during merge
           if-no-files-found: error
 
   release:
@@ -89,6 +94,13 @@ jobs:
           path: .
           pattern: gurl-*
           merge-multiple: true
+
+      - name: Merge checksums
+        run: |
+          # Concatenate all per-job checksum files into one SHA256SUMS
+          cat SHA256SUMS-* > SHA256SUMS
+          echo "Merged SHA256SUMS contents:"
+          cat SHA256SUMS
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
