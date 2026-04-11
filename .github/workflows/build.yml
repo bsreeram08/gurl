@@ -65,21 +65,38 @@ jobs:
             *) os_name="${{ matrix.os }}" ;;
           esac
           name="gurl-${os_name}-${{ matrix.arch }}"
+          checksum_file="checksums-${os_name}-${{ matrix.arch }}.txt"
+          mkdir -p checksums
           # Use macOS-compatible sha256 command
           if command -v shasum &>/dev/null; then
-            shasum -a 256 "$name" > "SHA256SUMS-${os_name}-${{ matrix.arch }}"
+            shasum -a 256 "$name" > "checksums/$checksum_file"
           else
-            sha256sum "$name" > "SHA256SUMS-${os_name}-${{ matrix.arch }}"
+            sha256sum "$name" > "checksums/$checksum_file"
           fi
           tar -czf "${name}.tar.gz" "$name"
+          echo "Created checksums/$checksum_file:"
+          cat "checksums/$checksum_file"
 
       - name: Upload Artifacts
+        if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: gurl-${{ matrix.os }}-${{ matrix.arch }}
           path: |
-            gurl-*
-            SHA256SUMS-*  # unique per job to avoid overwrite during merge
+            gurl-linux-${{ matrix.arch }}
+            gurl-linux-${{ matrix.arch }}.tar.gz
+            checksums/
+          if-no-files-found: error
+
+      - name: Upload Artifacts (macOS)
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gurl-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            gurl-darwin-${{ matrix.arch }}
+            gurl-darwin-${{ matrix.arch }}.tar.gz
+            checksums/
           if-no-files-found: error
 
   release:
@@ -95,21 +112,13 @@ jobs:
           pattern: gurl-*
           merge-multiple: true
 
-      - name: Debug artifacts
-        run: |
-          echo "=== Files in current directory ==="
-          ls -la
-          echo ""
-          echo "=== SHA256SUMS files found ==="
-          find . -name 'SHA256SUMS*' -type f 2>/dev/null
-          echo ""
-          echo "=== All gurl-* files ==="
-          find . -name 'gurl-*' -type f 2>/dev/null
-
       - name: Merge checksums
         run: |
-          echo "=== Concatenating SHA256SUMS files ==="
-          cat SHA256SUMS-* > SHA256SUMS 2>/dev/null || { echo "No SHA256SUMS-* files found!"; exit 1; }
+          echo "=== Checking checksums directory ==="
+          ls -la checksums/ 2>/dev/null || echo "checksums/ not found"
+          echo ""
+          echo "=== Concatenating all checksum files ==="
+          cat checksums/checksums-*.txt > SHA256SUMS 2>/dev/null || { echo "No checksums/checksums-*.txt found!"; ls -la checksums/ 2>/dev/null; exit 1; }
           echo "Merged SHA256SUMS contents:"
           cat SHA256SUMS
 
