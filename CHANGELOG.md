@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.1.19] - 2026-04-11
+
+### TUI Upgrade
+
+- **Bubbletea v2** (`internal/tui/`) — Upgraded from Bubbletea v1 to v2 (charm.land/bubbletea/v2). The TUI now uses the Cursed Renderer for better performance and stability
+- **Viewport API fix** — `viewport.New()` now uses functional options (`WithWidth`/`WithHeight`) per Bubbletea v2 API
+- **Key handling fix** — `tea.KeyRunes` replaced with `msg.Text != ""` for printable character detection; `tea.KeyCtrlJ` replaced with string matching (`keyStr == "ctrl+j"`)
+- **View model change** — All `View()` methods now return `tea.View` (struct) instead of `string`
+- **Alt screen/mouse API** — `tea.WithAltScreen()` option removed; set `v.AltScreen = true` and `v.MouseMode` directly on the `tea.View` struct
+- **SearchModal mutation bug** — Fixed `View()` method mutating live state (`sm.results` truncation moved to local `displayResults` variable)
+- **Test updates** — All tests updated for Bubbletea v2 API (`KeyMsg` → `KeyPressMsg`, view content accessed via `.Content` field)
+
 ## [Unreleased] - Security Hardening
 
 Full codebase audit fixing 21 critical issues and 30+ robustness improvements across 35 files.
