@@ -3,13 +3,15 @@ package tui
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/google/uuid"
 	"github.com/sreeram/gurl/internal/importers"
 	"github.com/sreeram/gurl/internal/runner"
@@ -58,6 +60,14 @@ type SearchModal struct {
 	height      int
 }
 
+// makeView creates a tea.View with standard TUI settings (alt screen, mouse)
+func makeView(content string) tea.View {
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
 // NewSearchModal creates a new search modal
 func NewSearchModal(allRequests []*types.SavedRequest, width, height int) *SearchModal {
 	ti := textinput.New()
@@ -96,7 +106,7 @@ func (sm *SearchModal) filterResults() {
 
 func (sm *SearchModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "up", "k":
 			if sm.selectedIdx > 0 {
@@ -119,7 +129,7 @@ func (sm *SearchModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return sm, nil
 }
 
-func (sm *SearchModal) View() string {
+func (sm *SearchModal) View() tea.View {
 	lines := []string{
 		Style.Header.Render(" Search "),
 		sm.input.View(),
@@ -130,11 +140,14 @@ func (sm *SearchModal) View() string {
 	if maxResults < 5 {
 		maxResults = 5
 	}
-	if len(sm.results) > maxResults {
-		sm.results = sm.results[:maxResults]
+
+	// Use local variable for display to avoid mutating live state
+	displayResults := sm.results
+	if len(displayResults) > maxResults {
+		displayResults = displayResults[:maxResults]
 	}
 
-	for i, req := range sm.results {
+	for i, req := range displayResults {
 		methodColor := methodTextColor(req.Method)
 		methodStyle := lipgloss.NewStyle().Foreground(methodColor).Bold(true)
 		name := req.Name
@@ -151,7 +164,7 @@ func (sm *SearchModal) View() string {
 		}
 	}
 
-	if len(sm.results) == 0 {
+	if len(displayResults) == 0 {
 		lines = append(lines, Style.PlainText.Render("  No matching requests"))
 	}
 
@@ -163,10 +176,10 @@ func (sm *SearchModal) View() string {
 	if modalWidth < 40 {
 		modalWidth = 40
 	}
-	return Style.Modal.
+	return makeView(Style.Modal.
 		Width(modalWidth).
 		Height(sm.height - 5).
-		Render(content)
+		Render(content))
 }
 
 func (sm *SearchModal) GetSelectedRequest() *types.SavedRequest {
@@ -203,7 +216,7 @@ func NewImportModal(width, height int) *ImportModal {
 
 func (im *ImportModal) Update(msg tea.Msg) *ImportModal {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "enter":
 			return im
@@ -215,7 +228,7 @@ func (im *ImportModal) Update(msg tea.Msg) *ImportModal {
 	return im
 }
 
-func (im *ImportModal) View() string {
+func (im *ImportModal) View() tea.View {
 	lines := []string{
 		Style.Header.Render(" Import "),
 		im.input.View(),
@@ -238,10 +251,10 @@ func (im *ImportModal) View() string {
 	if modalWidth < 50 {
 		modalWidth = 50
 	}
-	return Style.Modal.
+	return makeView(Style.Modal.
 		Width(modalWidth).
 		Height(im.height - 5).
-		Render(content)
+		Render(content))
 }
 
 func (im *ImportModal) GetPath() string {
@@ -291,7 +304,7 @@ func NewRunnerModal(collections []string, envs []string, width, height int) *Run
 
 func (rm *RunnerModal) Update(msg tea.Msg) *RunnerModal {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "up", "k":
 			if rm.selectedIdx > 0 {
@@ -312,7 +325,7 @@ func (rm *RunnerModal) Update(msg tea.Msg) *RunnerModal {
 	return rm
 }
 
-func (rm *RunnerModal) View() string {
+func (rm *RunnerModal) View() tea.View {
 	lines := []string{
 		Style.Header.Render(" Collection Runner "),
 		"",
@@ -398,10 +411,10 @@ func (rm *RunnerModal) View() string {
 	if modalWidth < 50 {
 		modalWidth = 50
 	}
-	return Style.Modal.
+	return makeView(Style.Modal.
 		Width(modalWidth).
 		Height(rm.height - 5).
-		Render(content)
+		Render(content))
 }
 
 func (rm *RunnerModal) getCollectionName() string {
@@ -490,17 +503,20 @@ type App struct {
 	activeTab   int
 	sidebarMode SidebarMode
 
-	requestList *RequestList
-	searchModal *SearchModal
-	importModal *ImportModal
-	runnerModal *RunnerModal
-	helpModal   bool
+	requestList   *RequestList
+	searchModal   *SearchModal
+	importModal   *ImportModal
+	runnerModal   *RunnerModal
+	helpModal     bool
+	loadingSpinner spinner.Model
 }
 
 // NewApp creates a new TUI application
 func NewApp(db storage.DB, config *types.Config) *App {
 	initialTab := newBlankTab(db)
 	rl := NewRequestList(db)
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
 	return &App{
 		db:           db,
 		config:       config,
@@ -511,6 +527,7 @@ func NewApp(db storage.DB, config *types.Config) *App {
 		activeTab:    0,
 		sidebarMode:  SidebarRequests,
 		requestList:  rl,
+		loadingSpinner: sp,
 	}
 }
 
@@ -549,6 +566,11 @@ func (m *App) Init() tea.Cmd {
 
 // Update implements tea.Model.Update
 func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Update spinner when loading
+	if !m.ready {
+		m.loadingSpinner, _ = m.loadingSpinner.Update(msg)
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -571,7 +593,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.requestList.SetRequests(msg.requests)
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.searchModal != nil {
 			result, cmd := m.searchModal.Update(msg)
 			if result == nil {
@@ -628,7 +650,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.helpModal {
-			if msg.Type == tea.KeyEsc || msg.String() == "q" || msg.String() == "?" {
+			if msg.Code == tea.KeyEscape || msg.String() == "q" || msg.String() == "?" {
 				m.helpModal = false
 			}
 			return m, nil
@@ -698,7 +720,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleKeyPress handles all keyboard input
-func (m *App) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *App) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	switch {
 	case IsQuitKey(key):
@@ -878,7 +900,7 @@ func (m *App) duplicateActiveTab() {
 
 func (m *App) handleNavigateUp() (tea.Model, tea.Cmd) {
 	if m.focusedPanel == PanelSidebar {
-		if _, cmd := m.requestList.Update(tea.KeyMsg{Type: tea.KeyUp}); cmd != nil {
+		if _, cmd := m.requestList.Update(tea.KeyPressMsg{Code: tea.KeyUp}); cmd != nil {
 			return m, cmd
 		}
 	}
@@ -887,7 +909,7 @@ func (m *App) handleNavigateUp() (tea.Model, tea.Cmd) {
 
 func (m *App) handleNavigateDown() (tea.Model, tea.Cmd) {
 	if m.focusedPanel == PanelSidebar {
-		if _, cmd := m.requestList.Update(tea.KeyMsg{Type: tea.KeyDown}); cmd != nil {
+		if _, cmd := m.requestList.Update(tea.KeyPressMsg{Code: tea.KeyDown}); cmd != nil {
 			return m, cmd
 		}
 	}
@@ -959,9 +981,17 @@ func (m *App) handleSpace() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *App) View() string {
+// makeView creates a tea.View with alt screen and mouse mode enabled
+func (m *App) makeView(content string) tea.View {
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
+func (m *App) View() tea.View {
 	if !m.ready {
-		return "Loading..."
+		return m.makeView(m.loadingSpinner.View() + " Loading...")
 	}
 
 	if m.searchModal != nil {
@@ -969,23 +999,24 @@ func (m *App) View() string {
 		bg := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")).
 			Background(lipgloss.Color("0"))
-		padding := (m.width - 60) / 2
+		modalWidth := max(min(m.width*80/100, 70), 40)
+		padding := (m.width - modalWidth) / 2
 		if padding < 5 {
 			padding = 5
 		}
-		return lipgloss.JoinVertical(
+		return m.makeView(lipgloss.JoinVertical(
 			lipgloss.Top,
 			bg.Render(strings.Repeat("\n", 5)),
 			lipgloss.JoinHorizontal(
 				lipgloss.Top,
 				strings.Repeat(" ", padding),
-				lipgloss.NewStyle().Width(60).Render(overlay),
+				lipgloss.NewStyle().Width(modalWidth).Render(overlay.Content),
 			),
-		)
+		))
 	}
 
 	if m.helpModal {
-		return m.renderHelpOverlay()
+		return m.makeView(m.renderHelpOverlay())
 	}
 
 	if m.importModal != nil {
@@ -993,19 +1024,20 @@ func (m *App) View() string {
 		bg := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")).
 			Background(lipgloss.Color("0"))
-		padding := (m.width - 60) / 2
+		modalWidth := max(min(m.width*80/100, 70), 50)
+		padding := (m.width - modalWidth) / 2
 		if padding < 5 {
 			padding = 5
 		}
-		return lipgloss.JoinVertical(
+		return m.makeView(lipgloss.JoinVertical(
 			lipgloss.Top,
 			bg.Render(strings.Repeat("\n", 5)),
 			lipgloss.JoinHorizontal(
 				lipgloss.Top,
 				strings.Repeat(" ", padding),
-				lipgloss.NewStyle().Width(60).Render(overlay),
+				lipgloss.NewStyle().Width(modalWidth).Render(overlay.Content),
 			),
-		)
+		))
 	}
 
 	if m.runnerModal != nil {
@@ -1013,19 +1045,20 @@ func (m *App) View() string {
 		bg := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")).
 			Background(lipgloss.Color("0"))
-		padding := (m.width - 60) / 2
+		modalWidth := max(min(m.width*80/100, 70), 50)
+		padding := (m.width - modalWidth) / 2
 		if padding < 5 {
 			padding = 5
 		}
-		return lipgloss.JoinVertical(
+		return m.makeView(lipgloss.JoinVertical(
 			lipgloss.Top,
 			bg.Render(strings.Repeat("\n", 5)),
 			lipgloss.JoinHorizontal(
 				lipgloss.Top,
 				strings.Repeat(" ", padding),
-				lipgloss.NewStyle().Width(60).Render(overlay),
+				lipgloss.NewStyle().Width(modalWidth).Render(overlay.Content),
 			),
-		)
+		))
 	}
 
 	layout := CalculateLayout(m.width, m.height)
@@ -1034,7 +1067,7 @@ func (m *App) View() string {
 	status := m.renderStatusBar(layout)
 
 	content := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, main)
-	return lipgloss.JoinVertical(lipgloss.Left, content, status)
+	return m.makeView(lipgloss.JoinVertical(lipgloss.Left, content, status))
 }
 
 // renderSidebar renders the sidebar (requests list or history)
@@ -1112,7 +1145,7 @@ func formatTimestamp(ts int64) string {
 }
 
 // methodTextColor returns the lipgloss color for an HTTP method
-func methodTextColor(method string) lipgloss.Color {
+func methodTextColor(method string) color.Color {
 	switch strings.ToUpper(method) {
 	case "GET":
 		return lipgloss.Color("82")
@@ -1142,7 +1175,7 @@ func (m *App) renderMain(layout Layout) string {
 	if m.activeTab < len(m.tabs) {
 		tab := m.tabs[m.activeTab]
 		if tab.Builder != nil {
-			sb.WriteString(tab.Builder.View())
+			sb.WriteString(tab.Builder.View().Content)
 		}
 	} else {
 		sb.WriteString(m.renderWelcome())

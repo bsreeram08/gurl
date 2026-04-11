@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/atotto/clipboard"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	"charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/formatter"
 	"github.com/sreeram/gurl/internal/protocols/sse"
@@ -49,7 +49,7 @@ type ResponseViewer struct {
 
 // NewResponseViewer creates a new response viewer component
 func NewResponseViewer() *ResponseViewer {
-	vp := viewport.New(80, 20)
+	vp := viewport.New(viewport.WithWidth(80), viewport.WithHeight(20))
 
 	return &ResponseViewer{
 		activeTab: TabBody,
@@ -304,11 +304,10 @@ func (rv *ResponseViewer) SetTab(tab ResponseTab) {
 }
 
 // handleKeyPress handles keyboard input
-func (rv *ResponseViewer) handleKeyPress(msg tea.KeyMsg) bool {
-	switch msg.Type {
-	case tea.KeyRunes:
-		runeStr := string(msg.Runes)
-		switch runeStr {
+func (rv *ResponseViewer) handleKeyPress(msg tea.KeyPressMsg) bool {
+	// In v2, printable characters have non-empty Text field
+	if msg.Text != "" {
+		switch msg.Text {
 		case "b":
 			rv.SetTab(TabBody)
 			return true
@@ -328,11 +327,22 @@ func (rv *ResponseViewer) handleKeyPress(msg tea.KeyMsg) bool {
 		case "y":
 			rv.copied = true
 			rv.CopyToClipboard()
+			// Reset copied feedback after 2 seconds
+			time.AfterFunc(2*time.Second, func() {
+				rv.copied = false
+			})
 			return true
 		case "s":
 			rv.saved = true
+			// Reset saved feedback after 2 seconds
+			time.AfterFunc(2*time.Second, func() {
+				rv.saved = false
+			})
 			return true
 		}
+	}
+
+	switch msg.Code {
 	case tea.KeyUp, tea.KeyDown:
 		// Handled by viewport
 		return false
@@ -342,47 +352,49 @@ func (rv *ResponseViewer) handleKeyPress(msg tea.KeyMsg) bool {
 }
 
 // View renders the response viewer
-func (rv *ResponseViewer) View() string {
+func (rv *ResponseViewer) View() tea.View {
+	var content string
 	if rv.response == nil {
-		return Style.WelcomeText.Render("  Send a request to see the response")
+		content = Style.WelcomeText.Render("  Send a request to see the response")
+	} else {
+		var sb strings.Builder
+
+		// Status line with status code, time, size
+		statusColor := rv.statusCodeColor()
+		statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Bold(true)
+
+		sb.WriteString(fmt.Sprintf("  %s %s %s\n",
+			statusStyle.Render(fmt.Sprintf("%d %s", rv.response.StatusCode, http.StatusText(rv.response.StatusCode))),
+			Style.PlainText.Render(rv.response.Duration.String()),
+			Style.PlainText.Render(formatSize(rv.response.Size)),
+		))
+
+		// Tab bar
+		sb.WriteString(rv.renderTabBar())
+		sb.WriteString("\n")
+
+		// Content based on active tab
+		switch rv.activeTab {
+		case TabBody:
+			sb.WriteString(rv.viewport.View())
+		case TabHeaders:
+			sb.WriteString(rv.formatHeaders())
+		case TabCookies:
+			sb.WriteString(rv.formatCookies())
+		case TabTiming:
+			sb.WriteString(rv.formatTiming())
+		}
+
+		// Copy/save feedback
+		if rv.copied {
+			sb.WriteString(Style.Hint.Render("  Copied!"))
+		} else if rv.saved {
+			sb.WriteString(Style.Hint.Render("  Saved!"))
+		}
+
+		content = sb.String()
 	}
-
-	var sb strings.Builder
-
-	// Status line with status code, time, size
-	statusColor := rv.statusCodeColor()
-	statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Bold(true)
-
-	sb.WriteString(fmt.Sprintf("  %s %s %s\n",
-		statusStyle.Render(fmt.Sprintf("%d %s", rv.response.StatusCode, http.StatusText(rv.response.StatusCode))),
-		Style.PlainText.Render(rv.response.Duration.String()),
-		Style.PlainText.Render(formatSize(rv.response.Size)),
-	))
-
-	// Tab bar
-	sb.WriteString(rv.renderTabBar())
-	sb.WriteString("\n")
-
-	// Content based on active tab
-	switch rv.activeTab {
-	case TabBody:
-		sb.WriteString(rv.viewport.View())
-	case TabHeaders:
-		sb.WriteString(rv.formatHeaders())
-	case TabCookies:
-		sb.WriteString(rv.formatCookies())
-	case TabTiming:
-		sb.WriteString(rv.formatTiming())
-	}
-
-	// Copy/save feedback
-	if rv.copied {
-		sb.WriteString(Style.Hint.Render("  Copied!"))
-	} else if rv.saved {
-		sb.WriteString(Style.Hint.Render("  Saved!"))
-	}
-
-	return sb.String()
+	return tea.NewView(content)
 }
 
 // renderTabBar renders the tab bar
@@ -407,23 +419,23 @@ func (rv *ResponseViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		rv.width = msg.Width
 		rv.height = msg.Height
-		rv.viewport.Width = msg.Width - 4
-		rv.viewport.Height = msg.Height - 8
+		rv.viewport.SetWidth(msg.Width - 4)
+		rv.viewport.SetHeight(msg.Height - 8)
 		rv.updateViewportContent()
 		return rv, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if rv.handleKeyPress(msg) {
 			return rv, nil
 		}
 
 		// Pass to viewport for scrolling
 		if IsNavigateUpKey(msg.String()) {
-			rv.viewport.LineUp(3)
+			rv.viewport.ScrollUp(3)
 			return rv, nil
 		}
 		if IsNavigateDownKey(msg.String()) {
-			rv.viewport.LineDown(3)
+			rv.viewport.ScrollDown(3)
 			return rv, nil
 		}
 
@@ -482,7 +494,7 @@ func (sv *StreamingViewer) Init() tea.Cmd {
 
 func (sv *StreamingViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if sv.connected {
 			if sv.protocol == "ws" || sv.protocol == "wss" {
 				if msg.String() == "enter" && sv.input.Value() != "" {
@@ -497,7 +509,7 @@ func (sv *StreamingViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return sv, nil
 }
 
-func (sv *StreamingViewer) View() string {
+func (sv *StreamingViewer) View() tea.View {
 	var sb strings.Builder
 
 	if !sv.connected && !sv.connecting {
@@ -556,7 +568,7 @@ func (sv *StreamingViewer) View() string {
 		sb.WriteString(sv.input.View())
 	}
 
-	return sb.String()
+	return tea.NewView(sb.String())
 }
 
 func (sv *StreamingViewer) Connect() tea.Cmd {

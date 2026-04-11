@@ -1,7 +1,9 @@
 package tui
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"image/color"
+
+	"charm.land/lipgloss/v2"
 )
 
 // Theme represents a color theme variant
@@ -66,7 +68,7 @@ var colorSchemes = map[Theme]ColorScheme{
 var currentTheme = Dark
 
 // Color returns the semantic color for the given token
-func Color(token string) lipgloss.Color {
+func Color(token string) color.Color {
 	return lipgloss.Color(colorSchemes[currentTheme].get(token))
 }
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/charmbracelet/bubbletea"
+	"charm.land/bubbletea/v2"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/internal/tui"
 	"github.com/sreeram/gurl/pkg/types"
@@ -28,9 +28,7 @@ and executing your saved API requests in a 3-panel layout.`,
 			app := tui.NewApp(db, config)
 
 			// Run the bubbletea program
-			p := tea.NewProgram(app,
-				tea.WithAltScreen(), // Use alternate screen buffer
-			)
+			p := tea.NewProgram(app)
 
 			if _, err := p.Run(); err != nil {
 				return fmt.Errorf("failed to run TUI: %w", err)
@@ -46,10 +44,7 @@ func RunTUI(db storage.DB) error {
 	config := &types.Config{}
 	app := tui.NewApp(db, config)
 
-	p := tea.NewProgram(app,
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
+	p := tea.NewProgram(app)
 
 	_, err := p.Run()
 	return err
@@ -60,10 +55,7 @@ func ExitWithTUI(db storage.DB) {
 	config := &types.Config{}
 	app := tui.NewApp(db, config)
 
-	p := tea.NewProgram(app,
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
+	p := tea.NewProgram(app)
 
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

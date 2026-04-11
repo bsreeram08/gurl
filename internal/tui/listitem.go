@@ -2,9 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
@@ -44,7 +45,7 @@ func (i RequestItem) MethodBadge() string {
 }
 
 // getMethodColor returns the lipgloss color for an HTTP method using switch
-func getMethodColor(method string) lipgloss.Color {
+func getMethodColor(method string) color.Color {
 	switch method {
 	case "GET":
 		return lipgloss.Color("green")

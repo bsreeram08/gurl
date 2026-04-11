@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
@@ -355,9 +355,12 @@ func (rb *RequestBuilder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		rb.width = msg.Width
 		rb.height = msg.Height
+		// Resize body input to available space
+		rb.bodyInput.SetWidth(msg.Width - 20) // Account for padding and borders
+		rb.bodyInput.SetHeight(msg.Height - 15) // Account for headers, tabs, etc.
 		return rb, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return rb.handleKeyPress(msg)
 
 	case BuilderRequestSelectedMsg:
@@ -391,29 +394,31 @@ func (rb *RequestBuilder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleKeyPress handles keyboard input
-func (rb *RequestBuilder) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle sending
-	if msg.Type == tea.KeyCtrlJ && rb.activeSection == SectionSend {
+func (rb *RequestBuilder) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	keyStr := msg.String()
+
+	// Handle sending - Ctrl+J (or Ctrl+Enter) in send section
+	if (keyStr == "ctrl+j" || keyStr == "ctrl+enter") && rb.activeSection == SectionSend {
 		return rb, rb.sendRequest()
 	}
 
-	// Ctrl+Enter sends request
-	if msg.Type == tea.KeyCtrlC {
+	// Ctrl+C cancels (but doesn't quit)
+	if keyStr == "ctrl+c" {
 		return rb, nil
 	}
 
 	// Ctrl+S saves request
-	if msg.Type == tea.KeyCtrlS {
+	if keyStr == "ctrl+s" {
 		return rb, rb.saveRequest()
 	}
 
 	// Tab navigates sections
-	if msg.String() == "tab" {
+	if keyStr == "tab" {
 		rb.nextSection()
 		return rb, nil
 	}
 
-	if msg.String() == "shift+tab" {
+	if keyStr == "shift+tab" {
 		rb.prevSection()
 		return rb, nil
 	}
@@ -425,7 +430,7 @@ func (rb *RequestBuilder) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case SectionURL:
 		if rb.showSuggestions {
-			switch msg.Type {
+			switch msg.Code {
 			case tea.KeyUp:
 				if len(rb.suggestions) > 0 {
 					rb.suggestionIndex--
@@ -467,7 +472,7 @@ func (rb *RequestBuilder) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return rb.handleAuthKey(msg)
 
 	case SectionSend:
-		if msg.Type == tea.KeyEnter {
+		if msg.Code == tea.KeyEnter {
 			return rb, rb.sendRequest()
 		}
 		return rb, nil
@@ -476,11 +481,10 @@ func (rb *RequestBuilder) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return rb, nil
 }
 
-func (rb *RequestBuilder) handleMethodKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (rb *RequestBuilder) handleMethodKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// 'g' then 'm' cycles methods (g then m shortcut)
-	switch msg.Type {
-	case tea.KeyRunes:
-		runes := string(msg.Runes)
+	if len(msg.Text) > 0 {
+		runes := msg.Text
 		if runes == "g" || runes == "G" {
 			// Start of g+m shortcut, do nothing yet
 			return rb, nil
@@ -490,6 +494,8 @@ func (rb *RequestBuilder) handleMethodKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			rb.methodIndex = (rb.methodIndex + 1) % len(rb.methods)
 			return rb, nil
 		}
+	}
+	switch msg.Code {
 	case tea.KeyUp, tea.KeyLeft:
 		rb.methodIndex--
 		if rb.methodIndex < 0 {
@@ -506,15 +512,15 @@ func (rb *RequestBuilder) handleMethodKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return rb, nil
 }
 
-func (rb *RequestBuilder) handleHeadersKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (rb *RequestBuilder) handleHeadersKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// 'a' adds a new header
-	if msg.Type == tea.KeyRunes && string(msg.Runes) == "a" {
+	if len(msg.Text) > 0 && msg.Text == "a" {
 		rb.addHeaderRow()
 		return rb, nil
 	}
 
 	// 'd' deletes focused header
-	if msg.Type == tea.KeyRunes && string(msg.Runes) == "d" {
+	if len(msg.Text) > 0 && msg.Text == "d" {
 		// Find focused row and remove it
 		for i := range rb.headerInputs {
 			if rb.headerInputs[i].keyInput.Focused() || rb.headerInputs[i].valueInput.Focused() {
@@ -526,7 +532,7 @@ func (rb *RequestBuilder) handleHeadersKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 	}
 
 	// Escape exits headers section
-	if msg.Type == tea.KeyEscape {
+	if msg.Code == tea.KeyEscape {
 		rb.nextSection()
 		return rb, nil
 	}
@@ -547,15 +553,15 @@ func (rb *RequestBuilder) handleHeadersKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 	return rb, nil
 }
 
-func (rb *RequestBuilder) handleQueryParamsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (rb *RequestBuilder) handleQueryParamsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// 'a' adds a new param
-	if msg.Type == tea.KeyRunes && string(msg.Runes) == "a" {
+	if len(msg.Text) > 0 && msg.Text == "a" {
 		rb.addQueryRow()
 		return rb, nil
 	}
 
 	// 'd' deletes focused param
-	if msg.Type == tea.KeyRunes && string(msg.Runes) == "d" {
+	if len(msg.Text) > 0 && msg.Text == "d" {
 		for i := range rb.queryInputs {
 			if rb.queryInputs[i].keyInput.Focused() || rb.queryInputs[i].valueInput.Focused() {
 				rb.removeQueryRow(i)
@@ -566,7 +572,7 @@ func (rb *RequestBuilder) handleQueryParamsKey(msg tea.KeyMsg) (tea.Model, tea.C
 	}
 
 	// Escape exits section
-	if msg.Type == tea.KeyEscape {
+	if msg.Code == tea.KeyEscape {
 		rb.nextSection()
 		return rb, nil
 	}
@@ -587,16 +593,16 @@ func (rb *RequestBuilder) handleQueryParamsKey(msg tea.KeyMsg) (tea.Model, tea.C
 	return rb, nil
 }
 
-func (rb *RequestBuilder) handleAuthKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (rb *RequestBuilder) handleAuthKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Escape exits section
-	if msg.Type == tea.KeyEscape {
+	if msg.Code == tea.KeyEscape {
 		rb.nextSection()
 		return rb, nil
 	}
 
 	// Number keys for auth type selection
-	if msg.Type == tea.KeyRunes {
-		switch string(msg.Runes) {
+	if len(msg.Text) > 0 {
+		switch msg.Text {
 		case "1":
 			rb.authType = "none"
 		case "2":
@@ -909,37 +915,39 @@ func detectContentType(headers []types.Header, body string) string {
 }
 
 // View implements tea.Model.View
-func (rb *RequestBuilder) View() string {
+func (rb *RequestBuilder) View() tea.View {
+	var content string
 	if rb.editing == nil {
-		return rb.welcomeView()
+		content = rb.welcomeView()
+	} else {
+		var sb strings.Builder
+
+		// Method + URL section
+		sb.WriteString(rb.renderMethodURL())
+		sb.WriteString("\n")
+
+		// Headers section
+		sb.WriteString(rb.renderHeaders())
+		sb.WriteString("\n")
+
+		// Query params section
+		sb.WriteString(rb.renderQueryParams())
+		sb.WriteString("\n")
+
+		// Body section
+		sb.WriteString(rb.renderBody())
+		sb.WriteString("\n")
+
+		// Auth section
+		sb.WriteString(rb.renderAuth())
+		sb.WriteString("\n")
+
+		// Send section
+		sb.WriteString(rb.renderSend())
+
+		content = sb.String()
 	}
-
-	var sb strings.Builder
-
-	// Method + URL section
-	sb.WriteString(rb.renderMethodURL())
-	sb.WriteString("\n")
-
-	// Headers section
-	sb.WriteString(rb.renderHeaders())
-	sb.WriteString("\n")
-
-	// Query params section
-	sb.WriteString(rb.renderQueryParams())
-	sb.WriteString("\n")
-
-	// Body section
-	sb.WriteString(rb.renderBody())
-	sb.WriteString("\n")
-
-	// Auth section
-	sb.WriteString(rb.renderAuth())
-	sb.WriteString("\n")
-
-	// Send section
-	sb.WriteString(rb.renderSend())
-
-	return sb.String()
+	return tea.NewView(content)
 }
 
 func (rb *RequestBuilder) welcomeView() string {

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 )
@@ -165,12 +165,12 @@ func (rl *RequestList) ViewTree() string {
 	return scrollIndicator + sb.String()
 }
 
-func (rl *RequestList) View() string { return rl.ViewTree() }
+func (rl *RequestList) View() tea.View { return tea.NewView(rl.ViewTree()) }
 
 func (rl *RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
+	case tea.KeyPressMsg:
+		switch msg.Code {
 		case tea.KeyUp:
 			rl.CursorUp()
 		case tea.KeyDown:

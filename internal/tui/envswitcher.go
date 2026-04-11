@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/sreeram/gurl/internal/env"
 )
 
@@ -128,7 +128,7 @@ func (es *EnvSwitcher) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		es.height = msg.Height
 		return es, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return es.handleKeyPress(msg)
 	}
 
@@ -136,7 +136,7 @@ func (es *EnvSwitcher) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleKeyPress handles keyboard input using switch on key.String()
-func (es *EnvSwitcher) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (es *EnvSwitcher) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "esc":
 		es.mode = EnvModeList
@@ -438,22 +438,22 @@ func (es *EnvSwitcher) handleBackspace() (tea.Model, tea.Cmd) {
 }
 
 // View renders the environment switcher
-func (es *EnvSwitcher) View() string {
+func (es *EnvSwitcher) View() tea.View {
 	switch es.mode {
 	case EnvModeList:
-		return es.viewList()
+		return tea.NewView(es.viewList())
 	case EnvModeCreate:
-		return es.viewCreate()
+		return tea.NewView(es.viewCreate())
 	case EnvModeEdit:
-		return es.viewEdit()
+		return tea.NewView(es.viewEdit())
 	case EnvModeDeleteConfirm:
-		return es.viewDeleteConfirm()
+		return tea.NewView(es.viewDeleteConfirm())
 	case EnvModeImport:
-		return es.viewImport()
+		return tea.NewView(es.viewImport())
 	case EnvModeVarEdit:
-		return es.viewVarEdit()
+		return tea.NewView(es.viewVarEdit())
 	default:
-		return es.viewList()
+		return tea.NewView(es.viewList())
 	}
 }
 

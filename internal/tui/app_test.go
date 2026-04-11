@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbletea"
+	"charm.land/bubbletea/v2"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 )
@@ -331,17 +331,17 @@ func TestApp_PanelFocus_ShiftTabCyclesReverse(t *testing.T) {
 	config := &types.Config{}
 	app := NewApp(db, config)
 
-	app.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 	if app.focusedPanel != PanelStatusbar {
 		t.Errorf("after Shift+Tab, focus should be Statusbar, got %v", app.focusedPanel)
 	}
 
-	app.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 	if app.focusedPanel != PanelMain {
 		t.Errorf("after second Shift+Tab, focus should be Main, got %v", app.focusedPanel)
 	}
 
-	app.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 	if app.focusedPanel != PanelSidebar {
 		t.Errorf("after third Shift+Tab, focus should be Sidebar, got %v", app.focusedPanel)
 	}
@@ -443,7 +443,7 @@ func TestApp_Keyboard_ctrlC_Quits(t *testing.T) {
 	config := &types.Config{}
 	app := NewApp(db, config)
 
-	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_, cmd := app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 
 	if !app.quitting {
 		t.Error("App should be in quitting state after Ctrl+C")
@@ -510,7 +510,7 @@ func TestApp_Keyboard_helpModal_Esc_Closes(t *testing.T) {
 	app := NewApp(db, config)
 
 	app.helpModal = true
-	app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	if app.helpModal {
 		t.Error("helpModal should be false after Escape")
@@ -600,7 +600,7 @@ func TestApp_SearchModal_EscapeCloses(t *testing.T) {
 
 	app.searchModal = NewSearchModal(nil, app.width, app.height)
 
-	_, cmd := app.searchModal.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd := app.searchModal.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	if cmd != nil {
 		t.Error("SearchModal.Update should return nil on Escape")
@@ -621,7 +621,7 @@ func TestApp_ImportModal_EscapeCloses(t *testing.T) {
 
 	app.importModal = NewImportModal(app.width, app.height)
 
-	result := app.importModal.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	result := app.importModal.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	if result != nil {
 		t.Error("ImportModal.Update should return nil on Escape")

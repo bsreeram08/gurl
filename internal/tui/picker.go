@@ -3,8 +3,8 @@ package tui
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
@@ -50,7 +50,7 @@ func (p *Picker) Init() tea.Cmd { return nil }
 
 func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			p.canceled = true
@@ -84,8 +84,8 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		default:
 			// Only accept printable single chars
-			if len(msg.Runes) == 1 {
-				p.query += string(msg.Runes)
+			if len(msg.Text) == 1 {
+				p.query += msg.Text
 				p.applyFilter()
 			}
 		}
@@ -93,7 +93,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return p, nil
 }
 
-func (p *Picker) View() string {
+func (p *Picker) View() tea.View {
 	var sb strings.Builder
 
 	// Filter prompt
@@ -124,7 +124,7 @@ func (p *Picker) View() string {
 	sb.WriteString("\n")
 	sb.WriteString(pickerHint.Render("↑/↓ navigate · enter run · esc cancel"))
 
-	return pickerBorder.Render(sb.String())
+	return tea.NewView(pickerBorder.Render(sb.String()))
 }
 
 func (p *Picker) applyFilter() {

@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbletea"
+	"charm.land/bubbletea/v2"
 )
 
 // KeyBindings contains common key bindings for consistent keyboard shortcuts

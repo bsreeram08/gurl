@@ -3,8 +3,8 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // HelpPanel is a sub-model that displays keyboard shortcuts
@@ -65,7 +65,7 @@ func (h *HelpPanel) Init() tea.Cmd {
 // Update implements tea.Model.Update
 func (h *HelpPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return h.handleKeyPress(msg)
 	case tea.WindowSizeMsg:
 		h.SetSize(msg.Width, msg.Height)
@@ -74,7 +74,7 @@ func (h *HelpPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleKeyPress handles keyboard input for the help panel
-func (h *HelpPanel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (h *HelpPanel) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	switch key {
 	case "?":
@@ -88,11 +88,11 @@ func (h *HelpPanel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model.View - renders the help overlay
-func (h *HelpPanel) View() string {
+func (h *HelpPanel) View() tea.View {
 	if !h.visible {
-		return ""
+		return tea.NewView("")
 	}
-	return h.renderHelpOverlay()
+	return tea.NewView(h.renderHelpOverlay())
 }
 
 // renderHelpOverlay renders the help panel as an overlay
