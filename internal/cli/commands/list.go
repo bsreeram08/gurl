@@ -62,12 +62,16 @@ func ListCommand(db storage.DB) *cli.Command {
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
+			sortVal := c.String("sort")
+			if sortVal != "name" && sortVal != "updated" && sortVal != "collection" {
+				return fmt.Errorf("invalid sort '%s': must be one of name, updated, collection", sortVal)
+			}
 			opts := &storage.ListOptions{
 				Collection: c.String("collection"),
 				Tag:        c.String("tag"),
 				Pattern:    c.String("pattern"),
 				Limit:      c.Int("limit"),
-				Sort:       c.String("sort"),
+				Sort:       sortVal,
 			}
 
 			requests, err := db.ListRequests(opts)

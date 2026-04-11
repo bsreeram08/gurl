@@ -48,7 +48,7 @@ func SequenceCommand(db storage.DB) *cli.Command {
 				Action: func(ctx context.Context, c *cli.Command) error {
 					args := c.Args()
 					if args.Len() < 1 {
-						return fmt.Errorf("collection name required")
+						return fmt.Errorf("collection name argument is required")
 					}
 					collection := args.Get(0)
 					reqs, err := runner.GetSequence(db, collection)

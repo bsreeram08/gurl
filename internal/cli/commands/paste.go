@@ -32,11 +32,11 @@ func PasteCommand(db storage.DB) *cli.Command {
 			curlCmd := []string{"curl", "-X", req.Method}
 
 			for _, header := range req.Headers {
-				curlCmd = append(curlCmd, "-H", fmt.Sprintf("%s: %s", header.Key, header.Value))
+				curlCmd = append(curlCmd, "-H", fmt.Sprintf("%s: %s", shellEscape(header.Key), shellEscape(header.Value)))
 			}
 
 			if req.Body != "" {
-				curlCmd = append(curlCmd, "-d", req.Body)
+				curlCmd = append(curlCmd, "-d", shellEscape(req.Body))
 			}
 
 			curlCmd = append(curlCmd, req.URL)

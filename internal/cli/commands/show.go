@@ -41,6 +41,9 @@ func ShowCommand(db storage.DB) *cli.Command {
 			}
 
 			format := c.String("format")
+			if format != "pretty" && format != "json" && format != "curl" {
+				return fmt.Errorf("invalid format '%s': must be one of pretty, json, curl", format)
+			}
 			switch format {
 			case "json":
 				data, err := json.MarshalIndent(req, "", "  ")

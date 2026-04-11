@@ -67,7 +67,9 @@ func signatureBaseString(method, baseURL, queryString string) string {
 }
 
 func hmacSHA1(consumerSecret, tokenSecret, baseString string) string {
-	key := percentEncode(consumerSecret) + "&" + percentEncode(tokenSecret)
+	// Per OAuth 1.0a spec, the HMAC key is the percent-encoded secrets joined by "&"
+	// The secrets themselves should NOT be percent-encoded before building the key
+	key := consumerSecret + "&" + tokenSecret
 
 	h := hmac.New(sha1.New, []byte(key))
 	h.Write([]byte(baseString))

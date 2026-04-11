@@ -41,6 +41,9 @@ func (c *CSVOutput) Render(ctx *plugins.ResponseContext) string {
 	}
 
 	_ = writer.Write(record)
+	if err := writer.Error(); err != nil {
+		return ""
+	}
 	writer.Flush()
 
 	return sb.String()

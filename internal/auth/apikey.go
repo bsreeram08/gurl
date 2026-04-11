@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/sreeram/gurl/internal/client"
@@ -35,10 +36,12 @@ func (h *APIKeyHandler) Apply(req *client.Request, params map[string]string) {
 		if paramName == "" {
 			paramName = "api_key"
 		}
+		// URL-escape the key value for query params
+		escapedKey := url.QueryEscape(key)
 		if strings.Contains(req.URL, "?") {
-			req.URL = req.URL + "&" + paramName + "=" + key
+			req.URL = req.URL + "&" + paramName + "=" + escapedKey
 		} else {
-			req.URL = req.URL + "?" + paramName + "=" + key
+			req.URL = req.URL + "?" + paramName + "=" + escapedKey
 		}
 	default:
 		if in != "" {

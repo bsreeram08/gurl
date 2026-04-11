@@ -49,12 +49,16 @@ func EnvCommand(db EnvStorage) *cli.Command {
 
 					newEnv := env.NewEnvironment(name, "")
 
-					for _, v := range c.StringSlice("var") {
-						parts := strings.SplitN(v, "=", 2)
-						if len(parts) == 2 {
-							newEnv.SetVariable(parts[0], parts[1])
-						}
+				for _, v := range c.StringSlice("var") {
+					parts := strings.SplitN(v, "=", 2)
+					if len(parts) != 2 {
+						return fmt.Errorf("invalid variable format '%s': must be KEY=VALUE", v)
 					}
+					if parts[0] == "" {
+						return fmt.Errorf("invalid variable format '%s': KEY cannot be empty", v)
+					}
+					newEnv.SetVariable(parts[0], parts[1])
+				}
 
 					for _, key := range c.StringSlice("secret") {
 						newEnv.SecretKeys[key] = true
@@ -113,10 +117,13 @@ func EnvCommand(db EnvStorage) *cli.Command {
 					}
 					name := args.Get(0)
 
-					env, err := db.GetEnvByName(name)
-					if err != nil || env == nil {
-						return fmt.Errorf("environment '%s' not found", name)
-					}
+				env, err := db.GetEnvByName(name)
+				if err != nil {
+					return fmt.Errorf("failed to get environment '%s': %w", name, err)
+				}
+				if env == nil {
+					return fmt.Errorf("environment '%s' not found", name)
+				}
 
 					if err := db.SetActiveEnv(name); err != nil {
 						return fmt.Errorf("failed to switch environment: %w", err)
@@ -137,10 +144,13 @@ func EnvCommand(db EnvStorage) *cli.Command {
 					}
 					name := args.Get(0)
 
-					env, err := db.GetEnvByName(name)
-					if err != nil || env == nil {
-						return fmt.Errorf("environment '%s' not found", name)
-					}
+				env, err := db.GetEnvByName(name)
+				if err != nil {
+					return fmt.Errorf("failed to get environment '%s': %w", name, err)
+				}
+				if env == nil {
+					return fmt.Errorf("environment '%s' not found", name)
+				}
 
 					if err := db.DeleteEnv(env.ID); err != nil {
 						return fmt.Errorf("failed to delete environment: %w", err)
@@ -161,10 +171,13 @@ func EnvCommand(db EnvStorage) *cli.Command {
 					}
 					name := args.Get(0)
 
-					env, err := db.GetEnvByName(name)
-					if err != nil || env == nil {
-						return fmt.Errorf("environment '%s' not found", name)
-					}
+				env, err := db.GetEnvByName(name)
+				if err != nil {
+					return fmt.Errorf("failed to get environment '%s': %w", name, err)
+				}
+				if env == nil {
+					return fmt.Errorf("environment '%s' not found", name)
+				}
 
 					fmt.Printf("Environment: %s\n", env.Name)
 					fmt.Printf("ID: %s\n", env.ID)
@@ -205,17 +218,24 @@ func EnvCommand(db EnvStorage) *cli.Command {
 					}
 					name := args.Get(0)
 
-					env, err := db.GetEnvByName(name)
-					if err != nil || env == nil {
-						return fmt.Errorf("environment '%s' not found", name)
-					}
+				env, err := db.GetEnvByName(name)
+				if err != nil {
+					return fmt.Errorf("failed to get environment '%s': %w", name, err)
+				}
+				if env == nil {
+					return fmt.Errorf("environment '%s' not found", name)
+				}
 
-					for _, v := range c.StringSlice("var") {
-						parts := strings.SplitN(v, "=", 2)
-						if len(parts) == 2 {
-							env.SetVariable(parts[0], parts[1])
-						}
+				for _, v := range c.StringSlice("var") {
+					parts := strings.SplitN(v, "=", 2)
+					if len(parts) != 2 {
+						return fmt.Errorf("invalid variable format '%s': must be KEY=VALUE", v)
 					}
+					if parts[0] == "" {
+						return fmt.Errorf("invalid variable format '%s': KEY cannot be empty", v)
+					}
+					env.SetVariable(parts[0], parts[1])
+				}
 
 					for _, key := range c.StringSlice("secret") {
 						env.SecretKeys[key] = true
@@ -248,7 +268,10 @@ func EnvCommand(db EnvStorage) *cli.Command {
 					name := args.Get(0)
 
 					env, err := db.GetEnvByName(name)
-					if err != nil || env == nil {
+					if err != nil {
+						return fmt.Errorf("failed to get environment '%s': %w", name, err)
+					}
+					if env == nil {
 						return fmt.Errorf("environment '%s' not found", name)
 					}
 
@@ -284,22 +307,22 @@ func EnvCommand(db EnvStorage) *cli.Command {
 					name := args.Get(0)
 
 					filePath := c.String("file")
-					if filePath == "" {
-						return fmt.Errorf("--file flag is required")
-					}
 
 					vars, err := env.ParseDotenvFile(filePath)
 					if err != nil {
 						return fmt.Errorf("failed to parse .env file: %w", err)
 					}
 
-					envObj, err := db.GetEnvByName(name)
-					if err != nil {
-						return fmt.Errorf("failed to get environment: %w", err)
-					}
-					if envObj == nil {
-						envObj = env.NewEnvironment(name, "")
-					}
+				envObj, err := db.GetEnvByName(name)
+				if err != nil && envObj == nil {
+					// Only create new if error indicates not found, not other errors
+					envObj = env.NewEnvironment(name, "")
+				} else if err != nil {
+					return fmt.Errorf("failed to get environment: %w", err)
+				}
+				if envObj == nil {
+					envObj = env.NewEnvironment(name, "")
+				}
 
 					for k, v := range vars {
 						envObj.SetVariable(k, v)

@@ -41,7 +41,7 @@ func DiffCommand(db storage.DB) *cli.Command {
 			}
 
 			if len(history) < 2 {
-				return fmt.Errorf("not enough execution history to diff (need at least 2)")
+				return fmt.Errorf("not enough execution history to diff (need at least 2). Use --limit to specify how many history entries to fetch")
 			}
 
 			histA := history[0]

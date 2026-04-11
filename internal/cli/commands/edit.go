@@ -126,6 +126,8 @@ func EditCommand(db storage.DB) *cli.Command {
 						Value: strings.TrimSpace(h[idx+1:]),
 					})
 					changes = append(changes, fmt.Sprintf("added header %s", strings.TrimSpace(h[:idx])))
+				} else {
+					return fmt.Errorf("invalid header format '%s': missing ':' (expected 'Key: Value')", h)
 				}
 			}
 
@@ -175,7 +177,7 @@ func EditCommand(db storage.DB) *cli.Command {
 			for _, a := range c.StringSlice("assert") {
 				assertion, err := parseAssertion(a)
 				if err != nil {
-					return fmt.Errorf("invalid assertion format '%s': %w", a, err)
+					return fmt.Errorf("invalid assertion '%s': %w (expected format: field=op=value)", a, err)
 				}
 				req.Assertions = append(req.Assertions, *assertion)
 				changes = append(changes, fmt.Sprintf("added assertion %s", a))

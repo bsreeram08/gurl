@@ -94,7 +94,7 @@ func ImportCommand(db storage.DB) *cli.Command {
 				}
 
 				if err := db.SaveRequest(req); err != nil {
-					fmt.Printf("⚠ Failed to import '%s': %v\n", req.Name, err)
+					fmt.Printf("✗ ERROR: Failed to import '%s': %v\n", req.Name, err)
 					continue
 				}
 

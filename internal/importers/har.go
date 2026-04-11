@@ -3,7 +3,9 @@ package importers
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/sreeram/gurl/pkg/types"
 )
@@ -206,11 +208,15 @@ func (h *HARImporter) entryToSavedRequest(entry *HAREntry, index int, pageMap ma
 		}
 	}
 
-	// Add cookies as headers if they're simple
-	for _, cookie := range entry.Request.Cookies {
+	// Add cookies as a single header
+	if len(entry.Request.Cookies) > 0 {
+		var cookieParts []string
+		for _, cookie := range entry.Request.Cookies {
+			cookieParts = append(cookieParts, cookie.Name+"="+cookie.Value)
+		}
 		headers = append(headers, types.Header{
 			Key:   "Cookie",
-			Value: cookie.Name + "=" + cookie.Value,
+			Value: strings.Join(cookieParts, "; "),
 		})
 	}
 
@@ -289,40 +295,19 @@ func (h *HARImporter) generateName(entry *HAREntry, index int) string {
 	return fmt.Sprintf("%s %s", entry.Request.Method, path)
 }
 
-// cleanPath cleans a URL path for display
-func cleanPath(path string) string {
-	// Remove protocol and host
-	if idx := 8; len(path) > idx {
-		if path[:8] == "https://" {
-			rest := path[8:]
-			if slashIdx := -1; true {
-				for i, c := range rest {
-					if c == '/' {
-						slashIdx = i
-						break
-					}
-				}
-				if slashIdx > 0 {
-					return rest[slashIdx:]
-				}
-			}
-		}
-		if path[:7] == "http://" {
-			rest := path[7:]
-			if slashIdx := -1; true {
-				for i, c := range rest {
-					if c == '/' {
-						slashIdx = i
-						break
-					}
-				}
-				if slashIdx > 0 {
-					return rest[slashIdx:]
-				}
-			}
-		}
+// cleanPath cleans a URL path for display, preserving query strings
+func cleanPath(rawURL string) string {
+	// Parse URL properly to preserve query string
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
 	}
-	return path
+
+	// Return path with query string if present
+	if u.RawQuery != "" {
+		return u.Path + "?" + u.RawQuery
+	}
+	return u.Path
 }
 
 // findPageID attempts to find the page ID for an entry

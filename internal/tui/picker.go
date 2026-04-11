@@ -65,11 +65,15 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up", "ctrl+p":
 			if p.cursor > 0 {
 				p.cursor--
+			} else if len(p.filtered) > 0 {
+				p.cursor = len(p.filtered) - 1
 			}
 
 		case "down", "ctrl+n":
 			if p.cursor < len(p.filtered)-1 {
 				p.cursor++
+			} else if len(p.filtered) > 0 {
+				p.cursor = 0
 			}
 
 		case "backspace":

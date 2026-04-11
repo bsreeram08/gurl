@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sreeram/gurl/internal/env"
@@ -38,6 +39,9 @@ type EnvSwitcher struct {
 	width         int
 	height        int
 	msgs          []tea.Msg
+	nameInput     textinput.Model
+	varsInput     textinput.Model
+	importInput   textinput.Model
 }
 
 // EnvChangedMsg is sent when the active environment changes
@@ -58,12 +62,27 @@ type EnvDeletedMsg struct {
 
 // NewEnvSwitcher creates a new environment switcher component
 func NewEnvSwitcher(envStorage *env.EnvStorage) *EnvSwitcher {
+	nameInput := textinput.New()
+	nameInput.Placeholder = "Environment name"
+	nameInput.Prompt = "> "
+
+	varsInput := textinput.New()
+	varsInput.Placeholder = "KEY=value, one per line"
+	varsInput.Prompt = "> "
+
+	importInput := textinput.New()
+	importInput.Placeholder = "Path to .env file"
+	importInput.Prompt = "> "
+
 	es := &EnvSwitcher{
 		envStorage:   envStorage,
 		envs:         []*env.Environment{},
 		cursor:       0,
 		mode:         EnvModeList,
 		editVarIndex: -1,
+		nameInput:    nameInput,
+		varsInput:    varsInput,
+		importInput:  importInput,
 	}
 
 	// Load environments
@@ -176,17 +195,29 @@ func (es *EnvSwitcher) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return es.handleBackspace()
 	}
 
-	// Handle typing in input modes
+	// Handle typing in input modes using textinput
 	if es.mode == EnvModeCreate || es.mode == EnvModeImport {
-		if msg.Type == tea.KeyRunes {
-			runes := string(msg.Runes)
-			if es.mode == EnvModeCreate && es.editVarIndex == 0 {
-				es.newEnvName += runes
-			} else if es.mode == EnvModeCreate && es.editVarIndex == 1 {
-				es.newEnvVars += runes
-			} else if es.mode == EnvModeImport {
-				es.importPath += runes
+		var input textinput.Model
+		switch es.mode {
+		case EnvModeCreate:
+			if es.editVarIndex == 0 {
+				input = es.nameInput
+			} else {
+				input = es.varsInput
 			}
+		case EnvModeImport:
+			input = es.importInput
+		}
+		input, _ = input.Update(msg)
+		switch es.mode {
+		case EnvModeCreate:
+			if es.editVarIndex == 0 {
+				es.nameInput = input
+			} else {
+				es.varsInput = input
+			}
+		case EnvModeImport:
+			es.importInput = input
 		}
 	}
 
@@ -201,6 +232,10 @@ func (es *EnvSwitcher) handleNavigateUp() (tea.Model, tea.Cmd) {
 			es.cursor--
 		}
 	case EnvModeVarEdit:
+		if es.editVarIndex > 0 {
+			es.editVarIndex--
+		}
+	case EnvModeCreate:
 		if es.editVarIndex > 0 {
 			es.editVarIndex--
 		}
@@ -282,18 +317,21 @@ func (es *EnvSwitcher) handleSelectEnv() (tea.Model, tea.Cmd) {
 
 // handleCreateEnv creates a new environment from input
 func (es *EnvSwitcher) handleCreateEnv() (tea.Model, tea.Cmd) {
-	if es.newEnvName == "" {
+	name := es.nameInput.Value()
+	vars := es.varsInput.Value()
+
+	if name == "" {
 		// Just move to vars input
 		es.editVarIndex = 1
 		return es, nil
 	}
 
 	// If we have vars, parse them
-	newEnv := env.NewEnvironment(es.newEnvName, "")
-	if es.newEnvVars != "" {
-		vars, err := env.ParseDotenv(es.newEnvVars)
+	newEnv := env.NewEnvironment(name, "")
+	if vars != "" {
+		envVars, err := env.ParseDotenv(vars)
 		if err == nil {
-			for k, v := range vars {
+			for k, v := range envVars {
 				newEnv.SetVariable(k, v)
 			}
 		}
@@ -307,23 +345,26 @@ func (es *EnvSwitcher) handleCreateEnv() (tea.Model, tea.Cmd) {
 	es.loadEnvs()
 	es.mode = EnvModeList
 	es.editVarIndex = -1
+	es.nameInput.SetValue("")
+	es.varsInput.SetValue("")
 
 	return es, nil
 }
 
 // handleImportEnv imports environment from .env file
 func (es *EnvSwitcher) handleImportEnv() (tea.Model, tea.Cmd) {
-	if es.importPath == "" {
+	path := es.importInput.Value()
+	if path == "" {
 		return es, nil
 	}
 
-	vars, err := env.ParseDotenvFile(es.importPath)
+	vars, err := env.ParseDotenvFile(path)
 	if err != nil {
 		return es, nil
 	}
 
 	// Get filename as env name
-	parts := strings.Split(es.importPath, "/")
+	parts := strings.Split(path, "/")
 	filename := parts[len(parts)-1]
 	envName := strings.TrimSuffix(filename, ".env")
 	if envName == "" {
@@ -342,7 +383,7 @@ func (es *EnvSwitcher) handleImportEnv() (tea.Model, tea.Cmd) {
 	es.msgs = append(es.msgs, EnvCreatedMsg{Env: newEnv})
 	es.loadEnvs()
 	es.mode = EnvModeList
-	es.importPath = ""
+	es.importInput.SetValue("")
 
 	return es, nil
 }

@@ -2,6 +2,8 @@ package auth
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,13 +15,15 @@ import (
 )
 
 type cachedToken struct {
-	accessToken string
-	expiresAt   time.Time
+	accessToken  string
+	refreshToken string
+	expiresAt    time.Time
 }
 
 type OAuth2Handler struct {
-	mu    sync.Mutex
-	cache map[string]cachedToken
+	mu     sync.Mutex
+	cache  map[string]cachedToken
+	client *http.Client
 }
 
 func (h *OAuth2Handler) Name() string {
@@ -27,9 +31,14 @@ func (h *OAuth2Handler) Name() string {
 }
 
 func (h *OAuth2Handler) Apply(req *client.Request, params map[string]string) {
+	h.mu.Lock()
 	if h.cache == nil {
 		h.cache = make(map[string]cachedToken)
 	}
+	if h.client == nil {
+		h.client = &http.Client{Timeout: 30 * time.Second}
+	}
+	h.mu.Unlock()
 
 	clientID := params["client_id"]
 	clientSecret := params["client_secret"]
@@ -55,14 +64,22 @@ func (h *OAuth2Handler) Apply(req *client.Request, params map[string]string) {
 func (h *OAuth2Handler) applyAuthCodeFlow(req *client.Request, params map[string]string, cacheKey, clientID, clientSecret, tokenURL string) {
 	authCode := params["auth_code"]
 	redirectURI := params["redirect_uri"]
+	registeredRedirectURI := params["registered_redirect_uri"]
 	scope := params["scope"]
 
 	if authCode == "" {
 		return
 	}
 
+	// Validate redirect_uri if registered one is provided
+	if registeredRedirectURI != "" {
+		if !validateRedirectURI(registeredRedirectURI, redirectURI) {
+			return
+		}
+	}
+
 	if token, ok := h.getCachedToken(cacheKey); ok {
-		h.setBearerHeader(req, token)
+		h.setBearerHeader(req, token.accessToken)
 		return
 	}
 
@@ -92,7 +109,7 @@ func (h *OAuth2Handler) applyClientCredentialsFlow(req *client.Request, params m
 	scope := params["scope"]
 
 	if token, ok := h.getCachedToken(cacheKey); ok {
-		h.setBearerHeader(req, token)
+		h.setBearerHeader(req, token.accessToken)
 		return
 	}
 
@@ -125,8 +142,41 @@ func (h *OAuth2Handler) applyClientCredentialsFlow(req *client.Request, params m
 	h.setBearerHeader(req, token.accessToken)
 }
 
+// validateRedirectURI checks that the sent redirect_uri matches the registered one
+// Per OAuth 2.0 RFC 6749, the client MUST validate that the redirect_uri matches
+func validateRedirectURI(registered, sent string) bool {
+	if registered == sent {
+		return true
+	}
+	// Handle exact match failure cases - be strict about matching
+	return false
+}
+
+// generateState creates a cryptographically random state parameter for CSRF protection
+// Per OAuth 2.0 RFC 6749, the state parameter is recommended to prevent CSRF attacks
+func generateState() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return base64.URLEncoding.EncodeToString(b)
+}
+
+// OAuth2State stores state for CSRF validation
+type OAuth2State struct {
+	State     string
+	CreatedAt time.Time
+}
+
 func (h *OAuth2Handler) fetchToken(tokenURL, body, contentType string) (cachedToken, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
+	// Get client reference without holding lock during network I/O
+	var client *http.Client
+	h.mu.Lock()
+	if h.client != nil {
+		client = h.client
+	} else {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	h.mu.Unlock()
+
 	resp, err := client.Post(tokenURL, contentType, bytes.NewBufferString(body))
 	if err != nil {
 		return cachedToken{}, err
@@ -134,13 +184,14 @@ func (h *OAuth2Handler) fetchToken(tokenURL, body, contentType string) (cachedTo
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return cachedToken{}, fmt.Errorf("token request failed")
+		return cachedToken{}, fmt.Errorf("token request failed: HTTP %d", resp.StatusCode)
 	}
 
 	var tokenResp struct {
-		AccessToken string `json:"access_token"`
-		TokenType   string `json:"token_type"`
-		ExpiresIn   int    `json:"expires_in"`
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		TokenType    string `json:"token_type"`
+		ExpiresIn    int    `json:"expires_in"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
@@ -150,26 +201,27 @@ func (h *OAuth2Handler) fetchToken(tokenURL, body, contentType string) (cachedTo
 	expiresAt := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 
 	return cachedToken{
-		accessToken: tokenResp.AccessToken,
-		expiresAt:   expiresAt,
+		accessToken:  tokenResp.AccessToken,
+		refreshToken: tokenResp.RefreshToken,
+		expiresAt:    expiresAt,
 	}, nil
 }
 
-func (h *OAuth2Handler) getCachedToken(cacheKey string) (string, bool) {
+func (h *OAuth2Handler) getCachedToken(cacheKey string) (cachedToken, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	token, ok := h.cache[cacheKey]
 	if !ok {
-		return "", false
+		return cachedToken{}, false
 	}
 
 	if time.Now().Add(30 * time.Second).After(token.expiresAt) {
 		delete(h.cache, cacheKey)
-		return "", false
+		return cachedToken{}, false
 	}
 
-	return token.accessToken, true
+	return token, true
 }
 
 func (h *OAuth2Handler) cacheToken(cacheKey string, token cachedToken) {

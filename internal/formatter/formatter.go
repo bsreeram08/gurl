@@ -10,6 +10,14 @@ import (
 	"strings"
 )
 
+// Package-level compiled regexes for performance
+var (
+	xmlTagRegex     = regexp.MustCompile(`(<[^>]+>)`)
+	xmlAttrRegex    = regexp.MustCompile(`([a-zA-Z:-]+)="([^"]*)"`)
+	htmlTagRegex    = regexp.MustCompile(`(<[^>]+>)`)
+	htmlAttrRegex   = regexp.MustCompile(`([a-zA-Z-]+)=`)
+)
+
 // FormatOptions controls formatting behavior
 type FormatOptions struct {
 	Indent   string // Indent string (e.g., "  " or "\t")
@@ -223,9 +231,8 @@ func FormatXML(body []byte, opts FormatOptions) string {
 func colorizeXML(s string) string {
 	var buf bytes.Buffer
 
-	re := regexp.MustCompile(`(<[^>]+>)`)
-	parts := re.Split(s, -1)
-	matches := re.FindAllStringSubmatchIndex(s, -1)
+	parts := xmlTagRegex.Split(s, -1)
+	matches := xmlTagRegex.FindAllStringSubmatchIndex(s, -1)
 
 	pi := 0
 	for i, match := range matches {
@@ -280,8 +287,7 @@ func colorizeXMLTag(tag string) string {
 
 	if spaceIdx < len(rest) {
 		attrs := rest[spaceIdx:]
-		attrRe := regexp.MustCompile(`([a-zA-Z:-]+)="([^"]*)"`)
-		attrs = attrRe.ReplaceAllString(attrs, Yellow+"$1"+Reset+"="+Green+"\"$2\""+Reset)
+		attrs = xmlAttrRegex.ReplaceAllString(attrs, Yellow+"$1"+Reset+"="+Green+"\"$2\""+Reset)
 		buf.WriteString(attrs)
 	}
 
@@ -299,10 +305,8 @@ func FormatHTML(body []byte, opts FormatOptions) string {
 	var buf bytes.Buffer
 	indentLevel := 0
 
-	tagRegex := regexp.MustCompile(`(<[^>]+>)`)
-
-	parts := tagRegex.Split(input, -1)
-	matches := tagRegex.FindAllStringSubmatchIndex(input, -1)
+	parts := htmlTagRegex.Split(input, -1)
+	matches := htmlTagRegex.FindAllStringSubmatchIndex(input, -1)
 
 	pi := 0
 	for i, match := range matches {
@@ -364,9 +368,8 @@ func FormatHTML(body []byte, opts FormatOptions) string {
 func colorizeHTML(s string) string {
 	var buf bytes.Buffer
 
-	re := regexp.MustCompile(`(<[^>]+>)`)
-	parts := re.Split(s, -1)
-	matches := re.FindAllStringSubmatchIndex(s, -1)
+	parts := htmlTagRegex.Split(s, -1)
+	matches := htmlTagRegex.FindAllStringSubmatchIndex(s, -1)
 
 	pi := 0
 	for i, match := range matches {
@@ -425,8 +428,7 @@ func colorizeHTMLTag(tag string) string {
 	if spaceIdx < len(rest) {
 		attrs := rest[spaceIdx:]
 		// Color attribute names yellow
-		attrRe := regexp.MustCompile(`([a-zA-Z-]+)=`)
-		attrs = attrRe.ReplaceAllString(attrs, Yellow+"$1"+Reset+"=")
+		attrs = htmlAttrRegex.ReplaceAllString(attrs, Yellow+"$1"+Reset+"=")
 		buf.WriteString(attrs)
 	}
 

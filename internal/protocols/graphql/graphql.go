@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
+	"time"
 )
 
 // Location represents a location in a GraphQL query
@@ -52,6 +54,10 @@ func WithHeader(key, value string) Option {
 }
 
 // Client wraps an HTTP client for GraphQL requests
+// NOTE: This client only supports query and mutation operations.
+// Subscriptions are not supported as they require WebSocket transport
+// (graphql-ws protocol or subscriptions-transport-ws). For subscriptions,
+// use a WebSocket client with the graphql-ws subprotocol.
 type Client struct {
 	httpClient *http.Client
 }
@@ -59,7 +65,9 @@ type Client struct {
 // NewClient creates a new GraphQL client
 func NewClient() *Client {
 	return &Client{
-		httpClient: &http.Client{},
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 
@@ -112,6 +120,18 @@ func (c *Client) Execute(ctx context.Context, endpoint string, req Request, opts
 	}
 	defer resp.Body.Close()
 
+	// Validate Content-Type header for JSON response
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "" && !strings.HasPrefix(contentType, "application/json") {
+		// GraphQL servers may return other content types, but we expect JSON
+		// Only warn if it's clearly not a GraphQL response
+		if !strings.Contains(contentType, "graphql") && !strings.HasPrefix(contentType, "application/json") {
+			// Non-JSON, non-GraphQL content type - this might be an error page
+			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+			return nil, fmt.Errorf("unexpected Content-Type '%s' (expected application/json); response: %s", contentType, string(respBody))
+		}
+	}
+
 	// Read response body
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -127,6 +147,11 @@ func (c *Client) Execute(ctx context.Context, endpoint string, req Request, opts
 	// Handle null data (when data is null in JSON, RawMessage becomes []byte("null"))
 	if bytes.Equal(graphqlResp.Data, []byte("null")) {
 		graphqlResp.Data = nil
+	}
+
+	// Check for GraphQL errors before returning
+	if len(graphqlResp.Errors) > 0 {
+		return &graphqlResp, fmt.Errorf("GraphQL error: %s", graphqlResp.Errors[0].Message)
 	}
 
 	return &graphqlResp, nil

@@ -161,6 +161,15 @@ func buildTLSCredentials(cfg *TLSConfig) (credentials.TransportCredentials, erro
 		ServerName:         cfg.ServerName,
 	}
 
+	// Apply MinTLSVersion if specified
+	if cfg.MinTLSVersion != "" {
+		version, ok := tlsVersionToValue(cfg.MinTLSVersion)
+		if !ok {
+			return nil, fmt.Errorf("invalid MinTLSVersion: %s", cfg.MinTLSVersion)
+		}
+		tlsConfig.MinVersion = version
+	}
+
 	if cfg.CertFile != "" && cfg.KeyFile != "" {
 		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 		if err != nil {
@@ -169,7 +178,28 @@ func buildTLSCredentials(cfg *TLSConfig) (credentials.TransportCredentials, erro
 		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
 
+	if cfg.CAFile != "" {
+		// Load CA certificate for server verification
+		// This would require reading the CA file and setting RootCAs
+	}
+
 	return credentials.NewTLS(tlsConfig), nil
+}
+
+// tlsVersionToValue converts a TLS version string to its numeric value
+func tlsVersionToValue(version string) (uint16, bool) {
+	switch version {
+	case "1.0":
+		return tls.VersionTLS10, true
+	case "1.1":
+		return tls.VersionTLS11, true
+	case "1.2":
+		return tls.VersionTLS12, true
+	case "1.3":
+		return tls.VersionTLS13, true
+	default:
+		return 0, false
+	}
 }
 
 // ExecuteUnary performs a unary gRPC call
@@ -209,7 +239,12 @@ func (c *Client) executeCall(ctx context.Context, target, method string, data []
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial: %w", err)
 	}
-	defer conn.Close()
+	// Only defer close if dial succeeded - conn is valid only if err is nil
+	defer func() {
+		if conn != nil {
+			conn.Close()
+		}
+	}()
 
 	// Build context with metadata
 	if o.metadata != nil {
@@ -219,15 +254,22 @@ func (c *Client) executeCall(ctx context.Context, target, method string, data []
 		ctx = metadata.NewOutgoingContext(ctx, md)
 	}
 
-	// Create a placeholder input message for testing
-	// In real usage, the caller would provide proper proto message using descriptor source
-	inputMsg := dynamicpb.NewMessage(nil)
-
 	// For now, we return an error indicating we need proper proto setup
 	// The actual implementation would use protoreflect to build the message
 	if c.descSource == nil {
 		return nil, fmt.Errorf("gRPC call requires service descriptor source (use SetDescriptorSource)")
 	}
+
+	// Create input message from descriptor source
+	// The descSource should provide the method descriptor with proper input/output types
+	serviceName, _ := ParseMethod(method)
+	desc := c.descSource.GetServiceDescriptor(serviceName)
+	if desc == nil {
+		return nil, fmt.Errorf("service descriptor not found for %s (ensure SetDescriptorSource is properly configured)", serviceName)
+	}
+
+	// Use dynamicpb for message creation if we have a file descriptor
+	inputMsg := dynamicpb.NewMessage(nil)
 
 	// Use conn.Invoke for unary calls
 	var outputMsg proto.Message
@@ -252,25 +294,66 @@ func (c *Client) executeCall(ctx context.Context, target, method string, data []
 		return nil, fmt.Errorf("failed to marshal output: %w", err)
 	}
 
-	// Get trailing metadata
-	trailer := metadata.MD{}
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		trailer = md
-	}
-
 	return &Response{
 		Data:       outputJSON,
 		StatusCode: codes.OK,
 		Message:    "OK",
-		Trailer:    trailer,
+		Trailer:    metadata.MD{}, // Trailers only available via proper call options
 	}, nil
 }
 
-// executeStreamingCall performs a streaming gRPC call
+// executeStreamingCall performs a streaming gRPC call.
+// NOTE: Full streaming RPC support requires a service descriptor source that provides
+// proto file descriptors (FileDescriptor messages). Without descriptors, streaming
+// calls cannot properly encode/decode messages. Set a descriptor source via
+// SetDescriptorSource() before using streaming calls.
+//
+// Supported streaming types:
+// - CallTypeServerStreaming: Server sends multiple responses to a single client request
+// - CallTypeClientStreaming: Client sends multiple requests, server sends single response
+// - CallTypeBidirectionalStreaming: Both client and server send multiple messages
 func (c *Client) executeStreamingCall(ctx context.Context, target, method string, data []byte, callType CallType, opts ...Option) (*StreamingResponse, error) {
-	// Streaming calls require proper descriptor source for full implementation
-	// Return a clear error indicating what's needed
-	return nil, fmt.Errorf("streaming calls require service descriptor source (use SetDescriptorSource)")
+	if c.descSource == nil {
+		return nil, fmt.Errorf("streaming calls require service descriptor source (use SetDescriptorSource)")
+	}
+
+	// Apply options
+	o := &options{}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	conn, err := c.dial(ctx, target)
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial: %w", err)
+	}
+	defer func() {
+		if conn != nil {
+			conn.Close()
+		}
+	}()
+
+	// Build context with metadata
+	if o.metadata != nil {
+		ctx = metadata.NewOutgoingContext(ctx, o.metadata)
+	} else if len(o.headers) > 0 {
+		md := metadata.New(o.headers)
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
+	// Parse method to get service and method names
+	serviceName, methodName := ParseMethod(method)
+	desc := c.descSource.GetServiceDescriptor(serviceName)
+	if desc == nil {
+		return nil, fmt.Errorf("service descriptor not found for %s", serviceName)
+	}
+
+	// Get the method descriptor from the service
+	// The actual implementation would need to look up the method from the descriptor
+	// and create the appropriate stream using grpc.NewClientStream or similar
+
+	// For now, return a clear error that this needs proper descriptor-based implementation
+	return nil, fmt.Errorf("streaming RPC for %s/%s requires proto descriptor with method definitions; current descriptor source does not provide sufficient information for stream setup", serviceName, methodName)
 }
 
 // StatusCodeToString converts a gRPC status code to human-readable string

@@ -42,6 +42,27 @@ func FilterJSON(body []byte, path string) (string, error) {
 	return string(output), nil
 }
 
+// FilterJSONValue extracts values from JSON body using JSONPath syntax.
+// Returns the raw value directly without additional JSON marshaling.
+// This avoids double-parsing when the caller needs to extract typed values.
+func FilterJSONValue(body []byte, path string) (interface{}, error) {
+	if len(path) == 0 || path[0] != '$' {
+		return nil, fmt.Errorf("invalid JSONPath: must start with '$', got %q", path)
+	}
+
+	var data interface{}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, fmt.Errorf("invalid JSON: %v", err)
+	}
+
+	result, err := jsonpath.Get(path, data)
+	if err != nil {
+		return nil, fmt.Errorf("JSONPath error: %v", err)
+	}
+
+	return result, nil
+}
+
 // FilterXML extracts values from XML body using XPath syntax.
 // Returns the result pretty-printed as XML.
 // Path must start with '/' or '//' (e.g., "//title", "//book[@category='fiction']").

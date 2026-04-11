@@ -172,9 +172,17 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 
 		var timeout time.Duration
 		if timeoutStr := c.String("timeout"); timeoutStr != "" {
-			timeout, _ = time.ParseDuration(timeoutStr)
+			var err error
+			timeout, err = time.ParseDuration(timeoutStr)
+			if err != nil {
+				return fmt.Errorf("invalid timeout format '%s': %w", timeoutStr, err)
+			}
 		} else if req.Timeout != "" {
-			timeout, _ = time.ParseDuration(req.Timeout)
+			var err error
+			timeout, err = time.ParseDuration(req.Timeout)
+			if err != nil {
+				return fmt.Errorf("invalid timeout format '%s': %w", req.Timeout, err)
+			}
 		}
 
 		clientReq := client.Request{
@@ -340,6 +348,12 @@ func executeDataDriven(ctx context.Context, db storage.DB, name string, baseVars
 	}
 
 	dataFile := c.String("data")
+	if _, err := os.Stat(dataFile); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("data file not found: %s", dataFile)
+		}
+		return fmt.Errorf("failed to access data file: %w", err)
+	}
 	loader, err := runner.NewDataLoader(dataFile)
 	if err != nil {
 		return fmt.Errorf("failed to load data file: %w", err)
@@ -367,9 +381,17 @@ func executeDataDriven(ctx context.Context, db storage.DB, name string, baseVars
 
 		var timeout time.Duration
 		if timeoutStr := c.String("timeout"); timeoutStr != "" {
-			timeout, _ = time.ParseDuration(timeoutStr)
+			var err error
+			timeout, err = time.ParseDuration(timeoutStr)
+			if err != nil {
+				return fmt.Errorf("invalid timeout format '%s': %w", timeoutStr, err)
+			}
 		} else if req.Timeout != "" {
-			timeout, _ = time.ParseDuration(req.Timeout)
+			var err error
+			timeout, err = time.ParseDuration(req.Timeout)
+			if err != nil {
+				return fmt.Errorf("invalid timeout format '%s': %w", req.Timeout, err)
+			}
 		}
 
 		clientReq := client.Request{

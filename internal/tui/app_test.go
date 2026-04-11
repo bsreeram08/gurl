@@ -600,9 +600,9 @@ func TestApp_SearchModal_EscapeCloses(t *testing.T) {
 
 	app.searchModal = NewSearchModal(nil, app.width, app.height)
 
-	result := app.searchModal.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd := app.searchModal.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
-	if result != nil {
+	if cmd != nil {
 		t.Error("SearchModal.Update should return nil on Escape")
 	}
 }

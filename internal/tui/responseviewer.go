@@ -450,6 +450,8 @@ type StreamingViewer struct {
 	width      int
 	height     int
 	mu         sync.Mutex
+	ctx        context.Context
+	cancelFn   context.CancelFunc
 }
 
 type StreamingMessage struct {
@@ -562,10 +564,12 @@ func (sv *StreamingViewer) Connect() tea.Cmd {
 		sv.connecting = true
 		sv.connected = false
 
+		sv.ctx, sv.cancelFn = context.WithCancel(context.Background())
+
 		if sv.protocol == "ws" || sv.protocol == "wss" {
-			sv.connectWS()
+			sv.connectWS(sv.ctx)
 		} else if sv.protocol == "sse" {
-			sv.connectSSE()
+			sv.connectSSE(sv.ctx)
 		} else {
 			sv.errMsg = "Unknown protocol: " + sv.protocol
 			sv.connecting = false
@@ -575,14 +579,20 @@ func (sv *StreamingViewer) Connect() tea.Cmd {
 	}
 }
 
-func (sv *StreamingViewer) connectWS() {
+// Close cancels the streaming context and signals goroutines to exit
+func (sv *StreamingViewer) Close() {
+	if sv.cancelFn != nil {
+		sv.cancelFn()
+	}
+}
+
+func (sv *StreamingViewer) connectWS(ctx context.Context) {
 	wsClient := websocket.NewClient()
 	headers := make(http.Header)
 	for k, v := range sv.headers {
 		headers[k] = v
 	}
 
-	ctx := context.Background()
 	if err := wsClient.Connect(ctx, sv.url, headers); err != nil {
 		sv.errMsg = err.Error()
 		sv.connecting = false
@@ -594,23 +604,27 @@ func (sv *StreamingViewer) connectWS() {
 
 	go func() {
 		for {
-			data, msgType, err := wsClient.Receive()
-			if err != nil {
-				sv.addMessage("recv", string(data), fmt.Sprintf("%v", err), time.Now().Format("15:04:05"))
-				break
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				data, msgType, err := wsClient.Receive()
+				if err != nil {
+					sv.addMessage("recv", string(data), fmt.Sprintf("%v", err), time.Now().Format("15:04:05"))
+					return
+				}
+				typeStr := "text"
+				if msgType == websocket.MessageTypeBinary {
+					typeStr = "binary"
+				}
+				sv.addMessage("recv", string(data), typeStr, time.Now().Format("15:04:05"))
 			}
-			typeStr := "text"
-			if msgType == websocket.MessageTypeBinary {
-				typeStr = "binary"
-			}
-			sv.addMessage("recv", string(data), typeStr, time.Now().Format("15:04:05"))
 		}
 	}()
 }
 
-func (sv *StreamingViewer) connectSSE() {
+func (sv *StreamingViewer) connectSSE(ctx context.Context) {
 	sseClient := sse.NewClient()
-	ctx := context.Background()
 
 	headers := make(map[string]string)
 	for k, v := range sv.headers {
@@ -632,10 +646,11 @@ func (sv *StreamingViewer) connectSSE() {
 	go func() {
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case event, ok := <-eventChan:
 				if !ok {
-					sv.addMessage("recv", event.Data, event.Type, time.Now().Format("15:04:05"))
-					break
+					return
 				}
 				sv.addMessage("recv", event.Data, event.Type, time.Now().Format("15:04:05"))
 			case err, ok := <-errorChan:

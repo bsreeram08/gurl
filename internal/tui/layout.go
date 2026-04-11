@@ -45,9 +45,9 @@ func CalculateLayout(width, height int) Layout {
 }
 
 // MainHeight returns the height available for the main content area
-// (total height minus status bar)
+// (total height minus status bar and padding)
 func (l Layout) MainHeight(totalHeight int) int {
-	h := totalHeight - l.StatusHeight - 2 // 2 for border
+	h := totalHeight - l.StatusHeight - 1 // 1 for border/padding
 	if h < 1 {
 		return 1
 	}

@@ -128,33 +128,32 @@ func (e *Evaluator) extractHeader(resp *client.Response, name string) (string, e
 
 // extractJSONPath extracts a value from JSON body using JSONPath.
 func (e *Evaluator) extractJSONPath(body []byte, path string) (string, error) {
-	result, err := formatter.FilterJSON(body, path)
+	// Use FilterJSONValue to avoid double-parsing (FilterJSON already marshals to JSON string)
+	result, err := formatter.FilterJSONValue(body, path)
 	if err != nil {
 		return "", err
 	}
-	// FilterJSON returns pretty-printed JSON, extract just the value
-	// For simple values, demarshal and return the raw value
-	if result != "" {
-		// Try to extract as simple value
-		var val interface{}
-		if err := json.Unmarshal([]byte(result), &val); err == nil {
-			switch v := val.(type) {
-			case string:
-				return v, nil
-			case float64:
-				// Check if it's an integer
-				if v == float64(int64(v)) {
-					return strconv.FormatInt(int64(v), 10), nil
-				}
-				return strconv.FormatFloat(v, 'f', -1, 64), nil
-			case bool:
-				return strconv.FormatBool(v), nil
-			case nil:
-				return "", nil
-			}
-		}
+	if result == nil {
+		return "", nil
 	}
-	return result, nil
+	switch v := result.(type) {
+	case string:
+		return v, nil
+	case float64:
+		// Check if it's an integer
+		if v == float64(int64(v)) {
+			return strconv.FormatInt(int64(v), 10), nil
+		}
+		return strconv.FormatFloat(v, 'f', -1, 64), nil
+	case bool:
+		return strconv.FormatBool(v), nil
+	case nil:
+		return "", nil
+	default:
+		// For complex types (objects, arrays, etc.), return marshaled JSON
+		out, _ := json.MarshalIndent(result, "", "  ")
+		return string(out), nil
+	}
 }
 
 // compare compares actual value with expected using the operator.

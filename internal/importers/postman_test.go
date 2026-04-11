@@ -375,7 +375,7 @@ func TestPostmanProcessItems(t *testing.T) {
 		},
 	}
 
-	p.processItems(items, "Collection", "path/to/folder", &requests)
+	p.processItems(items, "Collection", "path/to/folder", nil, nil, &requests)
 
 	if len(requests) != 1 {
 		t.Errorf("got %d requests, want 1", len(requests))
@@ -400,7 +400,7 @@ func TestPostmanRequestToSavedRequest(t *testing.T) {
 		},
 	}
 
-	saved := p.requestToSavedRequest(req, "Test Request", "Test Collection", "folder/subfolder")
+	saved := p.requestToSavedRequest(req, "Test Request", "Test Collection", "folder/subfolder", nil, nil)
 
 	if saved.Name != "Test Request" {
 		t.Errorf("got name %q, want %q", saved.Name, "Test Request")
@@ -569,7 +569,7 @@ func TestPostmanAddAuthHeaders(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			headers := []types.Header{}
 			if tt.auth != nil {
-				p.addAuthHeaders(tt.auth, &headers)
+				p.addAuthHeaders(tt.auth, &headers, nil)
 			}
 
 			if tt.wantAuthHeader {

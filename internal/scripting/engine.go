@@ -2,6 +2,7 @@ package scripting
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/dop251/goja"
@@ -22,6 +23,7 @@ type Engine struct {
 	response          *ScriptResponse
 	variables         map[string]string
 	AllowSecretAccess bool
+	pool              *RuntimePool
 }
 
 type ScriptRequest struct {
@@ -57,15 +59,54 @@ type TestResult struct {
 	Error  string
 }
 
+// RuntimePool manages a pool of reusable goja.Runtime instances
+type RuntimePool struct {
+	pool sync.Pool
+}
+
+func NewRuntimePool() *RuntimePool {
+	p := &RuntimePool{
+		pool: sync.Pool{
+			New: func() interface{} {
+				vm := goja.New()
+				registerSandboxRestricted(vm)
+				return vm
+			},
+		},
+	}
+	return p
+}
+
+func (p *RuntimePool) Get() *goja.Runtime {
+	return p.pool.Get().(*goja.Runtime)
+}
+
+func (p *RuntimePool) Put(vm *goja.Runtime) {
+	// Clear any pending interrupt and reset for reuse
+	vm.ClearInterrupt()
+	// Re-run sandbox setup to re-initialize restricted modules
+	registerSandboxRestricted(vm)
+	p.pool.Put(vm)
+}
+
 func NewEngine(envStorage *env.EnvStorage, opts ...EngineOption) *Engine {
 	eng := &Engine{
 		envStorage: envStorage,
 		timeout:    5 * time.Second,
+		pool:       NewRuntimePool(),
 	}
 	for _, opt := range opts {
 		opt(eng)
 	}
 	return eng
+}
+
+func (e *Engine) getRuntime() *goja.Runtime {
+	return e.pool.Get()
+}
+
+func (e *Engine) putRuntime(vm *goja.Runtime) {
+	e.pool.Put(vm)
 }
 
 func (e *Engine) Execute(script string) (*Result, error) {
@@ -74,13 +115,12 @@ func (e *Engine) Execute(script string) (*Result, error) {
 	e.skipRequest = false
 	e.nextRequest = ""
 
-	vm := goja.New()
+	vm := e.getRuntime()
 	e.vm = vm
 
 	RegisterGlobals(vm, e)
 	e.updateGurlRequest(vm)
 	e.updateGurlResponse(vm)
-	restrictModules(vm)
 
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	done := make(chan struct{})
@@ -104,6 +144,7 @@ func (e *Engine) Execute(script string) (*Result, error) {
 	select {
 	case <-done:
 		cancel()
+		e.putRuntime(vm)
 		return result, execErr
 	case <-ctx.Done():
 		cancel()
@@ -112,6 +153,7 @@ func (e *Engine) Execute(script string) (*Result, error) {
 		case <-done:
 		case <-time.After(5 * time.Second):
 		}
+		e.putRuntime(vm)
 		return &Result{Error: ctx.Err()}, ctx.Err()
 	}
 }

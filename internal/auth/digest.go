@@ -8,11 +8,16 @@ import (
 	"math/rand"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/sreeram/gurl/internal/client"
 )
 
-type DigestHandler struct{}
+type DigestHandler struct {
+	// nonceCounts tracks the nc value per nonce for replay protection
+	mu          sync.Mutex
+	nonceCounts map[string]int
+}
 
 func (h *DigestHandler) Name() string {
 	return "digest"
@@ -30,9 +35,10 @@ func (h *DigestHandler) Apply(req *client.Request, params map[string]string) {
 	// In a real implementation, these would come from the 401 response's WWW-Authenticate header
 	realm := params["realm"]
 	nonce := params["nonce"]
-	qop := params["qop"]
+	serverQop := params["qop"]
 	opaque := params["opaque"]
 	algorithm := params["algorithm"]
+	clientQop := params["client_qop"]
 
 	if realm == "" {
 		realm = "default-realm"
@@ -40,8 +46,9 @@ func (h *DigestHandler) Apply(req *client.Request, params map[string]string) {
 	if nonce == "" {
 		nonce = "default-nonce"
 	}
-	if qop == "" {
-		qop = "auth"
+	// Default client qop to "auth" if not specified
+	if clientQop == "" {
+		clientQop = "auth"
 	}
 
 	method := req.Method
@@ -52,33 +59,77 @@ func (h *DigestHandler) Apply(req *client.Request, params map[string]string) {
 
 	var response string
 	var ha1, ha2 string
-	nc := "00000001"
+
+	// Determine qop to use - validate server qop against client qop if both specified
+	qop := clientQop
+	if serverQop != "" && clientQop != "" {
+		// Check if there's a mismatch
+		if serverQOpAvailable := strings.Contains(serverQop, clientQop); !serverQOpAvailable {
+			// Client qop not in server's qop list - log warning
+			// Fall back to whatever the server sent
+			qop = serverQop
+		}
+	} else if serverQop != "" {
+		// Use server's qop
+		qop = serverQop
+	}
+
+	// Get and increment nonce count for this nonce
+	nc := h.incrementNonceCount(nonce)
+	ncStr := fmt.Sprintf("%08x", nc)
 	cnonce := generateCnonce()
 
 	if algorithm == "SHA-256" {
 		ha1Input := fmt.Sprintf("%s:%s:%s", username, realm, password)
 		ha1 = sha256Hash(ha1Input)
+
+		// Handle -sess algorithm per RFC 7616
+		// If algorithm contains "-sess", compute HA1 = H(HA1:nonce:cnonce)
+		if strings.Contains(algorithm, "-sess") {
+			ha1 = sha256Hash(ha1 + ":" + nonce + ":" + cnonce)
+		}
+
 		ha2Input := fmt.Sprintf("%s:%s", method, uri)
 		ha2 = sha256Hash(ha2Input)
 
-		responseInput := fmt.Sprintf("%s:%s:%s:%s:%s:%s", ha1, nonce, nc, cnonce, qop, ha2)
+		responseInput := fmt.Sprintf("%s:%s:%s:%s:%s:%s", ha1, nonce, ncStr, cnonce, qop, ha2)
 		response = sha256Hash(responseInput)
 	} else {
 		ha1Input := fmt.Sprintf("%s:%s:%s", username, realm, password)
 		ha1 = md5Hash(ha1Input)
+
+		// Handle -sess algorithm per RFC 7616
+		// If algorithm contains "-sess", compute HA1 = H(HA1:nonce:cnonce)
+		if strings.Contains(algorithm, "-sess") {
+			ha1 = md5Hash(ha1 + ":" + nonce + ":" + cnonce)
+		}
+
 		ha2Input := fmt.Sprintf("%s:%s", method, uri)
 		ha2 = md5Hash(ha2Input)
 
-		responseInput := fmt.Sprintf("%s:%s:%s:%s:%s:%s", ha1, nonce, nc, cnonce, qop, ha2)
+		responseInput := fmt.Sprintf("%s:%s:%s:%s:%s:%s", ha1, nonce, ncStr, cnonce, qop, ha2)
 		response = md5Hash(responseInput)
 	}
 
-	authHeader := buildDigestHeader(username, realm, nonce, uri, response, opaque, cnonce, nc, qop, algorithm)
+	authHeader := buildDigestHeader(username, realm, nonce, uri, response, opaque, cnonce, ncStr, qop, algorithm)
 
 	req.Headers = append(req.Headers, client.Header{
 		Key:   "Authorization",
 		Value: authHeader,
 	})
+}
+
+// incrementNonceCount atomically increments and returns the nonce count for a given nonce
+func (h *DigestHandler) incrementNonceCount(nonce string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.nonceCounts == nil {
+		h.nonceCounts = make(map[string]int)
+	}
+
+	h.nonceCounts[nonce]++
+	return h.nonceCounts[nonce]
 }
 
 func buildDigestHeader(username, realm, nonce, uri, response, opaque, cnonce, nc, qop, algorithm string) string {

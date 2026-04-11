@@ -198,7 +198,9 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		if config.Bail && !reqResult.Passed && !reqResult.Skipped {
 			remaining := len(requests) - i - 1
 			result.Skipped += remaining
-			result.Total += remaining
+			// Note: do NOT add remaining to result.Total - those requests were never
+			// executed so they shouldn't be double-counted. result.Total already includes
+			// only requests that actually ran (up to and including the failed one).
 			for j := i + 1; j < len(requests); j++ {
 				result.RequestResults = append(result.RequestResults, &RequestResult{
 					RequestName: requests[j].Name,

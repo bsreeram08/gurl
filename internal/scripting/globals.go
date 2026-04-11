@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/dop251/goja"
 )
@@ -266,40 +267,46 @@ func (e *Engine) jsSetNextRequest(call goja.FunctionCall) goja.Value {
 
 func (e *Engine) jsConsoleLog(call goja.FunctionCall) goja.Value {
 	args := call.Arguments
-	output := ""
+	var sb strings.Builder
+	sb.Grow(len(args) * 16) // Pre-allocate with reasonable capacity
 	for i, arg := range args {
 		if i > 0 {
-			output += " "
+			sb.WriteString(" ")
 		}
-		output += arg.String()
+		sb.WriteString(arg.String())
 	}
-	e.outputBuffer += output + "\n"
+	sb.WriteByte('\n')
+	e.outputBuffer += sb.String()
 	return goja.Undefined()
 }
 
 func (e *Engine) jsConsoleWarn(call goja.FunctionCall) goja.Value {
 	args := call.Arguments
-	output := ""
+	var sb strings.Builder
+	sb.Grow(len(args) * 16)
 	for i, arg := range args {
 		if i > 0 {
-			output += " "
+			sb.WriteString(" ")
 		}
-		output += arg.String()
+		sb.WriteString(arg.String())
 	}
-	e.outputBuffer += output + "\n"
+	sb.WriteByte('\n')
+	e.outputBuffer += sb.String()
 	return goja.Undefined()
 }
 
 func (e *Engine) jsConsoleError(call goja.FunctionCall) goja.Value {
 	args := call.Arguments
-	output := ""
+	var sb strings.Builder
+	sb.Grow(len(args) * 16)
 	for i, arg := range args {
 		if i > 0 {
-			output += " "
+			sb.WriteString(" ")
 		}
-		output += arg.String()
+		sb.WriteString(arg.String())
 	}
-	e.outputBuffer += output + "\n"
+	sb.WriteByte('\n')
+	e.outputBuffer += sb.String()
 	return goja.Undefined()
 }
 
@@ -310,7 +317,7 @@ func (e *Engine) jsRequire(call goja.FunctionCall) goja.Value {
 	case "crypto", "JSON", "Math", "Date", "Buffer":
 		return goja.Undefined()
 	}
-	panic(errors.New(fmt.Sprintf("Access to module '%s' is not allowed", module)))
+	panic(fmt.Errorf("Access to module '%s' is not allowed", module))
 }
 
 func (e *Engine) jsExpect(call goja.FunctionCall) goja.Value {
@@ -329,13 +336,13 @@ func (e *Engine) jsExpect(call goja.FunctionCall) goja.Value {
 		case int64:
 			if expectedInt, ok := expected.(int64); ok {
 				if actualVal != expectedInt {
-					panic(errors.New(fmt.Sprintf("Expected %d but got %d", expectedInt, actualVal)))
+					panic(fmt.Errorf("Expected %d but got %d", expectedInt, actualVal))
 				}
 			}
 		case string:
 			if expectedStr, ok := expected.(string); ok {
 				if actualVal != expectedStr {
-					panic(errors.New(fmt.Sprintf("Expected '%s' but got '%s'", expectedStr, actualVal)))
+					panic(fmt.Errorf("Expected '%s' but got '%s'", expectedStr, actualVal))
 				}
 			}
 		}

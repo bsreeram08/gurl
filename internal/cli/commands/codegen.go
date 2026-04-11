@@ -79,5 +79,5 @@ func copyToClipboard(text string) error {
 		cmd.Stdin = strings.NewReader(text)
 		return cmd.Run()
 	}
-	return fmt.Errorf("clipboard tools not available (pbcopy, xclip, wl-copy)")
+	return fmt.Errorf("clipboard tools not available. Install xclip (Linux) or wl-copy (Wayland) to enable clipboard copy")
 }

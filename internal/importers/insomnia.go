@@ -1,6 +1,7 @@
 package importers
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -160,7 +161,12 @@ func (i *InsomniaImporter) resourceToRequest(res *InsomniaResource, folders map[
 	if res.Authentication != nil {
 		switch {
 		case res.Authentication.Basic != nil:
-			// Basic auth would be added as a header
+			// Basic auth - encode credentials
+			encoded := base64.StdEncoding.EncodeToString([]byte(res.Authentication.Basic.Username + ":" + res.Authentication.Basic.Password))
+			headers = append(headers, types.Header{
+				Key:   "Authorization",
+				Value: "Basic " + encoded,
+			})
 		case res.Authentication.Bearer != nil:
 			headers = append(headers, types.Header{
 				Key:   "Authorization",

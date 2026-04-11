@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -35,6 +36,7 @@ type Client struct {
 	url            string
 	headers        http.Header
 	reconnect      ReconnectConfig
+	tlsConfig      *tls.Config
 	mu             sync.RWMutex
 	ioMu           sync.Mutex
 	closed         bool
@@ -77,6 +79,13 @@ func (c *Client) SetMessageHandler(handler func([]byte, MessageType)) {
 	c.messageHandler = handler
 }
 
+// SetTLSConfig sets TLS configuration for the WebSocket connection
+func (c *Client) SetTLSConfig(cfg *tls.Config) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.tlsConfig = cfg
+}
+
 // Connect establishes a WebSocket connection to the specified URL
 func (c *Client) Connect(ctx context.Context, url string, headers http.Header) error {
 	c.mu.Lock()
@@ -93,8 +102,17 @@ func (c *Client) Connect(ctx context.Context, url string, headers http.Header) e
 
 // connectWithRetry attempts to connect with reconnection support
 func (c *Client) connectWithRetry(ctx context.Context, attempt int) error {
+	c.mu.RLock()
+	tlsConfig := c.tlsConfig
+	c.mu.RUnlock()
+
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
+	}
+
+	// Apply TLS config if set
+	if tlsConfig != nil {
+		dialer.TLSClientConfig = tlsConfig
 	}
 
 	conn, _, err := dialer.DialContext(ctx, c.url, c.headers)
@@ -185,7 +203,6 @@ func (c *Client) ReceiveMultiple(ctx context.Context) (<-chan Message, error) {
 		c.mu.RUnlock()
 		return nil, fmt.Errorf("not connected")
 	}
-	conn := c.conn
 	c.mu.RUnlock()
 
 	msgChan := make(chan Message, 100) // Buffered channel
@@ -193,13 +210,19 @@ func (c *Client) ReceiveMultiple(ctx context.Context) (<-chan Message, error) {
 	go func() {
 		defer close(msgChan)
 		for {
+			// Get current connection reference fresh each iteration
+			// This ensures we use the latest conn after any reconnect
+			c.mu.RLock()
+			currentConn := c.conn
+			c.mu.RUnlock()
+
 			select {
 			case <-ctx.Done():
 				return
 			default:
 				c.ioMu.Lock()
-				conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-				msgType, data, err := conn.ReadMessage()
+				currentConn.SetReadDeadline(time.Now().Add(60 * time.Second))
+				msgType, data, err := currentConn.ReadMessage()
 				c.ioMu.Unlock()
 				if err != nil {
 					// Check if it's a close error
@@ -211,9 +234,10 @@ func (c *Client) ReceiveMultiple(ctx context.Context) (<-chan Message, error) {
 
 						if retryEnabled {
 							if reconnectErr := c.connectWithRetry(ctx, 0); reconnectErr == nil {
-								c.mu.Lock()
-								conn = c.conn
-								c.mu.Unlock()
+								// Get fresh conn reference after successful reconnect
+								c.mu.RLock()
+								currentConn = c.conn
+								c.mu.RUnlock()
 								continue
 							}
 						}
@@ -260,29 +284,52 @@ func (c *Client) Ping() error {
 // Close gracefully closes the WebSocket connection
 func (c *Client) Close() error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.closed {
+		c.mu.Unlock()
 		return nil
 	}
 
 	if c.conn == nil {
 		c.closed = true
+		c.mu.Unlock()
 		return nil
 	}
+	c.mu.Unlock()
 
+	// Write close frame and wait for server response
 	c.ioMu.Lock()
 	err := c.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	if err != nil {
-		c.conn.Close()
 		c.ioMu.Unlock()
+		// Try to close anyway
+		c.mu.Lock()
+		c.conn.Close()
 		c.closed = true
+		c.mu.Unlock()
 		return fmt.Errorf("failed to send close frame: %w", err)
 	}
 
-	err = c.conn.Close()
+	// Wait for close frame from server - set a deadline
+	c.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	// Read the close response from server (may be a close message or error)
+	for {
+		_, _, err := c.conn.ReadMessage()
+		if err != nil {
+			// If it's a close error, that's expected
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				break
+			}
+			// For other errors (including EOF on close), break
+			break
+		}
+	}
+
 	c.ioMu.Unlock()
+
+	c.mu.Lock()
+	err = c.conn.Close()
 	c.closed = true
+	c.mu.Unlock()
 	return err
 }
 

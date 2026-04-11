@@ -44,7 +44,7 @@ func ExportCommand(db storage.DB) *cli.Command {
 			&cli.StringFlag{
 				Name:    "format",
 				Aliases: []string{"fmt"},
-				Usage:   "Export format (gurl)",
+				Usage:   "Export format (only gurl format is supported)",
 				Value:   "gurl",
 			},
 		},

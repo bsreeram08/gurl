@@ -450,7 +450,10 @@ func TestNewClientWithTLS_ValidConfig(t *testing.T) {
 		KeyFile:  keyFile,
 	}
 
-	client := NewClientWithTLS(cfg)
+	client, err := NewClientWithTLS(cfg)
+	if err != nil {
+		t.Fatalf("NewClientWithTLS failed: %v", err)
+	}
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
@@ -475,7 +478,10 @@ func TestNewClientWithTLS_InsecureSkipsVerification(t *testing.T) {
 		Insecure: true,
 	}
 
-	client := NewClientWithTLS(cfg)
+	client, err := NewClientWithTLS(cfg)
+	if err != nil {
+		t.Fatalf("NewClientWithTLS failed: %v", err)
+	}
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
@@ -501,7 +507,10 @@ func TestNewClientWithTLS_CustomCA(t *testing.T) {
 		CAFile:   caFile,
 	}
 
-	client := NewClientWithTLS(cfg)
+	client, err := NewClientWithTLS(cfg)
+	if err != nil {
+		t.Fatalf("NewClientWithTLS failed: %v", err)
+	}
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
@@ -523,7 +532,10 @@ func TestNewClientWithTLS_MinTLSVersion(t *testing.T) {
 		MinTLSVersion: "1.2",
 	}
 
-	client := NewClientWithTLS(cfg)
+	client, err := NewClientWithTLS(cfg)
+	if err != nil {
+		t.Fatalf("NewClientWithTLS failed: %v", err)
+	}
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
@@ -539,7 +551,7 @@ func TestNewClientWithTLS_CertFileNotFound(t *testing.T) {
 		KeyFile:  "/nonexistent/key.pem",
 	}
 
-	client := NewClientWithTLS(cfg)
+	client, _ := NewClientWithTLS(cfg)
 	// Should return client but with error logged (non-fatal for now)
 	if client == nil {
 		t.Fatal("expected non-nil client even with missing cert")
@@ -558,7 +570,10 @@ func TestNewClientWithTLS_KeyFileNotFound(t *testing.T) {
 		KeyFile:  "/nonexistent/key.pem",
 	}
 
-	client := NewClientWithTLS(cfg)
+	client, err := NewClientWithTLS(cfg)
+	if err != nil {
+		t.Fatalf("NewClientWithTLS failed: %v", err)
+	}
 	if client == nil {
 		t.Fatal("expected non-nil client even with missing key")
 	}
@@ -577,7 +592,10 @@ func TestNewClientWithTLS_CAFileNotFound(t *testing.T) {
 		CAFile:   "/nonexistent/ca.pem",
 	}
 
-	client := NewClientWithTLS(cfg)
+	client, err := NewClientWithTLS(cfg)
+	if err != nil {
+		t.Fatalf("NewClientWithTLS failed: %v", err)
+	}
 	if client == nil {
 		t.Fatal("expected non-nil client even with missing CA")
 	}

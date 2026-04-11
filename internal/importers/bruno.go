@@ -2,6 +2,7 @@ package importers
 
 import (
 	"bufio"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,12 +41,23 @@ type BrunoAuth struct {
 	Type        string
 	Bearer      string
 	Basic       *BrunoBasicAuth
+	Digest      *BrunoDigestAuth
 }
 
 // BrunoBasicAuth represents basic auth in Bruno
 type BrunoBasicAuth struct {
 	Username string
 	Password string
+}
+
+// BrunoDigestAuth represents digest auth in Bruno
+type BrunoDigestAuth struct {
+	Username string
+	Password string
+	Realm    string
+	Nonce    string
+	Qop      string
+	Opaque   string
 }
 
 // BrunoVar represents a Bruno variable
@@ -219,18 +231,64 @@ func (b *BrunoImporter) parseAuthLine(req *BrunoRequest, line string) {
 		if req.Auth == nil {
 			req.Auth = &BrunoAuth{}
 		}
-		if req.Auth.Basic == nil {
-			req.Auth.Basic = &BrunoBasicAuth{}
+		if req.Auth.Type == "digest" {
+			if req.Auth.Digest == nil {
+				req.Auth.Digest = &BrunoDigestAuth{}
+			}
+			req.Auth.Digest.Username = value
+		} else {
+			if req.Auth.Basic == nil {
+				req.Auth.Basic = &BrunoBasicAuth{}
+			}
+			req.Auth.Basic.Username = value
 		}
-		req.Auth.Basic.Username = value
 	case "password":
 		if req.Auth == nil {
 			req.Auth = &BrunoAuth{}
 		}
-		if req.Auth.Basic == nil {
-			req.Auth.Basic = &BrunoBasicAuth{}
+		if req.Auth.Type == "digest" {
+			if req.Auth.Digest == nil {
+				req.Auth.Digest = &BrunoDigestAuth{}
+			}
+			req.Auth.Digest.Password = value
+		} else {
+			if req.Auth.Basic == nil {
+				req.Auth.Basic = &BrunoBasicAuth{}
+			}
+			req.Auth.Basic.Password = value
 		}
-		req.Auth.Basic.Password = value
+	case "realm":
+		if req.Auth == nil {
+			req.Auth = &BrunoAuth{}
+		}
+		if req.Auth.Digest == nil {
+			req.Auth.Digest = &BrunoDigestAuth{}
+		}
+		req.Auth.Digest.Realm = value
+	case "nonce":
+		if req.Auth == nil {
+			req.Auth = &BrunoAuth{}
+		}
+		if req.Auth.Digest == nil {
+			req.Auth.Digest = &BrunoDigestAuth{}
+		}
+		req.Auth.Digest.Nonce = value
+	case "qop":
+		if req.Auth == nil {
+			req.Auth = &BrunoAuth{}
+		}
+		if req.Auth.Digest == nil {
+			req.Auth.Digest = &BrunoDigestAuth{}
+		}
+		req.Auth.Digest.Qop = value
+	case "opaque":
+		if req.Auth == nil {
+			req.Auth = &BrunoAuth{}
+		}
+		if req.Auth.Digest == nil {
+			req.Auth.Digest = &BrunoDigestAuth{}
+		}
+		req.Auth.Digest.Opaque = value
 	}
 }
 
@@ -267,6 +325,15 @@ func (b *BrunoImporter) toSavedRequest(req *BrunoRequest, path string) *types.Sa
 		saved.Name = strings.TrimSuffix(filename, ".bru")
 	}
 
+	// Apply vars to URL, headers, and body
+	if len(req.Vars) > 0 {
+		saved.URL = b.applyVars(saved.URL, req.Vars)
+		saved.Body = b.applyVars(saved.Body, req.Vars)
+		for i := range saved.Headers {
+			saved.Headers[i].Value = b.applyVars(saved.Headers[i].Value, req.Vars)
+		}
+	}
+
 	// Add auth as headers
 	if req.Auth != nil {
 		switch req.Auth.Type {
@@ -294,7 +361,16 @@ func (b *BrunoImporter) toSavedRequest(req *BrunoRequest, path string) *types.Sa
 	return saved
 }
 
-// basicAuth creates a basic auth header value (simple base64)
+// applyVars replaces {{var}} patterns with variable values
+func (b *BrunoImporter) applyVars(s string, vars []BrunoVar) string {
+	for _, v := range vars {
+		s = strings.ReplaceAll(s, "{{"+v.Name+"}}", v.Value)
+	}
+	return s
+}
+
+// basicAuth creates a basic auth header value with base64 encoding
 func basicAuth(username, password string) string {
-	return username + ":" + password // In real implementation, would base64 encode
+	encoded := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+	return "Basic " + encoded
 }

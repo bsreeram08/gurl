@@ -3,6 +3,8 @@ package codegen
 import (
 	"bytes"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -17,7 +19,12 @@ func (g *JavaScriptGenerator) Language() string {
 	return "javascript"
 }
 
-const javascriptTemplate = `async function makeRequest() {
+// Note: fetch() is available in modern browsers and Node.js 18+.
+// For older Node.js versions, use node-fetch or cross-fetch polyfills.
+
+const javascriptTemplate = `// Note: fetch is available in browsers and Node.js 18+
+// For older Node.js, use: npm install node-fetch
+async function makeRequest() {
     const url = {{ .URL | escapeJS }};
 {{- if .HasHeaders }}
     const headers = {
@@ -27,10 +34,15 @@ const javascriptTemplate = `async function makeRequest() {
     };
 {{- end }}
 {{- if .HasBody }}
-{{- if .IsJSONBody }}
+{{- if .IsBinaryBody }}
+    // Binary body not supported in generated JavaScript code
+{{- else if .IsMultipartBody }}
+    // Multipart body not fully supported - consider using FormData
+    const body = {{ .Body | escapeJS }};
+{{- else if .IsJSONBody }}
     const body = JSON.stringify({{ .Body }});
 {{- else }}
-    const body = ` + "`" + `{{ .Body | escapeJS }}` + "`" + `;
+    const body = {{ .Body | escapeJS }};
 {{- end }}
 {{- end }}
 {{- if .HasAuth }}
@@ -47,12 +59,23 @@ const javascriptTemplate = `async function makeRequest() {
         headers,
 {{- end }}
 {{- if .HasBody }}
+{{- if not .IsBinaryBody }}
         body,
+{{- end }}
 {{- end }}
     };
 
     try {
         const response = await fetch(url, options);
+{{- if .HasAssertions }}
+        // Assertions
+{{- if .HasStatusAssertion }}
+        if (response.status !== {{ .ExpectedStatus }}) {
+            console.error("Assertion failed: expected status {{ .ExpectedStatus }}, got " + response.status);
+            return;
+        }
+{{- end }}
+{{- end }}
         const text = await response.text();
         console.log(response.status);
         console.log(text);
@@ -66,24 +89,42 @@ makeRequest();
 
 // JavaScriptCodeGenData holds template data for JavaScript generation
 type JavaScriptCodeGenData struct {
-	URL        string
-	Method     string
-	Headers    []types.Header
-	Body       string
-	HasHeaders bool
-	HasBody    bool
-	HasAuth    bool
-	AuthType   string
-	IsJSONBody bool
+	URL                 string
+	Method              string
+	Headers             []types.Header
+	Body                string
+	HasHeaders          bool
+	HasBody             bool
+	HasAuth             bool
+	AuthType            string
+	IsJSONBody          bool
+	IsBinaryBody        bool
+	IsMultipartBody     bool
+	HasAssertions       bool
+	HasStatusAssertion  bool
+	ExpectedStatus      int
 }
 
 // Generate creates JavaScript fetch code from a SavedRequest
 func (g *JavaScriptGenerator) Generate(req *types.SavedRequest, opts *GenOptions) (string, error) {
+	opts = sanitizeOpts(opts)
+
+	// Apply variable substitution
+	url := substituteVariables(req.URL, req.Variables)
+	body := substituteVariables(req.Body, req.Variables)
+
+	// Check content type for binary/multipart handling
+	contentType := getContentTypeFromHeaders(req.Headers)
+	isBinary := isBinaryContentType(contentType)
+	isMultipart := isMultipartContentType(contentType)
+
 	data := JavaScriptCodeGenData{
-		URL:        req.URL,
-		Method:     req.Method,
-		Headers:    req.Headers,
-		HasHeaders: len(req.Headers) > 0,
+		URL:             url,
+		Method:          req.Method,
+		Headers:         req.Headers,
+		HasHeaders:      len(req.Headers) > 0,
+		IsBinaryBody:    isBinary,
+		IsMultipartBody: isMultipart,
 	}
 
 	// Check for auth in headers
@@ -100,7 +141,7 @@ func (g *JavaScriptGenerator) Generate(req *types.SavedRequest, opts *GenOptions
 	}
 
 	// Check if body is JSON
-	if req.Body != "" {
+	if body != "" && !isBinary {
 		data.HasBody = true
 		// Check content-type header for JSON
 		for _, h := range req.Headers {
@@ -108,7 +149,20 @@ func (g *JavaScriptGenerator) Generate(req *types.SavedRequest, opts *GenOptions
 				data.IsJSONBody = true
 			}
 		}
-		data.Body = req.Body
+		data.Body = body
+	}
+
+	// Handle assertions
+	if len(req.Assertions) > 0 {
+		data.HasAssertions = true
+		for _, assertion := range req.Assertions {
+			if assertion.Field == "status" && assertion.Op == "eq" {
+				if status, err := strconv.Atoi(assertion.Value); err == nil {
+					data.HasStatusAssertion = true
+					data.ExpectedStatus = status
+				}
+			}
+		}
 	}
 
 	tmpl, err := template.New("javascript").Funcs(javascriptFuncMap()).Parse(javascriptTemplate)
@@ -144,3 +198,6 @@ func javascriptFuncMap() template.FuncMap {
 		"escapeJS": escapeJSString,
 	}
 }
+
+// jsVariablePattern matches {{var}} patterns for JavaScript
+var jsVariablePattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)

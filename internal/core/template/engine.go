@@ -13,26 +13,34 @@ var templatePattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
 // Substitute replaces all {{varName}} placeholders with values from vars map.
 // Returns an error if any variable is missing. Uses single-pass deterministic
-// substitution via regexp.ReplaceAllStringFunc.
+// substitution via regexp.ReplaceAllStringFunc that collects missing variables.
 func Substitute(cmd string, vars map[string]string) (string, error) {
-	// Check for missing variables first (deterministic order)
-	matches := templatePattern.FindAllStringSubmatchIndex(cmd, -1)
 	var missingVars []string
-	for _, match := range matches {
-		varName := cmd[match[2]:match[3]]
-		if _, ok := vars[varName]; !ok {
-			missingVars = append(missingVars, varName)
-		}
-	}
-	if len(missingVars) > 0 {
-		return "", fmt.Errorf("missing required variables: %s", strings.Join(missingVars, ", "))
-	}
 
-	// Single-pass deterministic replacement (no re-substitution)
+	// Single-pass: collect missing vars and perform replacement together
 	result := templatePattern.ReplaceAllStringFunc(cmd, func(match string) string {
 		varName := match[2 : len(match)-2] // strip {{ and }}
-		return vars[varName]
+		if val, ok := vars[varName]; ok {
+			return val
+		}
+		// Collect missing variable names
+		missingVars = append(missingVars, varName)
+		return match // return original if missing
 	})
+
+	// Deduplicate missing vars
+	if len(missingVars) > 0 {
+		seen := make(map[string]bool)
+		unique := make([]string, 0, len(missingVars))
+		for _, v := range missingVars {
+			if !seen[v] {
+				seen[v] = true
+				unique = append(unique, v)
+			}
+		}
+		return "", fmt.Errorf("missing required variables: %s", strings.Join(unique, ", "))
+	}
+
 	return result, nil
 }
 

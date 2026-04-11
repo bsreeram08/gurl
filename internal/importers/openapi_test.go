@@ -710,10 +710,9 @@ func TestOpenAPIGetOperations(t *testing.T) {
 
 func TestOpenAPIBuildURL(t *testing.T) {
 	o := &OpenAPIImporter{}
-	spec := &OpenAPISpec{}
 
 	// buildURL currently just returns the path
-	url := o.buildURL(spec, "/users/{id}")
+	url := o.buildURL("", "/users/{id}")
 	if url != "/users/{id}" {
 		t.Errorf("buildURL() = %q, want %q", url, "/users/{id}")
 	}
@@ -736,8 +735,9 @@ func TestOpenAPIOperationToRequest(t *testing.T) {
 
 	opwm := OpWithMethod{Method: "GET", Op: op}
 	tagMap := make(map[string]string)
+	securitySchemeMap := make(map[string]SecurityScheme)
 
-	req := o.operationToRequest(spec, "/users/{id}", opwm, tagMap)
+	req := o.operationToRequest(spec, "", "/users/{id}", opwm, tagMap, securitySchemeMap)
 
 	if req.Name != "Get User" {
 		t.Errorf("got name %q, want %q", req.Name, "Get User")
@@ -772,8 +772,9 @@ func TestOpenAPIOperationToRequestWithRequestBody(t *testing.T) {
 
 	opwm := OpWithMethod{Method: "POST", Op: op}
 	tagMap := make(map[string]string)
+	securitySchemeMap := make(map[string]SecurityScheme)
 
-	req := o.operationToRequest(spec, "/users", opwm, tagMap)
+	req := o.operationToRequest(spec, "", "/users", opwm, tagMap, securitySchemeMap)
 
 	if req.Body != "{ }" {
 		t.Errorf("got body %q, want %q", req.Body, "{ }")
@@ -792,8 +793,9 @@ func TestOpenAPIOperationToRequestWithPathParams(t *testing.T) {
 
 	opwm := OpWithMethod{Method: "GET", Op: op}
 	tagMap := make(map[string]string)
+	securitySchemeMap := make(map[string]SecurityScheme)
 
-	req := o.operationToRequest(spec, "/users/{id}", opwm, tagMap)
+	req := o.operationToRequest(spec, "", "/users/{id}", opwm, tagMap, securitySchemeMap)
 
 	// Should inherit tag from path
 	if len(req.Tags) != 1 || req.Tags[0] != "users" {

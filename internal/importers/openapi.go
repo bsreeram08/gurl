@@ -25,11 +25,27 @@ func (o *OpenAPIImporter) Extensions() []string {
 
 // OpenAPISpec represents the structure of an OpenAPI 3.x spec
 type OpenAPISpec struct {
-	OpenAPI    string                 `json:"openapi" yaml:"openapi"`
-	Info       OpenAPIInfo            `json:"info" yaml:"info"`
-	Paths      map[string]PathItem    `json:"paths" yaml:"paths"`
-	Components Components             `json:"components" yaml:"components"`
-	Tags       []Tag                  `json:"tags" yaml:"tags"`
+	OpenAPI    string                  `json:"openapi" yaml:"openapi"`
+	Info       OpenAPIInfo             `json:"info" yaml:"info"`
+	Paths      map[string]PathItem     `json:"paths" yaml:"paths"`
+	Components Components              `json:"components" yaml:"components"`
+	Tags       []Tag                   `json:"tags" yaml:"tags"`
+	Servers    []Server                `json:"servers" yaml:"servers"`
+	Security   []map[string][]string   `json:"security" yaml:"security"`
+}
+
+// Server represents a server object
+type Server struct {
+	URL         string                  `json:"url" yaml:"url"`
+	Description string                  `json:"description,omitempty" yaml:"description,omitempty"`
+	Variables   map[string]ServerVariable `json:"variables,omitempty" yaml:"variables,omitempty"`
+}
+
+// ServerVariable represents a server variable
+type ServerVariable struct {
+	Default     string   `json:"default,omitempty" yaml:"default,omitempty"`
+	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
+	Enum        []string `json:"enum,omitempty" yaml:"enum,omitempty"`
 }
 
 // OpenAPIInfo contains API metadata
@@ -55,17 +71,19 @@ type PathItem struct {
 
 // Operation represents an HTTP operation
 type Operation struct {
-	Tags        []string               `json:"tags,omitempty" yaml:"tags,omitempty"`
-	Summary     string                 `json:"summary,omitempty" yaml:"summary,omitempty"`
-	Description string                 `json:"description,omitempty" yaml:"description,omitempty"`
-	OperationID string                 `json:"operationId,omitempty" yaml:"operationId,omitempty"`
-	Parameters  []Parameter           `json:"parameters,omitempty" yaml:"parameters,omitempty"`
-	RequestBody *RequestBody           `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
-	Responses   map[string]Response   `json:"responses,omitempty" yaml:"responses,omitempty"`
+	Tags        []string                `json:"tags,omitempty" yaml:"tags,omitempty"`
+	Summary     string                  `json:"summary,omitempty" yaml:"summary,omitempty"`
+	Description string                  `json:"description,omitempty" yaml:"description,omitempty"`
+	OperationID string                  `json:"operationId,omitempty" yaml:"operationId,omitempty"`
+	Parameters  []Parameter             `json:"parameters,omitempty" yaml:"parameters,omitempty"`
+	RequestBody *RequestBody            `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
+	Responses   map[string]Response     `json:"responses,omitempty" yaml:"responses,omitempty"`
+	Security    []map[string][]string   `json:"security,omitempty" yaml:"security,omitempty"`
 }
 
 // Parameter represents an OpenAPI parameter
 type Parameter struct {
+	Ref         string `json:"$ref,omitempty" yaml:"$ref,omitempty"`
 	Name        string `json:"name" yaml:"name"`
 	In          string `json:"in" yaml:"in"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
@@ -75,9 +93,9 @@ type Parameter struct {
 
 // RequestBody represents the request body
 type RequestBody struct {
-	Description string         `json:"description,omitempty" yaml:"description,omitempty"`
-	Required    bool            `json:"required,omitempty" yaml:"required,omitempty"`
-	Content     map[string]MediaType `json:"content,omitempty" yaml:"content,omitempty"`
+	Description string                  `json:"description,omitempty" yaml:"description,omitempty"`
+	Required    bool                    `json:"required,omitempty" yaml:"required,omitempty"`
+	Content     map[string]MediaType    `json:"content,omitempty" yaml:"content,omitempty"`
 }
 
 // MediaType represents a media type
@@ -92,16 +110,29 @@ type Response struct {
 
 // Schema represents an OpenAPI schema
 type Schema struct {
-	Type        string   `json:"type,omitempty" yaml:"type,omitempty"`
-	Format      string   `json:"format,omitempty" yaml:"format,omitempty"`
-	Example     any      `json:"example,omitempty" yaml:"example,omitempty"`
-	Default     any      `json:"default,omitempty" yaml:"default,omitempty"`
-	Enum        []any    `json:"enum,omitempty" yaml:"enum,omitempty"`
+	Ref       string   `json:"$ref,omitempty" yaml:"$ref,omitempty"`
+	Type      string   `json:"type,omitempty" yaml:"type,omitempty"`
+	Format    string   `json:"format,omitempty" yaml:"format,omitempty"`
+	Example   any      `json:"example,omitempty" yaml:"example,omitempty"`
+	Default   any      `json:"default,omitempty" yaml:"default,omitempty"`
+	Enum      []any    `json:"enum,omitempty" yaml:"enum,omitempty"`
+	Properties map[string]Schema `json:"properties,omitempty" yaml:"properties,omitempty"`
+	Items     *Schema  `json:"items,omitempty" yaml:"items,omitempty"`
 }
 
 // Components represents reusable components
 type Components struct {
-	Schemas map[string]Schema `json:"schemas,omitempty" yaml:"schemas,omitempty"`
+	Schemas         map[string]Schema              `json:"schemas,omitempty" yaml:"schemas,omitempty"`
+	SecuritySchemes map[string]SecurityScheme      `json:"securitySchemes,omitempty" yaml:"securitySchemes,omitempty"`
+}
+
+// SecurityScheme represents a security scheme
+type SecurityScheme struct {
+	Type         string `json:"type,omitempty" yaml:"type,omitempty"`
+	Scheme       string `json:"scheme,omitempty" yaml:"scheme,omitempty"`
+	BearerFormat string `json:"bearerFormat,omitempty" yaml:"bearerFormat,omitempty"`
+	Name         string `json:"name,omitempty" yaml:"name,omitempty"`
+	In           string `json:"in,omitempty" yaml:"in,omitempty"`
 }
 
 // Tag represents an OpenAPI tag
@@ -116,6 +147,9 @@ func (o *OpenAPIImporter) Parse(path string) ([]*types.SavedRequest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read file: %w", err)
 	}
+
+	// Strip BOM if present
+	data = stripBOM(data)
 
 	spec, err := o.parse(data)
 	if err != nil {
@@ -145,6 +179,140 @@ func (o *OpenAPIImporter) parse(data []byte) (*OpenAPISpec, error) {
 	return &spec, nil
 }
 
+// resolvePathItem resolves $ref in PathItem
+func (o *OpenAPIImporter) resolvePathItem(path string, spec *OpenAPISpec, visited map[string]bool) *PathItem {
+	if visited == nil {
+		visited = make(map[string]bool)
+	}
+
+	// Check for circular reference
+	if visited[path] {
+		return nil
+	}
+
+	pi, ok := spec.Paths[path]
+	if !ok {
+		return nil
+	}
+
+	if pi.Ref != "" {
+		visited[path] = true
+		// Resolve $ref - format: #/paths/pathname
+		parts := strings.Split(pi.Ref, "/")
+		if len(parts) >= 3 && parts[0] == "#" {
+			resolvedPath := strings.Join(parts[2:], "/")
+			resolvedPath = strings.ReplaceAll(resolvedPath, "~1", "/")
+			resolvedPath = strings.ReplaceAll(resolvedPath, "~0", "~")
+			if resolvedPI, ok := spec.Paths[resolvedPath]; ok {
+				pi = resolvedPI
+				if pi.Ref != "" {
+					return o.resolvePathItem("/"+resolvedPath, spec, visited)
+				}
+			}
+		}
+	}
+
+	// Resolve refs in parameters for each operation
+	if pi.Get != nil {
+		for i := range pi.Get.Parameters {
+			o.resolveParameterRef(&pi.Get.Parameters[i], spec, visited)
+		}
+	}
+	if pi.Post != nil {
+		for i := range pi.Post.Parameters {
+			o.resolveParameterRef(&pi.Post.Parameters[i], spec, visited)
+		}
+	}
+	if pi.Put != nil {
+		for i := range pi.Put.Parameters {
+			o.resolveParameterRef(&pi.Put.Parameters[i], spec, visited)
+		}
+	}
+	if pi.Delete != nil {
+		for i := range pi.Delete.Parameters {
+			o.resolveParameterRef(&pi.Delete.Parameters[i], spec, visited)
+		}
+	}
+	if pi.Patch != nil {
+		for i := range pi.Patch.Parameters {
+			o.resolveParameterRef(&pi.Patch.Parameters[i], spec, visited)
+		}
+	}
+	if pi.Options != nil {
+		for i := range pi.Options.Parameters {
+			o.resolveParameterRef(&pi.Options.Parameters[i], spec, visited)
+		}
+	}
+	if pi.Head != nil {
+		for i := range pi.Head.Parameters {
+			o.resolveParameterRef(&pi.Head.Parameters[i], spec, visited)
+		}
+	}
+	if pi.Trace != nil {
+		for i := range pi.Trace.Parameters {
+			o.resolveParameterRef(&pi.Trace.Parameters[i], spec, visited)
+		}
+	}
+
+	return &pi
+}
+
+// resolveParameterRef resolves $ref in parameter
+func (o *OpenAPIImporter) resolveParameterRef(param *Parameter, spec *OpenAPISpec, visited map[string]bool) {
+	if param.Ref != "" {
+		// Resolve $ref - format: #/components/parameters/paramname
+		parts := strings.Split(param.Ref, "/")
+		if len(parts) >= 4 && parts[0] == "#" {
+			resolvedRef := strings.Join(parts[3:], "/")
+			resolvedRef = strings.ReplaceAll(resolvedRef, "~1", "/")
+			resolvedRef = strings.ReplaceAll(resolvedRef, "~0", "~")
+			if spec.Components.Schemas != nil {
+				if resolvedSchema, ok := spec.Components.Schemas[resolvedRef]; ok {
+					param.Name = resolvedSchema.Type
+					param.Schema = resolvedSchema
+				}
+			}
+		}
+	}
+
+	// Resolve schema ref if present
+	o.resolveSchemaRef(&param.Schema, spec, visited)
+}
+
+// resolveSchemaRef resolves $ref in schema
+func (o *OpenAPIImporter) resolveSchemaRef(schema *Schema, spec *OpenAPISpec, visited map[string]bool) {
+	if schema == nil || schema.Ref == "" {
+		return
+	}
+
+	if visited == nil {
+		visited = make(map[string]bool)
+	}
+
+	// Check for circular reference
+	if visited[schema.Ref] {
+		return
+	}
+	visited[schema.Ref] = true
+
+	// Resolve $ref - format: #/components/schemas/typename
+	parts := strings.Split(schema.Ref, "/")
+	if len(parts) >= 4 && parts[0] == "#" {
+		resolvedRef := strings.Join(parts[3:], "/")
+		resolvedRef = strings.ReplaceAll(resolvedRef, "~1", "/")
+		resolvedRef = strings.ReplaceAll(resolvedRef, "~0", "~")
+		if spec.Components.Schemas != nil {
+			if resolvedSchema, ok := spec.Components.Schemas[resolvedRef]; ok {
+				*schema = resolvedSchema
+				// Continue resolving if the resolved schema also has a ref
+				if schema.Ref != "" {
+					o.resolveSchemaRef(schema, spec, visited)
+				}
+			}
+		}
+	}
+}
+
 // convertToRequests transforms an OpenAPI spec into SavedRequests
 func (o *OpenAPIImporter) convertToRequests(spec *OpenAPISpec) []*types.SavedRequest {
 	var requests []*types.SavedRequest
@@ -155,17 +323,55 @@ func (o *OpenAPIImporter) convertToRequests(spec *OpenAPISpec) []*types.SavedReq
 		tagMap[tag.Name] = tag.Description
 	}
 
+	// Build security schemes map
+	securitySchemeMap := make(map[string]SecurityScheme)
+	if spec.Components.SecuritySchemes != nil {
+		for name, scheme := range spec.Components.SecuritySchemes {
+			securitySchemeMap[name] = scheme
+		}
+	}
+
+	// Get base server URL
+	baseURL := o.getServerURL(spec)
+
 	// Process each path
 	for path, pathItem := range spec.Paths {
-		operations := o.getOperations(&pathItem)
+		// Resolve PathItem refs
+		resolvedPI := o.resolvePathItem(path, spec, nil)
+		if resolvedPI == nil {
+			resolvedPI = &pathItem
+		}
+
+		operations := o.getOperations(resolvedPI)
 
 		for _, opWithMethod := range operations {
-			req := o.operationToRequest(spec, path, opWithMethod, tagMap)
+			req := o.operationToRequest(spec, baseURL, path, opWithMethod, tagMap, securitySchemeMap)
 			requests = append(requests, req)
 		}
 	}
 
 	return requests
+}
+
+// getServerURL returns the base server URL with resolved variables
+func (o *OpenAPIImporter) getServerURL(spec *OpenAPISpec) string {
+	if len(spec.Servers) == 0 {
+		return ""
+	}
+
+	server := spec.Servers[0]
+	url := server.URL
+
+	// Resolve server variables
+	for name, variable := range server.Variables {
+		defaultVal := variable.Default
+		if defaultVal == "" && len(variable.Enum) > 0 {
+			defaultVal = variable.Enum[0]
+		}
+		url = strings.ReplaceAll(url, "{"+name+"}", defaultVal)
+	}
+
+	return url
 }
 
 // getOperations returns all operations from a PathItem with their HTTP methods
@@ -199,11 +405,15 @@ func (o *OpenAPIImporter) getOperations(pi *PathItem) []OpWithMethod {
 }
 
 // operationToRequest converts an OpenAPI operation to a SavedRequest
-func (o *OpenAPIImporter) operationToRequest(spec *OpenAPISpec, path string, opWithMethod OpWithMethod, tagMap map[string]string) *types.SavedRequest {
+func (o *OpenAPIImporter) operationToRequest(spec *OpenAPISpec, baseURL, path string, opWithMethod OpWithMethod, tagMap map[string]string, securitySchemeMap map[string]SecurityScheme) *types.SavedRequest {
 	op := opWithMethod.Op
 	method := opWithMethod.Method
 	name := o.getName(op, path, method)
-	url := o.buildURL(spec, path)
+
+	// Substitute path parameters
+	path = o.substitutePathParams(path, op.Parameters)
+
+	url := o.buildURL(baseURL, path)
 
 	// Build headers
 	var headers []types.Header
@@ -220,7 +430,7 @@ func (o *OpenAPIImporter) operationToRequest(spec *OpenAPISpec, path string, opW
 	var queryParams []string
 	for _, param := range op.Parameters {
 		if param.In == "query" {
-			queryParams = append(queryParams, fmt.Sprintf("%s=%s", param.Name, o.getExampleOrDefault(&param.Schema)))
+			queryParams = append(queryParams, fmt.Sprintf("%s=%s", queryEscape(param.Name), queryEscape(o.getExampleOrDefault(&param.Schema))))
 		}
 	}
 	if len(queryParams) > 0 {
@@ -247,41 +457,83 @@ func (o *OpenAPIImporter) operationToRequest(spec *OpenAPISpec, path string, opW
 		}
 	}
 
+	// Apply security
+	o.applySecurity(op.Security, spec.Security, securitySchemeMap, &headers)
+
 	return &types.SavedRequest{
-		Name:        name,
-		URL:         url,
-		Method:      opWithMethod.Method,
-		Headers:     headers,
-		Body:        body,
-		Tags:        tags,
-		Collection:  spec.Info.Title,
+		Name:       name,
+		URL:        url,
+		Method:     opWithMethod.Method,
+		Headers:    headers,
+		Body:       body,
+		Tags:       tags,
+		Collection: spec.Info.Title,
 	}
 }
 
-// getMethod determines the HTTP method from an operation
-func (o *OpenAPIImporter) getMethod(op *Operation) string {
-	switch {
-	case op == nil:
-		return "GET"
-	default:
-		// Use struct field inspection via operation reference
-		// Since we can't directly check which field we're from, we check summary
-		summary := strings.ToLower(op.Summary)
+// queryEscape URL-encodes a query parameter value
+func queryEscape(s string) string {
+	// Simple URL encoding for query params
+	var result strings.Builder
+	for _, c := range s {
 		switch {
-		case strings.Contains(summary, "post"):
-			return "POST"
-		case strings.Contains(summary, "put"):
-			return "PUT"
-		case strings.Contains(summary, "delete"):
-			return "DELETE"
-		case strings.Contains(summary, "patch"):
-			return "PATCH"
-		case strings.Contains(summary, "head"):
-			return "HEAD"
-		case strings.Contains(summary, "options"):
-			return "OPTIONS"
+		case c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c == '.' || c == '~':
+			result.WriteRune(c)
+		case c == ' ':
+			result.WriteString("%20")
 		default:
-			return "GET"
+			result.WriteString(fmt.Sprintf("%%%X", c))
+		}
+	}
+	return result.String()
+}
+
+// substitutePathParams replaces {param} placeholders with example/default values
+func (o *OpenAPIImporter) substitutePathParams(path string, params []Parameter) string {
+	for _, param := range params {
+		if param.In == "path" {
+			replacement := o.getExampleOrDefault(&param.Schema)
+			if replacement == "" {
+				replacement = "example"
+			}
+			path = strings.ReplaceAll(path, "{"+param.Name+"}", replacement)
+		}
+	}
+	return path
+}
+
+// applySecurity applies security schemes to headers
+func (o *OpenAPIImporter) applySecurity(opSecurity, specSecurity []map[string][]string, securitySchemeMap map[string]SecurityScheme, headers *[]types.Header) {
+	security := opSecurity
+	if len(security) == 0 {
+		security = specSecurity
+	}
+
+	for _, sec := range security {
+		for schemeName := range sec {
+			if scheme, ok := securitySchemeMap[schemeName]; ok {
+				switch scheme.Type {
+				case "http":
+					if scheme.Scheme == "bearer" {
+						*headers = append(*headers, types.Header{
+							Key:   "Authorization",
+							Value: "Bearer <token>",
+						})
+					} else if scheme.Scheme == "basic" {
+						*headers = append(*headers, types.Header{
+							Key:   "Authorization",
+							Value: "Basic <credentials>",
+						})
+					}
+				case "apiKey":
+					if scheme.In == "header" {
+						*headers = append(*headers, types.Header{
+							Key:   scheme.Name,
+							Value: "<api_key>",
+						})
+					}
+				}
+			}
 		}
 	}
 }
@@ -305,11 +557,39 @@ func (o *OpenAPIImporter) getName(op *Operation, path, method string) string {
 	return method + "_" + name
 }
 
+// getMethod extracts the HTTP method from an operation's Summary field
+func (o *OpenAPIImporter) getMethod(op *Operation) string {
+	if op == nil {
+		return "GET"
+	}
+	summary := strings.ToUpper(op.Summary)
+	switch {
+	case strings.Contains(summary, "POST"):
+		return "POST"
+	case strings.Contains(summary, "PUT"):
+		return "PUT"
+	case strings.Contains(summary, "DELETE"):
+		return "DELETE"
+	case strings.Contains(summary, "PATCH"):
+		return "PATCH"
+	case strings.Contains(summary, "HEAD"):
+		return "HEAD"
+	case strings.Contains(summary, "OPTIONS"):
+		return "OPTIONS"
+	default:
+		return "GET"
+	}
+}
+
 // buildURL constructs the full URL from spec and path
-func (o *OpenAPIImporter) buildURL(spec *OpenAPISpec, path string) string {
-	// For now, use the path directly
-	// In a full implementation, we'd also consider server URLs
-	return path
+func (o *OpenAPIImporter) buildURL(baseURL, path string) string {
+	if baseURL == "" {
+		return path
+	}
+	// Ensure proper joining
+	baseURL = strings.TrimSuffix(baseURL, "/")
+	path = strings.TrimPrefix(path, "/")
+	return baseURL + "/" + path
 }
 
 // getExampleOrDefault returns an example or default value from schema
@@ -358,22 +638,49 @@ func (o *OpenAPIImporter) schemaToExample(schema *Schema) string {
 
 	switch schema.Type {
 	case "object":
+		if len(schema.Properties) > 0 {
+			var pairs []string
+			for name, prop := range schema.Properties {
+				value := o.schemaToExample(&prop)
+				if value == "" {
+					value = "\"\""
+				}
+				pairs = append(pairs, fmt.Sprintf("%q: %s", name, value))
+			}
+			return "{" + strings.Join(pairs, ", ") + "}"
+		}
 		return "{ }"
 	case "array":
+		if schema.Items != nil {
+			item := o.schemaToExample(schema.Items)
+			if item == "" {
+				item = "null"
+			}
+			return "[" + item + "]"
+		}
 		return "[ ]"
 	case "string":
 		if schema.Example != nil {
-			return fmt.Sprintf("%v", schema.Example)
+			return fmt.Sprintf("%q", schema.Example)
+		}
+		if schema.Default != nil {
+			return fmt.Sprintf("%q", schema.Default)
 		}
 		return "\"string\""
 	case "integer", "number":
 		if schema.Example != nil {
 			return fmt.Sprintf("%v", schema.Example)
 		}
+		if schema.Default != nil {
+			return fmt.Sprintf("%v", schema.Default)
+		}
 		return "0"
 	case "boolean":
 		if schema.Example != nil {
 			return fmt.Sprintf("%v", schema.Example)
+		}
+		if schema.Default != nil {
+			return fmt.Sprintf("%v", schema.Default)
 		}
 		return "true"
 	default:

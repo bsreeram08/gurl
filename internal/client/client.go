@@ -15,6 +15,7 @@ import (
 )
 
 var ErrTooManyRedirects = errors.New("too many redirects")
+var ErrRedirectLoop = errors.New("redirect loop detected")
 
 // wrapTimeoutError wraps context deadline exceeded errors with a friendly message
 func wrapTimeoutError(err error, timeout time.Duration) error {
@@ -88,16 +89,21 @@ type Client struct {
 func NewClient() *Client {
 	return &Client{
 		transport: &http.Transport{
-			DisableKeepAlives: true,
+			DisableKeepAlives: false,
+			MaxIdleConns:      100,
+			IdleConnTimeout:   90 * time.Second,
 		},
 		timeout: defaultTimeout,
 	}
 }
 
-func NewClientWithTLS(cfg TLSConfig) *Client {
+func NewClientWithTLS(cfg TLSConfig) (*Client, error) {
 	tlsConfig := &tls.Config{}
 
 	if cfg.Insecure {
+		if os.Getenv("GURL_TLS_INSECURE_OK") == "" {
+			return nil, fmt.Errorf("TLS verification disabled but GURL_TLS_INSECURE_OK environment variable is not set")
+		}
 		tlsConfig.InsecureSkipVerify = true
 		fmt.Fprintf(os.Stderr, "WARNING: TLS verification disabled. This is insecure and should only be used for testing.\n")
 	}
@@ -136,11 +142,13 @@ func NewClientWithTLS(cfg TLSConfig) *Client {
 
 	return &Client{
 		transport: &http.Transport{
-			DisableKeepAlives: true,
+			DisableKeepAlives: false,
+			MaxIdleConns:      100,
+			IdleConnTimeout:   90 * time.Second,
 			TLSClientConfig:   tlsConfig,
 		},
 		timeout: defaultTimeout,
-	}
+	}, nil
 }
 
 func parseTLSVersion(version string) (uint16, error) {
@@ -193,6 +201,7 @@ func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response,
 
 	var redirectHops []RedirectHop
 	var redirectChain []string
+	origHost := httpReq.URL.Host
 
 	httpClient := &http.Client{
 		Transport: c.transport,
@@ -210,6 +219,7 @@ func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response,
 	} else if maxRedirects > 0 {
 		redirectHops = make([]RedirectHop, 0, maxRedirects)
 		redirectChain = make([]string, 0, maxRedirects)
+		visitedURLs := make(map[string]bool)
 		lastStatusCode := 0
 		origTransport := httpClient.Transport
 		httpClient.Transport = &statusCapturingTransport{
@@ -231,6 +241,17 @@ func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response,
 				}
 				redirectHops = append(redirectHops, hop)
 				redirectChain = append(redirectChain, req.URL.String())
+
+				// Check for redirect loop
+				if visitedURLs[req.URL.String()] {
+					return ErrRedirectLoop
+				}
+				visitedURLs[req.URL.String()] = true
+
+				// Warn if redirecting to external domain
+				if req.URL.Host != origHost {
+					fmt.Fprintf(os.Stderr, "WARNING: Redirect to external domain: %s (original: %s)\n", req.URL.Host, origHost)
+				}
 			}
 			if len(via) >= maxRedirects {
 				return ErrTooManyRedirects
@@ -244,6 +265,9 @@ func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response,
 	duration := time.Since(start)
 
 	if err != nil {
+		if httpResp != nil {
+			defer httpResp.Body.Close()
+		}
 		if errors.Is(err, ErrTooManyRedirects) && len(redirectHops) > 0 {
 			lastHop := redirectHops[len(redirectHops)-1]
 			headers := http.Header{}
@@ -259,20 +283,23 @@ func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response,
 				Redirects:  redirectHops,
 			}, nil
 		}
+		if errors.Is(err, ErrRedirectLoop) {
+			return Response{
+				StatusCode: 0,
+				Headers:    http.Header{},
+				Body:       []byte{},
+				Duration:   duration,
+				Size:       0,
+				Redirects:  redirectHops,
+			}, ErrRedirectLoop
+		}
 		return Response{}, wrapTimeoutError(err, effectiveTimeout)
 	}
 	defer httpResp.Body.Close()
 
-	body := make([]byte, 0, 1024)
-	buf := make([]byte, 4096)
-	for {
-		n, readErr := httpResp.Body.Read(buf)
-		if n > 0 {
-			body = append(body, buf[:n]...)
-		}
-		if readErr != nil {
-			break
-		}
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return Response{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	return Response{

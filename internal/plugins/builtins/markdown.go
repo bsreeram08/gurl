@@ -53,7 +53,9 @@ func (m *MarkdownOutput) Render(ctx *plugins.ResponseContext) string {
 			var buf strings.Builder
 			enc := json.NewEncoder(&buf)
 			enc.SetIndent("", "  ")
-			_ = enc.Encode(bodyObj)
+			if err := enc.Encode(bodyObj); err != nil {
+				return ""
+			}
 			bodyStr = buf.String()
 		}
 		sb.WriteString("```json\n")

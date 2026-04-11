@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -123,8 +124,14 @@ func (r *InteractiveRunner) receiveLoop(ctx context.Context, msgChan chan<- stri
 				return
 
 			case MessageTypePing:
-				// Respond with pong
-				r.client.Send([]byte{}, MessageTypePong)
+				// Respond with pong - must include the payload from the ping
+				if err := r.client.Send(data, MessageTypePong); err != nil {
+					select {
+					case errChan <- fmt.Errorf("pong failed: %w", err):
+					case <-ctx.Done():
+					}
+					return
+				}
 
 			case MessageTypePong:
 				// Pong received, nothing to do
@@ -237,30 +244,39 @@ func (r *InteractiveRunner) formatBinaryMessage(data []byte, prefix string) stri
 
 // formatHex creates a hex dump string
 func formatHex(data []byte, bytesPerLine int) string {
-	result := ""
+	var result strings.Builder
+	result.Grow(len(data) * 4) // Pre-allocate
+
 	for i := 0; i < len(data); i += bytesPerLine {
 		end := i + bytesPerLine
 		if end > len(data) {
 			end = len(data)
 		}
 		line := data[i:end]
-		hex := ""
-		ascii := ""
+
+		// Build hex and ascii parts
+		var hexBuilder, asciiBuilder strings.Builder
+		hexBuilder.Grow(bytesPerLine * 3)
+		asciiBuilder.Grow(bytesPerLine)
+
 		for _, b := range line {
-			hex += fmt.Sprintf("%02x ", b)
+			hexBuilder.WriteString(fmt.Sprintf("%02x ", b))
 			if b >= 32 && b <= 126 {
-				ascii += string(b)
+				asciiBuilder.WriteByte(b)
 			} else {
-				ascii += "."
+				asciiBuilder.WriteByte('.')
 			}
 		}
+		hex := hexBuilder.String()
+		ascii := asciiBuilder.String()
+
 		// Pad hex to full width
 		for len(line) < bytesPerLine {
 			hex += "   "
 		}
-		result += fmt.Sprintf("  %04x: %s|%s|\n", i, hex, ascii)
+		result.WriteString(fmt.Sprintf("  %04x: %s|%s|\n", i, hex, ascii))
 	}
-	return result
+	return result.String()
 }
 
 // trimNewline removes trailing newline characters

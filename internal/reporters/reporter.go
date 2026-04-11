@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"html"
 	"os"
 	"strings"
 	"time"
@@ -370,7 +371,7 @@ h1 { color: #333; margin-bottom: 20px; }
 		sb.WriteString(`<div class="iteration">
 <div class="iteration-header">
 <span class="iteration-title">`)
-		sb.WriteString(result.CollectionName)
+		sb.WriteString(html.EscapeString(result.CollectionName))
 		sb.WriteString(` - Iteration `)
 		sb.WriteString(fmt.Sprintf("%d", result.Iteration))
 		sb.WriteString(`</span>
@@ -398,24 +399,24 @@ h1 { color: #333; margin-bottom: 20px; }
 				}
 			}
 
-			sb.WriteString(`<div class="test-result `)
-			sb.WriteString(class)
-			sb.WriteString(`">
+		sb.WriteString(`<div class="test-result `)
+		sb.WriteString(class)
+		sb.WriteString(`">
 <span class="status">`)
-			sb.WriteString(status)
-			sb.WriteString(`</span>
+		sb.WriteString(status)
+		sb.WriteString(`</span>
 <span class="name">`)
-			sb.WriteString(reqResult.RequestName)
-			sb.WriteString(`</span>
+		sb.WriteString(html.EscapeString(reqResult.RequestName))
+		sb.WriteString(`</span>
 <span class="duration">`)
-			sb.WriteString(reqResult.Duration.String())
+		sb.WriteString(reqResult.Duration.String())
+		sb.WriteString(`</span>`)
+		if message != "" {
+			sb.WriteString(`<span class="message">`)
+			sb.WriteString(html.EscapeString(message))
 			sb.WriteString(`</span>`)
-			if message != "" {
-				sb.WriteString(`<span class="message">`)
-				sb.WriteString(message)
-				sb.WriteString(`</span>`)
-			}
-			sb.WriteString(`</div>
+		}
+		sb.WriteString(`</div>
 `)
 		}
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/sreeram/gurl/pkg/types"
@@ -44,6 +45,7 @@ type ListOptions struct {
 type LMDB struct {
 	DB     *leveldb.DB
 	dbPath string
+	mu     sync.Mutex
 }
 
 // NewLMDB creates a new LMDB instance
@@ -77,6 +79,9 @@ func NewLMDBWithPath(dbPath string) *LMDB {
 
 // Open opens the database
 func (db *LMDB) Open() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	var err error
 	db.DB, err = leveldb.OpenFile(db.dbPath, &opt.Options{
 		WriteBuffer: 4 * 1024 * 1024, // 4MB write buffer
@@ -85,24 +90,44 @@ func (db *LMDB) Open() error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	if err := db.MigrateIfNeeded(); err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
-	}
-
 	return nil
 }
 
 // Close closes the database
 func (db *LMDB) Close() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	if db.DB != nil {
 		return db.DB.Close()
 	}
 	return nil
 }
 
+// GetSchemaVersion returns the current schema version of the database
+func (db *LMDB) GetSchemaVersion() (int, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	data, err := db.DB.Get([]byte("schema_version"), nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get schema version: %w", err)
+	}
+
+	var version int
+	if err := json.Unmarshal(data, &version); err != nil {
+		return 0, fmt.Errorf("failed to unmarshal schema version: %w", err)
+	}
+
+	return version, nil
+}
+
 // SaveRequest saves a request to the database atomically.
-// If a request with the same name already exists, it is updated in-place (upsert).
+// If a request with this name already exists, it is updated in-place (upsert).
 func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	if req.ID == "" {
 		// Check if a request with this name already exists
 		nameKey := fmt.Sprintf("idx:name:%s", req.Name)
@@ -146,8 +171,8 @@ func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
 		db.addToIndexBatch(batch, folderKey, req.ID)
 	}
 
-	// Atomic write
-	if err := db.DB.Write(batch, nil); err != nil {
+	// Atomic write with sync for durability
+	if err := db.DB.Write(batch, &opt.WriteOptions{Sync: true}); err != nil {
 		return fmt.Errorf("failed to save request atomically: %w", err)
 	}
 
@@ -217,6 +242,9 @@ func (db *LMDB) addToIndex(indexKey string, requestID string) error {
 
 // GetRequest retrieves a request by ID
 func (db *LMDB) GetRequest(id string) (*types.SavedRequest, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	key := fmt.Sprintf("request:%s", id)
 	data, err := db.DB.Get([]byte(key), nil)
 	if err != nil {
@@ -236,6 +264,9 @@ func (db *LMDB) GetRequest(id string) (*types.SavedRequest, error) {
 
 // GetRequestByName retrieves a request by name
 func (db *LMDB) GetRequestByName(name string) (*types.SavedRequest, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	// Look up in name index
 	nameKey := fmt.Sprintf("idx:name:%s", name)
 	idData, err := db.DB.Get([]byte(nameKey), nil)
@@ -247,11 +278,14 @@ func (db *LMDB) GetRequestByName(name string) (*types.SavedRequest, error) {
 	}
 
 	id := string(idData)
-	return db.GetRequest(id)
+	return db.getRequestLocked(id)
 }
 
 // ListRequests returns all requests matching the options
 func (db *LMDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	if opts == nil {
 		opts = &ListOptions{}
 	}
@@ -267,15 +301,19 @@ func (db *LMDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, error) {
 		tagKey := fmt.Sprintf("idx:tag:%s", opts.Tag)
 		requestIDs = db.getFromIndex(tagKey)
 	default:
-		// List all requests - scan all keys with "request:" prefix
+		// List all requests - use prefix iteration with byte range ["request:", "request;"]
 		iter := db.DB.NewIterator(nil, nil)
 		defer iter.Release()
 
+		seekKey := []byte("request:")
+		iter.Seek(seekKey)
 		for iter.Next() {
 			key := string(iter.Key())
-			if len(key) > 8 && key[:8] == "request:" {
-				requestIDs = append(requestIDs, key[8:])
+			// Stop when we go past "request:" prefix (next char after ':' is ';' in ascii)
+			if len(key) < 8 || key[:8] != "request:" {
+				break
 			}
+			requestIDs = append(requestIDs, key[8:])
 		}
 	}
 
@@ -283,7 +321,7 @@ func (db *LMDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, error) {
 	seen := make(map[string]bool)
 	var results []*types.SavedRequest
 	for _, id := range requestIDs {
-		req, err := db.GetRequest(id)
+		req, err := db.getRequestLocked(id)
 		if err != nil {
 			continue // Skip requests that can't be retrieved
 		}
@@ -303,7 +341,7 @@ func (db *LMDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, error) {
 		if opts.Pattern != "" {
 			match := false
 			for _, pattern := range []string{req.Name, req.URL} {
-				if contains(pattern, opts.Pattern) {
+				if strings.Contains(pattern, opts.Pattern) {
 					match = true
 					break
 				}
@@ -324,6 +362,25 @@ func (db *LMDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, error) {
 	return results, nil
 }
 
+// getRequestLocked retrieves a request by ID (must be called with lock held)
+func (db *LMDB) getRequestLocked(id string) (*types.SavedRequest, error) {
+	key := fmt.Sprintf("request:%s", id)
+	data, err := db.DB.Get([]byte(key), nil)
+	if err != nil {
+		if err == leveldb.ErrNotFound {
+			return nil, fmt.Errorf("request not found: %s", id)
+		}
+		return nil, fmt.Errorf("failed to get request: %w", err)
+	}
+
+	var req types.SavedRequest
+	if err := json.Unmarshal(data, &req); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
+	}
+
+	return &req, nil
+}
+
 // getFromIndex retrieves all request IDs from an index
 func (db *LMDB) getFromIndex(indexKey string) []string {
 	data, err := db.DB.Get([]byte(indexKey), nil)
@@ -339,49 +396,49 @@ func (db *LMDB) getFromIndex(indexKey string) []string {
 	return ids
 }
 
-// contains checks if a string contains a substring (simple implementation)
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && findSubstring(s, substr) >= 0
-}
-
-// findSubstring implements a simple substring search
-func findSubstring(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}
-
 // DeleteRequest deletes a request by ID
 func (db *LMDB) DeleteRequest(id string) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	// First get the request to clean up indices
-	req, err := db.GetRequest(id)
+	req, err := db.getRequestLocked(id)
 	if err != nil {
 		return err
 	}
 
+	// Use batch for atomic delete of request + all index entries
+	batch := new(leveldb.Batch)
+
 	// Delete the request
 	key := fmt.Sprintf("request:%s", id)
-	if err := db.DB.Delete([]byte(key), nil); err != nil {
-		return fmt.Errorf("failed to delete request: %w", err)
-	}
+	batch.Delete([]byte(key))
 
 	// Delete from name index
 	nameKey := fmt.Sprintf("idx:name:%s", req.Name)
-	db.DB.Delete([]byte(nameKey), nil)
+	batch.Delete([]byte(nameKey))
 
 	// Delete from collection index
 	if req.Collection != "" {
 		colKey := fmt.Sprintf("idx:collection:%s", req.Collection)
-		db.removeFromIndex(colKey, id)
+		db.removeFromIndexBatch(batch, colKey, id)
 	}
 
 	// Delete from tag indices
 	for _, tag := range req.Tags {
 		tagKey := fmt.Sprintf("idx:tag:%s", tag)
-		db.removeFromIndex(tagKey, id)
+		db.removeFromIndexBatch(batch, tagKey, id)
+	}
+
+	// Delete from folder index
+	if req.Folder != "" {
+		folderKey := fmt.Sprintf("idx:folder:%s", req.Folder)
+		db.removeFromIndexBatch(batch, folderKey, id)
+	}
+
+	// Atomic write with sync
+	if err := db.DB.Write(batch, &opt.WriteOptions{Sync: true}); err != nil {
+		return fmt.Errorf("failed to delete request: %w", err)
 	}
 
 	return nil
@@ -415,14 +472,46 @@ func (db *LMDB) removeFromIndex(indexKey string, requestID string) error {
 	return db.DB.Put([]byte(indexKey), newData, nil)
 }
 
+// removeFromIndexBatch removes a request ID from an index using a batch
+func (db *LMDB) removeFromIndexBatch(batch *leveldb.Batch, indexKey string, requestID string) error {
+	indexData, err := db.DB.Get([]byte(indexKey), nil)
+	if err != nil {
+		return nil // Index doesn't exist, nothing to remove
+	}
+
+	var ids []string
+	if err := json.Unmarshal(indexData, &ids); err != nil {
+		return fmt.Errorf("failed to unmarshal index: %w", err)
+	}
+
+	// Filter out the request ID
+	var newIDs []string
+	for _, id := range ids {
+		if id != requestID {
+			newIDs = append(newIDs, id)
+		}
+	}
+
+	newData, err := json.Marshal(newIDs)
+	if err != nil {
+		return fmt.Errorf("failed to marshal index: %w", err)
+	}
+
+	batch.Put([]byte(indexKey), newData)
+	return nil
+}
+
 // UpdateRequest updates an existing request
 func (db *LMDB) UpdateRequest(req *types.SavedRequest) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	if req.ID == "" {
 		return fmt.Errorf("cannot update request without ID")
 	}
 
 	// Get existing request to clean up old indices
-	existing, err := db.GetRequest(req.ID)
+	existing, err := db.getRequestLocked(req.ID)
 	if err != nil {
 		return fmt.Errorf("request not found: %w", err)
 	}
@@ -443,11 +532,68 @@ func (db *LMDB) UpdateRequest(req *types.SavedRequest) error {
 		db.removeFromIndex(folderKey, req.ID)
 	}
 
-	return db.SaveRequest(req)
+	return db.saveRequestLocked(req)
 }
 
-// SaveHistory saves an execution history entry
+// saveRequestLocked saves a request to the database atomically (must be called with lock held).
+// If a request with this name already exists, it is updated in-place (upsert).
+func (db *LMDB) saveRequestLocked(req *types.SavedRequest) error {
+	if req.ID == "" {
+		// Check if a request with this name already exists
+		nameKey := fmt.Sprintf("idx:name:%s", req.Name)
+		if existingID, err := db.DB.Get([]byte(nameKey), nil); err == nil && len(existingID) > 0 {
+			req.ID = string(existingID)
+		} else {
+			req.ID = uuid.New().String()
+		}
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Use atomic batch write for all index updates
+	batch := new(leveldb.Batch)
+
+	// Save the request
+	key := fmt.Sprintf("request:%s", req.ID)
+	batch.Put([]byte(key), data)
+
+	// Update name index
+	nameKey := fmt.Sprintf("idx:name:%s", req.Name)
+	batch.Put([]byte(nameKey), []byte(req.ID))
+
+	// Add to collection index if set
+	if req.Collection != "" {
+		colKey := fmt.Sprintf("idx:collection:%s", req.Collection)
+		db.addToIndexBatch(batch, colKey, req.ID)
+	}
+
+	// Add to tag indices
+	for _, tag := range req.Tags {
+		tagKey := fmt.Sprintf("idx:tag:%s", tag)
+		db.addToIndexBatch(batch, tagKey, req.ID)
+	}
+
+	if req.Folder != "" {
+		folderKey := fmt.Sprintf("idx:folder:%s", req.Folder)
+		db.addToIndexBatch(batch, folderKey, req.ID)
+	}
+
+	// Atomic write with sync for durability
+	if err := db.DB.Write(batch, &opt.WriteOptions{Sync: true}); err != nil {
+		return fmt.Errorf("failed to save request atomically: %w", err)
+	}
+
+	return nil
+}
+
+// SaveHistory saves an execution history entry with per-request limit of 100 entries
 func (db *LMDB) SaveHistory(history *types.ExecutionHistory) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	if history.ID == "" {
 		history.ID = uuid.New().String()
 	}
@@ -459,7 +605,45 @@ func (db *LMDB) SaveHistory(history *types.ExecutionHistory) error {
 
 	// Use timestamp as part of key for ordering
 	key := fmt.Sprintf("history:%s:%d", history.RequestID, history.Timestamp)
-	if err := db.DB.Put([]byte(key), data, nil); err != nil {
+
+	// Enforce history limit: collect existing keys and delete oldest if over 100
+	const maxHistory = 100
+	var historyKeys []int64
+	prefix := fmt.Sprintf("history:%s:", history.RequestID)
+	iter := db.DB.NewIterator(nil, nil)
+	for iter.Next() {
+		k := string(iter.Key())
+		if len(k) > len(prefix) && k[:len(prefix)] == prefix {
+			var ts int64
+			fmt.Sscanf(k[len(prefix):], "%d", &ts)
+			historyKeys = append(historyKeys, ts)
+		}
+	}
+	iter.Release()
+
+	// If we would exceed limit, delete oldest entries
+	if len(historyKeys) >= maxHistory {
+		// Sort timestamps ascending (oldest first)
+		for i := 0; i < len(historyKeys)-1; i++ {
+			for j := i + 1; j < len(historyKeys); j++ {
+				if historyKeys[i] > historyKeys[j] {
+					historyKeys[i], historyKeys[j] = historyKeys[j], historyKeys[i]
+				}
+			}
+		}
+		// Delete oldest entries to get down to maxHistory - 1 (leaving room for new entry)
+		toDelete := len(historyKeys) - (maxHistory - 1)
+		batch := new(leveldb.Batch)
+		for i := 0; i < toDelete; i++ {
+			oldKey := fmt.Sprintf("history:%s:%d", history.RequestID, historyKeys[i])
+			batch.Delete([]byte(oldKey))
+		}
+		if err := db.DB.Write(batch, &opt.WriteOptions{Sync: true}); err != nil {
+			return fmt.Errorf("failed to trim old history: %w", err)
+		}
+	}
+
+	if err := db.DB.Put([]byte(key), data, &opt.WriteOptions{Sync: true}); err != nil {
 		return fmt.Errorf("failed to save history: %w", err)
 	}
 
@@ -468,6 +652,9 @@ func (db *LMDB) SaveHistory(history *types.ExecutionHistory) error {
 
 // GetHistory retrieves execution history for a request
 func (db *LMDB) GetHistory(requestID string, limit int) ([]*types.ExecutionHistory, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	if limit <= 0 {
 		limit = 100
 	}
@@ -503,6 +690,9 @@ func (db *LMDB) GetHistory(requestID string, limit int) ([]*types.ExecutionHisto
 }
 
 func (db *LMDB) ListFolder(path string) ([]*types.SavedRequest, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	folderKey := fmt.Sprintf("idx:folder:%s", path)
 	requestIDs := db.getFromIndex(folderKey)
 	if requestIDs == nil {
@@ -511,7 +701,7 @@ func (db *LMDB) ListFolder(path string) ([]*types.SavedRequest, error) {
 
 	var results []*types.SavedRequest
 	for _, id := range requestIDs {
-		req, err := db.GetRequest(id)
+		req, err := db.getRequestLocked(id)
 		if err != nil {
 			continue
 		}
@@ -522,6 +712,9 @@ func (db *LMDB) ListFolder(path string) ([]*types.SavedRequest, error) {
 }
 
 func (db *LMDB) ListFolderRecursive(path string) ([]*types.SavedRequest, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	iter := db.DB.NewIterator(nil, nil)
 	defer iter.Release()
 
@@ -553,7 +746,7 @@ func (db *LMDB) ListFolderRecursive(path string) ([]*types.SavedRequest, error) 
 	uniqueIDs := uniqueStrings(requestIDs)
 	var results []*types.SavedRequest
 	for _, id := range uniqueIDs {
-		req, err := db.GetRequest(id)
+		req, err := db.getRequestLocked(id)
 		if err != nil {
 			continue
 		}
@@ -564,22 +757,60 @@ func (db *LMDB) ListFolderRecursive(path string) ([]*types.SavedRequest, error) 
 }
 
 func (db *LMDB) DeleteFolder(path string) error {
-	requests, err := db.ListFolder(path)
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	requests, err := db.listFolderLocked(path)
 	if err != nil {
 		return err
 	}
 
+	batch := new(leveldb.Batch)
 	for _, req := range requests {
 		req.Folder = ""
-		if err := db.UpdateRequest(req); err != nil {
-			return err
+		data, err := json.Marshal(req)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request: %w", err)
 		}
+		key := fmt.Sprintf("request:%s", req.ID)
+		batch.Put([]byte(key), data)
+
+		// Remove from old folder index
+		folderKey := fmt.Sprintf("idx:folder:%s", path)
+		db.removeFromIndexBatch(batch, folderKey, req.ID)
+	}
+
+	if err := db.DB.Write(batch, &opt.WriteOptions{Sync: true}); err != nil {
+		return fmt.Errorf("failed to delete folder: %w", err)
 	}
 
 	return nil
 }
 
+// listFolderLocked lists requests in a folder (must be called with lock held)
+func (db *LMDB) listFolderLocked(path string) ([]*types.SavedRequest, error) {
+	folderKey := fmt.Sprintf("idx:folder:%s", path)
+	requestIDs := db.getFromIndex(folderKey)
+	if requestIDs == nil {
+		return []*types.SavedRequest{}, nil
+	}
+
+	var results []*types.SavedRequest
+	for _, id := range requestIDs {
+		req, err := db.getRequestLocked(id)
+		if err != nil {
+			continue
+		}
+		results = append(results, req)
+	}
+
+	return results, nil
+}
+
 func (db *LMDB) GetAllFolders() ([]string, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	iter := db.DB.NewIterator(nil, nil)
 	defer iter.Release()
 

@@ -13,7 +13,13 @@ import (
 	"github.com/sreeram/gurl/internal/client"
 )
 
-type AWSv4Handler struct{}
+// AWSv4Handler supports AWS Signature Version 4 with configurable clock skew handling
+type AWSv4Handler struct {
+	// ClockSkew allows configuring acceptable clock skew (default 0)
+	// Positive values increase the X-Amz-Date to allow for server clock being ahead
+	// Negative values decrease the X-Amz-Date to allow for server clock being behind
+	ClockSkew time.Duration
+}
 
 func (h *AWSv4Handler) Name() string {
 	return "awsv4"
@@ -30,7 +36,8 @@ func (h *AWSv4Handler) Apply(req *client.Request, params map[string]string) {
 		return
 	}
 
-	now := time.Now().UTC()
+	// Apply clock skew adjustment (default 0 if not set)
+	now := time.Now().UTC().Add(h.ClockSkew)
 	dateStr := now.Format("20060102")
 	amzDateStr := now.Format("20060102T150405Z")
 

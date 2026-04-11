@@ -94,7 +94,7 @@ func (sm *SearchModal) filterResults() {
 	}
 }
 
-func (sm *SearchModal) Update(msg tea.Msg) *SearchModal {
+func (sm *SearchModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -107,15 +107,16 @@ func (sm *SearchModal) Update(msg tea.Msg) *SearchModal {
 				sm.selectedIdx++
 			}
 		case "enter":
-			// Return nil to indicate "open selected"
-			return nil
+			// Return nil, nil to indicate "open selected"
+			return nil, nil
 		case "esc":
-			return nil
+			// Return nil, nil to indicate "cancel"
+			return nil, nil
 		}
 	}
 	sm.input, _ = sm.input.Update(msg)
 	sm.filterResults()
-	return sm
+	return sm, nil
 }
 
 func (sm *SearchModal) View() string {
@@ -172,6 +173,11 @@ func (sm *SearchModal) GetSelectedRequest() *types.SavedRequest {
 	if sm.selectedIdx >= 0 && sm.selectedIdx < len(sm.results) {
 		return sm.results[sm.selectedIdx]
 	}
+	return nil
+}
+
+// Init implements tea.Model.Init
+func (sm *SearchModal) Init() tea.Cmd {
 	return nil
 }
 
@@ -246,6 +252,7 @@ func (im *ImportModal) SetError(msg string) {
 	im.errorMsg = msg
 }
 
+// RunnerModal manages collection runner state
 type RunnerModal struct {
 	collections []string
 	selectedIdx int
@@ -260,6 +267,9 @@ type RunnerModal struct {
 	width       int
 	height      int
 	mu          sync.Mutex
+	cancelCtx   context.Context
+	cancelFn    context.CancelFunc
+	done        chan struct{}
 }
 
 func NewRunnerModal(collections []string, envs []string, width, height int) *RunnerModal {
@@ -417,6 +427,38 @@ func (rm *RunnerModal) SetTotal(total int) {
 	rm.total = total
 }
 
+// StartRun begins the collection run with cancellation support
+func (rm *RunnerModal) StartRun(collection string, db storage.DB, r *runner.Runner) {
+	rm.cancelCtx, rm.cancelFn = context.WithCancel(context.Background())
+	rm.done = make(chan struct{})
+	reqs, _ := db.ListRequests(&storage.ListOptions{Collection: collection})
+	rm.total = len(reqs)
+	go func() {
+		defer close(rm.done)
+		res, _ := r.Run(rm.cancelCtx, runner.RunConfig{CollectionName: collection})
+		for _, runResult := range res {
+			for _, rr := range runResult.RequestResults {
+				select {
+				case <-rm.cancelCtx.Done():
+					return
+				default:
+					rm.AppendResult(rr)
+				}
+			}
+		}
+	}()
+}
+
+// CancelRun signals the goroutine to stop
+func (rm *RunnerModal) CancelRun() {
+	if rm.cancelFn != nil {
+		rm.cancelFn()
+	}
+	if rm.done != nil {
+		<-rm.done
+	}
+}
+
 func (rm *RunnerModal) AppendResult(result *runner.RequestResult) {
 	rm.mu.Lock()
 	rm.results = append(rm.results, result)
@@ -513,19 +555,13 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.ready = true
 		m.requestList.SetSize(msg.Width, msg.Height)
-		if m.activeTab < len(m.tabs) {
-			tab := m.tabs[m.activeTab]
+		// Always update all components regardless of active tab
+		for _, tab := range m.tabs {
 			if tab.Builder != nil {
-				_, cmd := tab.Builder.Update(msg)
-				if cmd != nil {
-					return m, cmd
-				}
+				tab.Builder.Update(msg)
 			}
 			if tab.Viewer != nil {
-				_, cmd := tab.Viewer.Update(msg)
-				if cmd != nil {
-					return m, cmd
-				}
+				tab.Viewer.Update(msg)
 			}
 		}
 		return m, nil
@@ -537,7 +573,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if m.searchModal != nil {
-			result := m.searchModal.Update(msg)
+			result, cmd := m.searchModal.Update(msg)
 			if result == nil {
 				if req := m.searchModal.GetSelectedRequest(); req != nil {
 					m.searchModal = nil
@@ -546,7 +582,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.searchModal = nil
 			}
-			return m, nil
+			return m, cmd
 		}
 		if m.importModal != nil {
 			result := m.importModal.Update(msg)
@@ -576,6 +612,9 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.runnerModal != nil {
 			result := m.runnerModal.Update(msg)
 			if result == nil {
+				if m.runnerModal.IsRunning() {
+					m.runnerModal.CancelRun()
+				}
 				m.runnerModal = nil
 				return m, nil
 			}
@@ -583,17 +622,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				col := m.runnerModal.GetSelectedCollection()
 				if col != "" && m.runnerModal.total == 0 {
 					r := runner.NewRunner(m.db, nil)
-					reqs, _ := m.db.ListRequests(&storage.ListOptions{Collection: col})
-					m.runnerModal.SetTotal(len(reqs))
-					go func() {
-						ctx := context.Background()
-						res, _ := r.Run(ctx, runner.RunConfig{CollectionName: col})
-						for _, runResult := range res {
-							for _, rr := range runResult.RequestResults {
-								m.runnerModal.AppendResult(rr)
-							}
-						}
-					}()
+					m.runnerModal.StartRun(col, m.db, r)
 				}
 			}
 			return m, nil
@@ -720,6 +749,10 @@ func (m *App) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case IsHelpKey(key):
 		m.helpModal = !m.helpModal
+		return m, nil
+
+	case key == "ctrl+e":
+		// TODO: Open env switcher modal
 		return m, nil
 
 	case key == "h":

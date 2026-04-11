@@ -130,7 +130,8 @@ func isProxyAuth(proxyURL *url.URL) (string, string) {
 	if proxyURL.User == nil {
 		return "", ""
 	}
-	return proxyURL.User.Username(), ""
+	password, _ := proxyURL.User.Password()
+	return proxyURL.User.Username(), password
 }
 
 func shouldUseProxy(req *http.Request, noProxy []string) bool {

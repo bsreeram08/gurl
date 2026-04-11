@@ -47,6 +47,10 @@ func SaveCommand(db storage.DB) *cli.Command {
 				Usage: "Human-readable description",
 			},
 			&cli.StringFlag{
+				Name:  "name",
+				Usage: "Name for the request (used with --curl)",
+			},
+			&cli.StringFlag{
 				Name:  "curl",
 				Usage: "Full curl command as a string",
 			},
@@ -71,11 +75,14 @@ func SaveCommand(db storage.DB) *cli.Command {
 
 			// Mode 1: --curl flag provided
 			if curlFlag := c.String("curl"); curlFlag != "" {
-				name := c.String("description") // reuse description flag for name when using --curl
+				name := c.String("name")
+				if name == "" {
+					name = c.String("description")
+				}
 				if name == "" && args.Len() >= 1 {
 					name = args.Get(0)
 				} else if name == "" {
-					return fmt.Errorf("name is required")
+					return fmt.Errorf("name is required (use --name or provide as argument)")
 				}
 
 				parsed, err := curl.ParseCurl(curlFlag)
@@ -86,7 +93,11 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req := types.ParsedCurlToSavedRequest(*parsed)
 				req.Name = name
 				req.ID = fmt.Sprintf("saved-%d", time.Now().UnixNano())
-				req.OutputFormat = c.String("format")
+				format := c.String("format")
+				if format != "auto" && format != "json" && format != "table" {
+					return fmt.Errorf("invalid format '%s': must be one of auto, json, table", format)
+				}
+				req.OutputFormat = format
 				req.Tags = c.StringSlice("tag")
 				req.Collection = c.String("collection")
 				req.Folder = c.String("folder")
@@ -134,13 +145,17 @@ func SaveCommand(db storage.DB) *cli.Command {
 					Method:       method,
 					Headers:      headerList,
 					Body:         c.String("d"),
-					OutputFormat: c.String("format"),
 					Tags:         c.StringSlice("tag"),
 					Collection:   c.String("collection"),
 					Folder:       c.String("folder"),
 					CreatedAt:    time.Now().Unix(),
 					UpdatedAt:    time.Now().Unix(),
 				}
+				format := c.String("format")
+				if format != "auto" && format != "json" && format != "table" {
+					return fmt.Errorf("invalid format '%s': must be one of auto, json, table", format)
+				}
+				req.OutputFormat = format
 
 				if err := db.SaveRequest(req); err != nil {
 					return fmt.Errorf("failed to save request: %w", err)
@@ -170,7 +185,11 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req := types.ParsedCurlToSavedRequest(*parsed)
 				req.Name = name
 				req.ID = fmt.Sprintf("saved-%d", time.Now().UnixNano())
-				req.OutputFormat = c.String("format")
+				format := c.String("format")
+				if format != "auto" && format != "json" && format != "table" {
+					return fmt.Errorf("invalid format '%s': must be one of auto, json, table", format)
+				}
+				req.OutputFormat = format
 				req.Tags = c.StringSlice("tag")
 				req.Collection = c.String("collection")
 				req.Folder = c.String("folder")

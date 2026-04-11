@@ -45,17 +45,30 @@ var blockedModules = map[string]bool{
 	"zlib":           true,
 }
 
-func restrictModules(vm *goja.Runtime) {
-	blockedList := make([]string, 0, len(blockedModules))
-	for mod := range blockedModules {
-		blockedList = append(blockedList, mod)
-	}
+// blockedArrayJS is pre-computed at init for use in restrictModules
+var blockedArrayJS string
 
+func init() {
+	parts := make([]string, 0, len(blockedModules))
+	for mod := range blockedModules {
+		encoded, _ := json.Marshal(mod)
+		parts = append(parts, string(encoded))
+	}
+	blockedArrayJS = "[" + strings.Join(parts, ",") + "]"
+}
+
+// registerSandboxRestricted sets up sandbox restrictions on a new runtime
+// Called once per runtime when created, not on each reuse
+func registerSandboxRestricted(vm *goja.Runtime) {
+	// Combine all sandbox restrictions into a single RunString call for efficiency
 	_, _ = vm.RunString(`
 		(function() {
 			var originalRequire = typeof require !== 'undefined' ? require : null;
+			var originalEval = eval;
+			var originalFunction = Function;
+
 			global.require = function(module) {
-				var blocked = ` + generateBlockedArray() + `;
+				var blocked = ` + blockedArrayJS + `;
 				if (blocked.indexOf(module) !== -1) {
 					throw new Error('Access to module "' + module + '" is not allowed');
 				}
@@ -64,31 +77,18 @@ func restrictModules(vm *goja.Runtime) {
 				}
 				throw new Error('Module "' + module + '" is not available');
 			};
-			if (typeof window !== 'undefined') {
-				window.require = global.require;
-			}
-		})();
-	`)
 
-	_, _ = vm.RunString(`
-		(function() {
-			var originalEval = eval;
 			eval = function() {
 				throw new Error("eval is not allowed in sandbox");
 			};
-			if (typeof window !== 'undefined') {
-				window.eval = eval;
-			}
-		})();
-	`)
 
-	_, _ = vm.RunString(`
-		(function() {
-			var originalFunction = Function;
 			Function = function() {
 				throw new Error("Function is not allowed in sandbox");
 			};
+
 			if (typeof window !== 'undefined') {
+				window.require = global.require;
+				window.eval = eval;
 				window.Function = Function;
 			}
 		})();
@@ -112,13 +112,4 @@ func restrictModules(vm *goja.Runtime) {
 		panic(vm.NewTypeError("Buffer.from is not available in the scripting sandbox"))
 	})
 	vm.Set("Buffer", bufferObj)
-}
-
-func generateBlockedArray() string {
-	parts := make([]string, 0, len(blockedModules))
-	for mod := range blockedModules {
-		encoded, _ := json.Marshal(mod)
-		parts = append(parts, string(encoded))
-	}
-	return "[" + strings.Join(parts, ",") + "]"
 }

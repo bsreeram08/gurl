@@ -21,10 +21,11 @@ type Event struct {
 type Option func(*options)
 
 type options struct {
-	headers     map[string]string
-	eventTypes  []string
-	lastEventID string
-	timeout     time.Duration
+	headers         map[string]string
+	eventTypes      []string
+	lastEventID     string
+	timeout         time.Duration
+	maxScanTokenSize int // 0 means use default 1MB limit
 }
 
 func WithHeader(key, value string) Option {
@@ -54,13 +55,24 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
+// WithMaxScanTokenSize sets the maximum size for a single token (line) in the SSE stream.
+// Default is 1MB. Setting this to a smaller value may cause truncation of long lines.
+// Setting to 0 uses the default 1MB limit.
+func WithMaxScanTokenSize(size int) Option {
+	return func(o *options) {
+		o.maxScanTokenSize = size
+	}
+}
+
 type Client struct {
 	httpClient *http.Client
 }
 
 func NewClient() *Client {
 	return &Client{
-		httpClient: &http.Client{},
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 
@@ -101,22 +113,27 @@ func (c *Client) Connect(ctx context.Context, url string, opts ...Option) (<-cha
 	if err != nil {
 		return nil, nil, fmt.Errorf("request failed: %w", err)
 	}
+	defer resp.Body.Close()
 
 	eventChan := make(chan Event, 100)
 	errorChan := make(chan error, 1)
 
-	go c.readEvents(resp.Body, eventChan, errorChan, o.eventTypes, o.lastEventID)
+	go c.readEvents(resp.Body, eventChan, errorChan, o.eventTypes, o.lastEventID, o.maxScanTokenSize)
 
 	return eventChan, errorChan, nil
 }
 
-func (c *Client) readEvents(body io.Reader, eventChan chan<- Event, errorChan chan<- error, filterTypes []string, lastEventID string) {
+func (c *Client) readEvents(body io.Reader, eventChan chan<- Event, errorChan chan<- error, filterTypes []string, lastEventID string, maxScanTokenSize int) {
 	defer close(eventChan)
 	defer close(errorChan)
 
 	scanner := bufio.NewScanner(body)
 
-	const maxScanTokenSize = 1024 * 1024
+	// Configure scanner buffer size
+	const defaultMaxScanTokenSize = 1024 * 1024 // 1MB
+	if maxScanTokenSize <= 0 {
+		maxScanTokenSize = defaultMaxScanTokenSize
+	}
 	buf := make([]byte, maxScanTokenSize)
 	scanner.Buffer(buf, maxScanTokenSize)
 
@@ -124,19 +141,51 @@ func (c *Client) readEvents(body io.Reader, eventChan chan<- Event, errorChan ch
 	currentEvent.ID = lastEventID
 	var dataBuilder strings.Builder
 
+	// Track seen event IDs for deduplication
+	seenIDs := make(map[string]bool)
+	if lastEventID != "" {
+		seenIDs[lastEventID] = true
+	}
+
 	for scanner.Scan() {
 		line := scanner.Text()
+
+		// Check for token truncation (bufio.Scanner returns.ErrFinalToken when hitting max token size)
+		if len(line) >= maxScanTokenSize {
+			select {
+			case errorChan <- fmt.Errorf("SSE line exceeded maximum token size of %d bytes; consider using WithMaxScanTokenSize to increase limit", maxScanTokenSize):
+			default:
+			}
+		}
 
 		if line == "" {
 			if dataBuilder.Len() > 0 {
 				currentEvent.Data = dataBuilder.String()
 				dataBuilder.Reset()
 
+				// Check for duplicate event ID
+				if currentEvent.ID != "" && seenIDs[currentEvent.ID] {
+					// Skip duplicate - reset and continue
+					if currentEvent.ID != "" {
+						lastEventID = currentEvent.ID
+					}
+					currentEvent = Event{ID: lastEventID}
+					continue
+				}
+
 				if len(filterTypes) == 0 || contains(filterTypes, currentEvent.Type) {
-					eventChan <- currentEvent
+					// Send with backpressure check
+					select {
+					case eventChan <- currentEvent:
+						// Successfully sent
+					default:
+						// Channel full - log warning and drop event
+						fmt.Printf("SSE warning: event channel full, dropping event (ID=%s, Type=%s)\n", currentEvent.ID, currentEvent.Type)
+					}
 				}
 
 				if currentEvent.ID != "" {
+					seenIDs[currentEvent.ID] = true
 					lastEventID = currentEvent.ID
 				}
 				currentEvent = Event{ID: lastEventID}
@@ -176,8 +225,15 @@ func (c *Client) readEvents(body io.Reader, eventChan chan<- Event, errorChan ch
 		if dataBuilder.Len() > 0 {
 			currentEvent.Data = dataBuilder.String()
 		}
-		if currentEvent.Data != "" && (len(filterTypes) == 0 || contains(filterTypes, currentEvent.Type)) {
-			eventChan <- currentEvent
+		// Check for duplicate before final event
+		if currentEvent.ID != "" && seenIDs[currentEvent.ID] {
+			// Skip duplicate
+		} else if currentEvent.Data != "" && (len(filterTypes) == 0 || contains(filterTypes, currentEvent.Type)) {
+			select {
+			case eventChan <- currentEvent:
+			default:
+				fmt.Printf("SSE warning: event channel full, dropping final event (ID=%s, Type=%s)\n", currentEvent.ID, currentEvent.Type)
+			}
 		}
 	}
 

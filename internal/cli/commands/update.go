@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,27 +55,30 @@ func updateGurl() error {
 		return fmt.Errorf("failed to read response: %w", err)
 	}
 
-	bodyStr := string(body)
+	var release struct {
+		TagName string `json:"tag_name"`
+	}
 
-	// Extract tag_name
-	tagStart := strings.Index(bodyStr, `"tag_name":"`)
-	if tagStart == -1 {
-		return fmt.Errorf("failed to parse latest release")
+	if err := json.Unmarshal(body, &release); err != nil {
+		return fmt.Errorf("failed to parse latest release: %w", err)
 	}
-	tagStart += 12
-	tagEnd := strings.Index(bodyStr[tagStart:], `"`)
-	if tagEnd == -1 {
-		return fmt.Errorf("failed to parse tag name")
-	}
-	latestVersion := bodyStr[tagStart : tagStart+tagEnd]
-	latestVersion = strings.TrimPrefix(latestVersion, "v")
+
+	latestVersion := release.TagName
 
 	fmt.Printf("Latest version: %s\n", latestVersion)
 
 	// Compare versions (strip v prefix and -dirty suffix for consistent comparison)
+	latestVersion = strings.TrimPrefix(latestVersion, "v")
 	currentVersion = strings.TrimPrefix(currentVersion, "v")
 	currentVersion = strings.SplitN(currentVersion, "-dirty", 2)[0]
-	if latestVersion == currentVersion || currentVersion == "dev" || strings.HasPrefix(currentVersion, "dev-") {
+	latestVersion = strings.SplitN(latestVersion, "-dirty", 2)[0]
+	// Handle dev versions: if current is "dev" or starts with "dev-", skip update
+	if currentVersion == "dev" || strings.HasPrefix(currentVersion, "dev-") {
+		fmt.Println("Already up to date!")
+		return nil
+	}
+	// If latest is same as current after stripping prefixes, we're up to date
+	if latestVersion == currentVersion {
 		fmt.Println("Already up to date!")
 		return nil
 	}

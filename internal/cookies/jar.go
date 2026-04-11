@@ -8,7 +8,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
@@ -23,6 +25,7 @@ type cookieJarEntry struct {
 	Path     string `json:"path"`
 	Secure   bool   `json:"secure"`
 	HttpOnly bool   `json:"http_only"`
+	Expires  int64  `json:"expires"` // Unix timestamp, 0 means session cookie
 }
 
 type CookieDB interface {
@@ -55,11 +58,35 @@ func NewCookieJar(db CookieDB) (*CookieJar, error) {
 		return nil, fmt.Errorf("failed to open cookie db: %w", err)
 	}
 
+	// Clean expired cookies on startup
+	if err := cj.cleanExpired(); err != nil {
+		return nil, fmt.Errorf("failed to clean expired cookies: %w", err)
+	}
+
 	if err := cj.loadFromDB(); err != nil {
 		return nil, fmt.Errorf("failed to load cookies from db: %w", err)
 	}
 
 	return cj, nil
+}
+
+// cleanExpired removes expired cookies from the database
+func (c *CookieJar) cleanExpired() error {
+	now := time.Now().Unix()
+	entries, err := c.db.GetAllCookies()
+	if err != nil {
+		return err
+	}
+
+	for _, e := range entries {
+		if e.Expires > 0 && e.Expires < now {
+			if err := c.db.DeleteCookie(e.Domain, e.Name); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (c *CookieJar) loadFromDB() error {
@@ -105,6 +132,10 @@ func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 		if path == "" {
 			path = "/"
 		}
+		var expires int64
+		if !cookie.Expires.IsZero() {
+			expires = cookie.Expires.Unix()
+		}
 		entries[i] = &cookieJarEntry{
 			Name:     cookie.Name,
 			Value:    cookie.Value,
@@ -112,6 +143,7 @@ func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 			Path:     path,
 			Secure:   cookie.Secure,
 			HttpOnly: cookie.HttpOnly,
+			Expires:  expires,
 		}
 	}
 
@@ -121,7 +153,17 @@ func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 func (c *CookieJar) Cookies(u *url.URL) []*http.Cookie {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.jar.Cookies(u)
+
+	// Filter out expired cookies
+	now := time.Now().Unix()
+	var validCookies []*http.Cookie
+	for _, cookie := range c.jar.Cookies(u) {
+		if !cookie.Expires.IsZero() && cookie.Expires.Unix() < now {
+			continue // Skip expired
+		}
+		validCookies = append(validCookies, cookie)
+	}
+	return validCookies
 }
 
 func (c *CookieJar) ClearAll() error {
@@ -160,6 +202,10 @@ func (c *CookieJar) DeleteCookie(host, name string) error {
 
 	for _, e := range entries {
 		u := &url.URL{Scheme: "https", Host: e.Domain, Path: e.Path}
+		var expires time.Time
+		if e.Expires > 0 {
+			expires = time.Unix(e.Expires, 0)
+		}
 		newJar.SetCookies(u, []*http.Cookie{
 			{
 				Name:     e.Name,
@@ -168,6 +214,7 @@ func (c *CookieJar) DeleteCookie(host, name string) error {
 				Path:     e.Path,
 				Secure:   e.Secure,
 				HttpOnly: e.HttpOnly,
+				Expires:  expires,
 			},
 		})
 	}
@@ -231,16 +278,21 @@ func (c *LMDBCookieDB) SetCookies(cookies []*cookieJarEntry) error {
 		key := fmt.Sprintf("%s%s:%s:%s", cookieKeyPrefix, cookie.Domain, cookie.Path, cookie.Name)
 		batch.Put([]byte(key), data)
 	}
-	return c.db.Write(batch, nil)
+	return c.db.Write(batch, &opt.WriteOptions{Sync: true})
 }
 
 func (c *LMDBCookieDB) GetAllCookies() ([]*cookieJarEntry, error) {
+	return c.GetAllCookiesWithPrefix(cookieKeyPrefix)
+}
+
+// GetAllCookiesWithPrefix returns all cookies with keys having the given prefix
+func (c *LMDBCookieDB) GetAllCookiesWithPrefix(prefix string) ([]*cookieJarEntry, error) {
 	var result []*cookieJarEntry
 	iter := c.db.NewIterator(nil, nil)
 	defer iter.Release()
 	for iter.Next() {
 		key := string(iter.Key())
-		if len(key) < len(cookieKeyPrefix) || key[:len(cookieKeyPrefix)] != cookieKeyPrefix {
+		if len(key) < len(prefix) || key[:len(prefix)] != prefix {
 			continue
 		}
 		var entry cookieJarEntry
@@ -252,24 +304,40 @@ func (c *LMDBCookieDB) GetAllCookies() ([]*cookieJarEntry, error) {
 	return result, nil
 }
 
+// GetAllCookiesForDomain returns all cookies for a specific domain using prefix iteration
+func (c *LMDBCookieDB) GetAllCookiesForDomain(domain string) ([]*cookieJarEntry, error) {
+	prefix := fmt.Sprintf("%s%s:", cookieKeyPrefix, domain)
+	return c.GetAllCookiesWithPrefix(prefix)
+}
+
 func (c *LMDBCookieDB) DeleteCookie(host, name string) error {
-	var toDelete [][]byte
+	// Use prefix iteration to find the exact cookie key
+	prefix := fmt.Sprintf("%s%s:", cookieKeyPrefix, host)
 	iter := c.db.NewIterator(nil, nil)
 	defer iter.Release()
+
+	iter.Seek([]byte(prefix))
 	for iter.Next() {
-		key := make([]byte, len(iter.Key()))
-		copy(key, iter.Key())
-		var entry cookieJarEntry
-		if json.Unmarshal(iter.Value(), &entry) == nil && entry.Domain == host && entry.Name == name {
-			toDelete = append(toDelete, key)
+		key := string(iter.Key())
+		// Check if key still has our prefix (might be at a different key)
+		if len(key) < len(prefix) || key[:len(prefix)] != prefix {
+			break
+		}
+		// Parse path:name from key: cookie:{host}:{path}:{name}
+		// The prefix is cookie:{host}:, remaining is {path}:{name}
+		remaining := key[len(prefix):]
+		// Find the last colon which separates path from name
+		colonIdx := strings.LastIndex(remaining, ":")
+		if colonIdx == -1 {
+			continue
+		}
+		cookieName := remaining[colonIdx+1:]
+		if cookieName == name {
+			// Found exact match - delete it directly
+			return c.db.Delete(iter.Key(), &opt.WriteOptions{Sync: true})
 		}
 	}
-	for _, key := range toDelete {
-		if err := c.db.Delete(key, nil); err != nil {
-			return err
-		}
-	}
-	return nil
+	return nil // Cookie not found
 }
 
 func (c *LMDBCookieDB) ClearAllCookies() error {
@@ -282,5 +350,5 @@ func (c *LMDBCookieDB) ClearAllCookies() error {
 			batch.Delete(iter.Key())
 		}
 	}
-	return c.db.Write(batch, nil)
+	return c.db.Write(batch, &opt.WriteOptions{Sync: true})
 }
