@@ -42,9 +42,9 @@ gurl env create prod --secret "API_KEY=sk-live-abc123def456"
 
 **2. Auth Handler Abstraction**
 
-Nine auth handlers inject credentials at the HTTP transport layer. The calling process never builds a credential string that could appear in output.
+Eight auth handlers inject credentials at the HTTP transport layer. The calling process never builds a credential string that could appear in output.
 
-Handlers: Bearer, Basic, OAuth2, API Key, JWT, Hawk, AWS Sigv4, NTLM, and Anonymous.
+Handlers: Bearer, Basic, Digest, API Key, OAuth1, OAuth2, AWS Sigv4, NTLM.
 
 **3. Header Redaction**
 

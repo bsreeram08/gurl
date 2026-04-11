@@ -72,7 +72,7 @@ The AI references a named environment, not a raw credential value. When `gurl en
 
 **Auth handler abstraction**
 
-Nine auth handlers cover common patterns: Bearer tokens, Basic auth, OAuth2, API keys, JWT, Hawk, AWS Sigv4, etc. Each handler injects credentials at the HTTP transport layer.
+Eight auth handlers cover common patterns: Bearer, Basic, Digest, API Key, OAuth1, OAuth2, AWS Sigv4, NTLM. Each handler injects credentials at the HTTP transport layer.
 
 **Scripting engine for complex flows**
 

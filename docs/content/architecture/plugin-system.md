@@ -93,7 +93,7 @@ On startup, Gurl scans `~/.config/gurl/plugins/` for `.so` files. Each plugin fi
 // plugin.go
 package main
 
-import "github.com/gurl/..."
+import "github.com/sreeram/gurl/..."
 
 func PluginSymbol() interface{} {
     return &MyMiddlewarePlugin{}
@@ -120,7 +120,7 @@ import (
     "crypto/hmac"
     "crypto/sha256"
     "encoding/hex"
-    "github.com/gurl/gurl"
+    "github.com/sreeram/gurl"
 )
 
 type SigningPlugin struct{}

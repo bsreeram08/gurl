@@ -16,7 +16,7 @@ AI agents need to call APIs. Gurl makes that safe and auditable — credentials 
 
 Every command you need for API workflows: save, run, list, edit, delete, duplicate, export, import, and more.
 
-### 9 Auth Handlers
+### 8 Auth Handlers
 
 Programmatic credential injection for every auth scheme:
 
@@ -30,7 +30,6 @@ Programmatic credential injection for every auth scheme:
 | OAuth 2.0 | Token flow |
 | AWS SigV4 | AWS API Gateway |
 | NTLM | Windows integrated |
-| Hawk | Message authentication |
 
 ### 5 Protocol Clients
 

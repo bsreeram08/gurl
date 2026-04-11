@@ -17,7 +17,7 @@ Gurl stores data in two locations:
 | Database | `~/.local/share/gurl/gurl.db` | Requests, collections, environments, history |
 | Config | `~/.config/gurl/config.toml` | User preferences, plugin settings |
 
-The database uses LMDB via goleveldb for high-performance key-value storage. Configuration uses TOML for human-readable settings.
+The database uses goleveldb (LevelDB port) for high-performance key-value storage. Configuration uses TOML for human-readable settings.
 
 ## 9-Layer Architecture
 
@@ -30,7 +30,7 @@ The database uses LMDB via goleveldb for high-performance key-value storage. Con
 │  Template Engine │ Auth Registry │ Formatter        │
 │  Curl Parser     │ Scripting     │ Assertions       │
 ├─────────────────────────────────────────────────────┤
-│              Storage (LMDB)                          │
+│              Storage (goleveldb)                    │
 │  Requests │ Collections │ Environments │ History     │
 ├─────────────────────────────────────────────────────┤
 │              HTTP Client (net/http)                 │
@@ -53,7 +53,7 @@ The database uses LMDB via goleveldb for high-performance key-value storage. Con
 
 **Core Services Layer** - Contains the business logic. Template engine handles variable substitution. Auth registry manages API keys, Bearer tokens, and basic auth. Formatter provides response rendering in multiple formats.
 
-**Storage Layer** - LMDB-backed persistence for requests, collections, environments, and execution history. Provides ACID-like transactions for data integrity.
+**Storage Layer** - goleveldb-backed persistence for requests, collections, environments, and execution history. Provides ACID-like transactions for data integrity.
 
 **HTTP Client Layer** - Wraps Go's net/http with TLS configuration, timeout handling, proxy support, and cookie jar management.
 

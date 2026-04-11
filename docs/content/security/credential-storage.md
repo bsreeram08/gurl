@@ -31,9 +31,9 @@ Environment variables marked `--secret` are encrypted before storage. This appli
 
 ## Auth Credentials in Requests
 
-Saved requests store auth configuration in an LMDB database at `~/.local/share/gurl/gurl.db`.
+Saved requests store auth configuration in a goleveldb database at `~/.local/share/gurl/gurl.db`.
 
-**Database**: LMDB (memory-mapped, transactional)
+**Database**: goleveldb (LevelDB port, memory-mapped, transactional)
 
 **Auth params**: Username, password, tokens stored as JSON in `SavedRequest.AuthConfig`
 
