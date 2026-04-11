@@ -52,13 +52,15 @@ func (m *MockDB) ListFolderRecursive(path string) ([]*types.SavedRequest, error)
 func (m *MockDB) DeleteFolder(path string) error                                 { return nil }
 func (m *MockDB) GetAllFolders() ([]string, error)                               { return nil, nil }
 
-func strKey(s string) tea.KeyMsg {
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+func strKey(s string) tea.KeyPressMsg {
+	if len(s) == 0 {
+		return tea.KeyPressMsg{}
+	}
+	return tea.KeyPressMsg{Code: rune(s[0]), Text: s}
 }
 
-func ctrlKey(ch rune) tea.KeyMsg {
-	keyType := tea.KeyType(int(tea.KeyCtrlA) + int(ch-'a'))
-	return tea.KeyMsg{Type: keyType}
+func ctrlKey(ch rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: rune(int('a') + int(ch-'a')), Mod: tea.ModCtrl}
 }
 
 func TestApp_NewApp(t *testing.T) {
@@ -310,17 +312,17 @@ func TestApp_PanelFocus_TabCyclesForward(t *testing.T) {
 		t.Errorf("initial focus should be Sidebar, got %v", app.focusedPanel)
 	}
 
-	app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if app.focusedPanel != PanelMain {
 		t.Errorf("after Tab, focus should be Main, got %v", app.focusedPanel)
 	}
 
-	app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if app.focusedPanel != PanelStatusbar {
 		t.Errorf("after second Tab, focus should be Statusbar, got %v", app.focusedPanel)
 	}
 
-	app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if app.focusedPanel != PanelSidebar {
 		t.Errorf("after third Tab, focus should cycle to Sidebar, got %v", app.focusedPanel)
 	}
