@@ -95,10 +95,21 @@ jobs:
           pattern: gurl-*
           merge-multiple: true
 
+      - name: Debug artifacts
+        run: |
+          echo "=== Files in current directory ==="
+          ls -la
+          echo ""
+          echo "=== SHA256SUMS files found ==="
+          find . -name 'SHA256SUMS*' -type f 2>/dev/null
+          echo ""
+          echo "=== All gurl-* files ==="
+          find . -name 'gurl-*' -type f 2>/dev/null
+
       - name: Merge checksums
         run: |
-          # Concatenate all per-job checksum files into one SHA256SUMS
-          cat SHA256SUMS-* > SHA256SUMS
+          echo "=== Concatenating SHA256SUMS files ==="
+          cat SHA256SUMS-* > SHA256SUMS 2>/dev/null || { echo "No SHA256SUMS-* files found!"; exit 1; }
           echo "Merged SHA256SUMS contents:"
           cat SHA256SUMS
 
