@@ -660,8 +660,8 @@ func TestApp_View_NotReady(t *testing.T) {
 	app := NewApp(db, config)
 
 	view := app.View()
-	if view != "Loading..." {
-		t.Errorf("View before Init should return 'Loading...', got %q", view)
+	if !strings.Contains(view.Content, "Loading...") {
+		t.Errorf("View before Init should contain 'Loading...', got %q", view.Content)
 	}
 }
 
@@ -673,8 +673,8 @@ func TestApp_View_WithSize(t *testing.T) {
 	app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 
 	view := app.View()
-	if view == "Loading..." {
-		t.Error("View after size set should not be 'Loading...'")
+	if strings.Contains(view.Content, "Loading...") {
+		t.Error("View after size set should not contain 'Loading...' (still loading)")
 	}
 }
 
@@ -690,7 +690,7 @@ func TestApp_View_HelpModal(t *testing.T) {
 
 	found := false
 	for _, line := range []string{"Ctrl+T", "New tab", "Ctrl+W", "Ctrl+K"} {
-		if containsStr(view, line) {
+		if containsStr(view.Content, line) {
 			found = true
 			break
 		}
@@ -710,7 +710,7 @@ func TestApp_View_SearchModal(t *testing.T) {
 
 	view := app.View()
 
-	if !containsStr(view, "Search") {
+	if !containsStr(view.Content, "Search") {
 		t.Error("View should show search modal")
 	}
 }
@@ -725,7 +725,7 @@ func TestApp_View_ImportModal(t *testing.T) {
 
 	view := app.View()
 
-	if !containsStr(view, "Import") {
+	if !containsStr(view.Content, "Import") {
 		t.Error("View should show import modal")
 	}
 }
@@ -737,8 +737,8 @@ func TestApp_NavigateWithNoSidebarFocus(t *testing.T) {
 
 	app.focusedPanel = PanelMain
 
-	app.Update(tea.KeyMsg{Type: tea.KeyUp})
-	app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	app.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	app.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 
 	if app.focusedPanel != PanelMain {
 		t.Error("focusedPanel should not change when not in sidebar")
@@ -754,7 +754,7 @@ func TestApp_SpaceToggleFolder(t *testing.T) {
 	app.focusedPanel = PanelSidebar
 	app.sidebarMode = SidebarRequests
 
-	app.Update(tea.KeyMsg{Type: tea.KeySpace})
+	app.Update(tea.KeyPressMsg{Code: tea.KeySpace})
 
 	if app.focusedPanel != PanelSidebar {
 		t.Error("focusedPanel should not change when handling Space")
