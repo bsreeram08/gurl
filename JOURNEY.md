@@ -28,11 +28,10 @@
 
 | Date | Decision | Rationale | Alternative Considered |
 |------|----------|-----------|----------------------|
-| 2026-04-07 | Name: Gurl | Memorable, short, Google-proof | gurl, rcurl, hurl, acurl |
-| 2026-04-07 | GURL acronym | "Gurl's Universal Request Library" - like GNU | Various alternatives |
+| 2026-04-07 | Name: Gurl | "Go URL" — run a URL (verb + noun) | gurl, rcurl, hurl, acurl |
 | 2026-04-07 | Go over Zig | Faster development, better CLI ecosystem (cobra, bubbletea) | Zig for performance |
 | 2026-04-07 | TOML config | Native Go library, human-readable | YAML, JSON |
-| 2026-04-07 | LMDB storage | Fast, embedded, single-file DB | SQLite, badger |
+| 2026-04-07 | goleveldb storage | Fast, embedded, single-file DB (LevelDB port) | SQLite, LMDB |
 | 2026-04-07 | urfave/cli | Standard Go CLI, good docs | cobra, kingpin |
 | 2026-04-07 | bubbletea TUI | Elm architecture, declarative | tview, gocui |
 | 2026-04-07 | Plugin system | Extensible by design | Hardcoded features |
@@ -132,6 +131,14 @@ Why:
 - [x] Sandbox: make crypto.digest() and Buffer.from() throw uncatchable JS errors
 - [x] Template: single-pass regexp substitution (deterministic, prevents injection)
 - [x] Update: real SHA256 checksum verification with subtle.ConstantTimeCompare
+
+### v0.1.19 - TUI Foundation ✅
+- [x] Bubbletea v2 upgrade — charm.land/bubbletea/v2 with Cursed Renderer
+- [x] TUI crash fix — viewport API, tea.View struct, alt screen/mouse mode
+- [x] SearchModal mutation bug fix — View() no longer mutates live state
+- [x] All tests updated for Bubbletea v2 API (KeyPressMsg, view.Content)
+- [x] AI-generated README images (logo, TUI mockup, features grid)
+- [x] Name meaning: "Gurl = Go URL"
 - [x] Path traversal: symlink-aware validation for import/export/run commands
 
 ### Next
