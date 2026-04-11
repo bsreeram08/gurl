@@ -20,57 +20,88 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.26'
           
+      - name: Download modules
+        run: go mod download
+
       - name: Run Hound Review
         id: review
         run: |
-          # Get changed files
-          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.go' | grep -v '_test.go' || true)
-          
+          set -euo pipefail
+
+          # Get base ref safely (handle detached head or missing origin)
+          BASE_REF="${{ github.base_ref }}"
+          if ! git rev-parse "origin/$BASE_REF" &>/dev/null; then
+            BASE_REF="master"
+          fi
+
+          # Get changed Go files (non-test)
+          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD -- '*.go' 2>/dev/null | grep -v '_test.go' || echo "")
+
           # Initialize review output
           REVIEW_OUTPUT="## 🐕 Hound Code Review\n\n"
           REVIEW_OUTPUT+="**Pull Request:** #${{ github.event.pull_request.number }}\n\n"
-          
-          # Check for security issues
-          SECURITY_ISSUES=""
-          SHELL_INJECT=$(grep -rn 'exec\.Command.*+.*"' $CHANGED_FILES 2>/dev/null || true)
-          if [[ -n "$SHELL_INJECT" ]]; then
-            SECURITY_ISSUES+="⚠️ **Shell Injection Risk:**\n\`exec.Command\` with string concatenation\n\n"
-            SECURITY_ISSUES+="\`\`\`\n$SHELL_INJECT\n\`\`\`\n\n"
+          REVIEW_OUTPUT+="**Go Version:** $(go version)\n\n"
+
+          ISSUES_FOUND=false
+
+          # --- Security Checks on changed files only ---
+          if [[ -n "$CHANGED_FILES" ]]; then
+            # Shell=True risk (Shell=true in exec is dangerous)
+            SHELL_TRUE=$(echo "$CHANGED_FILES" | xargs grep -rn 'Shell[[:space:]]*[:=][[:space:]]*true' 2>/dev/null || true)
+            if [[ -n "$SHELL_TRUE" ]]; then
+              ISSUES_FOUND=true
+              REVIEW_OUTPUT+="⚠️ **Shell=True Risk** — \`Shell=true\` enables shell interpretation:\n\n"
+              REVIEW_OUTPUT+="\`\`\`\n$SHELL_TRUE\n\`\`\`\n\n"
+            fi
+
+            # Template injection in os/exec (data-dependent command construction)
+            # Look for patterns like: exec.Command(..., userInput) where userInput isn't validated
+            TEMPLATE_INJECT=$(echo "$CHANGED_FILES" | xargs grep -rn 'exec\.Command(' 2>/dev/null | grep -v '_test.go' | grep -v 'shellJoin\|fieldQuote' || true)
+            if [[ -n "$TEMPLATE_INJECT" ]]; then
+              # Only flag if there's string concat or template in the args
+              TEMPLATE_CONCAT=$(echo "$TEMPLATE_INJECT" | grep -E '\+ |fmt\.Sprintf|`|\$\{?' 2>/dev/null || true)
+              if [[ -n "$TEMPLATE_CONCAT" ]]; then
+                ISSUES_FOUND=true
+                REVIEW_OUTPUT+="⚠️ **Potential Shell Injection** — \`exec.Command\` with dynamic string building:\n\n"
+                REVIEW_OUTPUT+="\`\`\`\n$TEMPLATE_CONCAT\n\`\`\`\n\n"
+              fi
+            fi
           fi
-          
-          SHELL_TRUE=$(grep -rn 'Shell.*true' $CHANGED_FILES 2>/dev/null || true)
-          if [[ -n "$SHELL_TRUE" ]]; then
-            SECURITY_ISSUES+="⚠️ **Shell=True Risk:**\n\`Shell=true\` in exec\n\n"
-            SECURITY_ISSUES+="\`\`\`\n$SHELL_TRUE\n\`\`\`\n\n"
+
+          # --- Go vet ---
+          if ! go vet ./... 2>&1; then
+            ISSUES_FOUND=true
+            VET_OUTPUT=$(go vet ./... 2>&1)
+            REVIEW_OUTPUT+="⚠️ **Go Vet Warnings:**\n\`\`\`\n$VET_OUTPUT\n\`\`\`\n\n"
           fi
-          
-          # Check for go vet issues
-          VET_OUTPUT=$(go vet ./... 2>&1 || true)
-          if [[ -n "$VET_OUTPUT" && "$VET_OUTPUT" != "ok"* ]]; then
-            SECURITY_ISSUES+="⚠️ **Go Vet Warnings:**\n\`\`\`\n$VET_OUTPUT\n\`\`\`\n\n"
+
+          # --- Build ---
+          BUILD_OUTPUT=""
+          if ! go build -o /dev/null ./cmd/gurl 2>&1; then
+            ISSUES_FOUND=true
+            BUILD_OUTPUT=$(go build -o /dev/null ./cmd/gurl 2>&1)
+            REVIEW_OUTPUT+="❌ **Build Failed:**\n\`\`\`\n$BUILD_OUTPUT\n\`\`\`\n\n"
           fi
-          
-          # Check for build
-          BUILD_OUTPUT=$(go build -o /dev/null ./cmd/gurl 2>&1 || true)
-          if [[ -n "$BUILD_OUTPUT" ]]; then
-            SECURITY_ISSUES+="❌ **Build Failed:**\n\`\`\`\n$BUILD_OUTPUT\n\`\`\`\n\n"
+
+          # --- Tests ---
+          TEST_OUTPUT=""
+          if ! go test ./... 2>&1; then
+            ISSUES_FOUND=true
+            TEST_OUTPUT=$(go test ./... 2>&1)
+            REVIEW_OUTPUT+="❌ **Tests Failed:**\n\`\`\`\n$TEST_OUTPUT\n\`\`\`\n\n"
           fi
-          
+
           # Compile final review
-          if [[ -n "$SECURITY_ISSUES" ]]; then
-            REVIEW_OUTPUT+="### 🔴 Security & Quality Issues\n\n$SECURITY_ISSUES"
+          if $ISSUES_FOUND; then
+            REVIEW_OUTPUT+="### 🔴 Issues Found\n\nSee above for details.\n"
           else
-            REVIEW_OUTPUT+="### 🟢 No Issues Found\n\nHound didn't find any security or quality issues.\n\n"
+            REVIEW_OUTPUT+="### 🟢 No Issues Found\n\nHound found no security, build, vet, or test issues.\n"
           fi
-          
-          # Print for debugging
-          echo "$REVIEW_OUTPUT"
-          
-          # Save to file for next step
+
           echo "review<<EOF" >> $GITHUB_OUTPUT
-          echo "$REVIEW_OUTPUT" >> $GITHUB_OUTPUT
+          printf '%s' "$REVIEW_OUTPUT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
       - name: Post Review Comment
