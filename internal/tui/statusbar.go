@@ -3,9 +3,9 @@ package tui
 import (
 	"fmt"
 	"strings"
-)
 
-const gurlVersion = "dev"
+	"charm.land/lipgloss/v2"
+)
 
 // StatusBar displays environment, request count, and version
 type StatusBar struct {
@@ -19,23 +19,25 @@ func NewStatusBar(app *App) *StatusBar {
 
 // View renders the status bar content
 func (s *StatusBar) View() string {
-	var sb strings.Builder
+	left := strings.Join([]string{
+		Style.FooterLabel.Render("ENV:"),
+		Style.StatusEnv.Render(s.app.GetCurrentEnv()),
+		Style.FooterLabel.Render("| Requests:"),
+		Style.StatusCount.Render(fmt.Sprintf("%d", s.app.GetRequestCount())),
+		Style.FooterLabel.Render("| Tabs:"),
+		Style.FooterValue.Render(fmt.Sprintf("%d", s.app.TabCount())),
+	}, " ")
 
-	// Current environment
-	env := s.app.GetCurrentEnv()
-	sb.WriteString(Style.StatusEnv.Render(fmt.Sprintf(" env: %s ", env)))
+	right := strings.Join([]string{
+		Style.StatusVersion.Render(s.app.DisplayVersion()),
+		Style.FooterLabel.Render("|"),
+		Style.StatusState.Render(s.app.StateLabel()),
+	}, " ")
 
-	sb.WriteString(" │ ")
+	gap := s.app.width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		gap = 1
+	}
 
-	// Request count
-	count := s.app.GetRequestCount()
-	sb.WriteString(Style.StatusCount.Render(fmt.Sprintf(" %d requests ", count)))
-
-	// Fill remaining space
-	sb.WriteString(strings.Repeat(" ", 40))
-
-	// Version on the right
-	sb.WriteString(Style.StatusVersion.Render(fmt.Sprintf(" gurl %s ", gurlVersion)))
-
-	return sb.String()
+	return left + strings.Repeat(" ", gap) + right
 }

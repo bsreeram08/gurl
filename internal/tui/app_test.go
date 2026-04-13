@@ -63,6 +63,13 @@ func ctrlKey(ch rune) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: rune(int('a') + int(ch-'a')), Mod: tea.ModCtrl}
 }
 
+func ctrlTextKey(s string) tea.KeyPressMsg {
+	if len(s) == 0 {
+		return tea.KeyPressMsg{}
+	}
+	return tea.KeyPressMsg{Code: rune(s[0]), Mod: tea.ModCtrl}
+}
+
 func TestApp_NewApp(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
@@ -303,7 +310,7 @@ func TestApp_ActiveTab(t *testing.T) {
 	}
 }
 
-func TestApp_PanelFocus_TabCyclesForward(t *testing.T) {
+func TestApp_PanelFocus_CtrlShortcuts(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
 	app := NewApp(db, config)
@@ -312,40 +319,19 @@ func TestApp_PanelFocus_TabCyclesForward(t *testing.T) {
 		t.Errorf("initial focus should be Sidebar, got %v", app.focusedPanel)
 	}
 
-	app.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	app.Update(ctrlTextKey("2"))
 	if app.focusedPanel != PanelMain {
-		t.Errorf("after Tab, focus should be Main, got %v", app.focusedPanel)
+		t.Errorf("after Ctrl+2, focus should be Main, got %v", app.focusedPanel)
 	}
 
-	app.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if app.focusedPanel != PanelStatusbar {
-		t.Errorf("after second Tab, focus should be Statusbar, got %v", app.focusedPanel)
+	app.Update(ctrlTextKey("3"))
+	if app.focusedPanel != PanelResponse {
+		t.Errorf("after Ctrl+3, focus should be Response, got %v", app.focusedPanel)
 	}
 
-	app.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	app.Update(ctrlTextKey("1"))
 	if app.focusedPanel != PanelSidebar {
-		t.Errorf("after third Tab, focus should cycle to Sidebar, got %v", app.focusedPanel)
-	}
-}
-
-func TestApp_PanelFocus_ShiftTabCyclesReverse(t *testing.T) {
-	db := &MockDB{}
-	config := &types.Config{}
-	app := NewApp(db, config)
-
-	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
-	if app.focusedPanel != PanelStatusbar {
-		t.Errorf("after Shift+Tab, focus should be Statusbar, got %v", app.focusedPanel)
-	}
-
-	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
-	if app.focusedPanel != PanelMain {
-		t.Errorf("after second Shift+Tab, focus should be Main, got %v", app.focusedPanel)
-	}
-
-	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
-	if app.focusedPanel != PanelSidebar {
-		t.Errorf("after third Shift+Tab, focus should be Sidebar, got %v", app.focusedPanel)
+		t.Errorf("after Ctrl+1, focus should return to Sidebar, got %v", app.focusedPanel)
 	}
 }
 
@@ -633,24 +619,48 @@ func TestApp_ImportModal_EscapeCloses(t *testing.T) {
 func TestApp_CalculateLayout(t *testing.T) {
 	layout := CalculateLayout(120, 40)
 
+	if layout.Mode != LayoutSplitRight {
+		t.Fatalf("expected split-right layout for medium terminal, got %v", layout.Mode)
+	}
+
 	if layout.SidebarWidth < 30 {
 		t.Errorf("SidebarWidth should be at least 30, got %d", layout.SidebarWidth)
 	}
 
-	if layout.StatusHeight != 1 {
-		t.Errorf("StatusHeight should be 1, got %d", layout.StatusHeight)
+	if layout.FooterHeight != 1 {
+		t.Errorf("FooterHeight should be 1, got %d", layout.FooterHeight)
 	}
 
-	if layout.SidebarWidth+layout.MainWidth != 120 {
-		t.Errorf("SidebarWidth + MainWidth should equal total width")
+	if layout.SidebarWidth+layout.EditorWidth != 120 {
+		t.Errorf("SidebarWidth + EditorWidth should equal total width")
+	}
+
+	if layout.EditorHeight+layout.ResponseHeight != layout.WorkspaceHeight {
+		t.Errorf("editor and response heights should fill workspace height")
 	}
 }
 
 func TestApp_CalculateLayout_SmallTerminal(t *testing.T) {
 	layout := CalculateLayout(40, 10)
 
-	if layout.SidebarWidth < 30 {
-		t.Errorf("SidebarWidth should be at least 30 even on small terminals")
+	if layout.Mode != LayoutStacked {
+		t.Fatalf("expected stacked layout for narrow terminal, got %v", layout.Mode)
+	}
+
+	if layout.SidebarHeight+layout.EditorHeight+layout.ResponseHeight != layout.WorkspaceHeight {
+		t.Errorf("stacked panes should fill workspace height")
+	}
+}
+
+func TestApp_CalculateLayout_LargeTerminal(t *testing.T) {
+	layout := CalculateLayout(160, 40)
+
+	if layout.Mode != LayoutThreePane {
+		t.Fatalf("expected three-pane layout for wide terminal, got %v", layout.Mode)
+	}
+
+	if layout.SidebarWidth+layout.EditorWidth+layout.ResponseWidth != 160 {
+		t.Errorf("three-pane widths should fill terminal width")
 	}
 }
 
@@ -675,6 +685,9 @@ func TestApp_View_WithSize(t *testing.T) {
 	view := app.View()
 	if strings.Contains(view.Content, "Loading...") {
 		t.Error("View after size set should not contain 'Loading...' (still loading)")
+	}
+	if !strings.Contains(view.Content, "REQUEST") || !strings.Contains(view.Content, "RESPONSE") {
+		t.Error("workspace view should render request and response panes")
 	}
 }
 

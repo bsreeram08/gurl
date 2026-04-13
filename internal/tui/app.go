@@ -13,6 +13,7 @@ import (
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/google/uuid"
+	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/importers"
 	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/storage"
@@ -30,7 +31,8 @@ type Panel int
 const (
 	PanelSidebar Panel = iota
 	PanelMain
-	PanelStatusbar
+	PanelResponse
+	PanelStatusbar = PanelResponse
 )
 
 // Tab represents a single request tab
@@ -489,6 +491,7 @@ func (rm *RunnerModal) GetResults() []*runner.RequestResult {
 type App struct {
 	db           storage.DB
 	config       *types.Config
+	version      string
 	requests     []*types.SavedRequest
 	history      []*types.HistoryEntry
 	selectedIdx  int
@@ -503,32 +506,54 @@ type App struct {
 	activeTab   int
 	sidebarMode SidebarMode
 
-	requestList   *RequestList
-	searchModal   *SearchModal
-	importModal   *ImportModal
-	runnerModal   *RunnerModal
-	helpModal     bool
-	loadingSpinner spinner.Model
+	requestList     *RequestList
+	searchModal     *SearchModal
+	importModal     *ImportModal
+	runnerModal     *RunnerModal
+	envSwitcher     *EnvSwitcher
+	envSwitcherOpen bool
+	activeEnvName   string
+	helpModal       bool
+	loadingSpinner  spinner.Model
 }
 
 // NewApp creates a new TUI application
 func NewApp(db storage.DB, config *types.Config) *App {
+	return NewAppWithVersion(db, config, "dev")
+}
+
+// NewAppWithVersion creates a new TUI application with build metadata.
+func NewAppWithVersion(db storage.DB, config *types.Config, version string) *App {
 	initialTab := newBlankTab(db)
 	rl := NewRequestList(db)
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
+	envSwitcher, activeEnvName := newAppEnvSwitcher(db)
 	return &App{
-		db:           db,
-		config:       config,
-		focusedPanel: PanelSidebar,
-		width:        80,
-		height:       24,
-		tabs:         []*Tab{initialTab},
-		activeTab:    0,
-		sidebarMode:  SidebarRequests,
-		requestList:  rl,
+		db:             db,
+		config:         config,
+		version:        version,
+		focusedPanel:   PanelSidebar,
+		width:          80,
+		height:         24,
+		tabs:           []*Tab{initialTab},
+		activeTab:      0,
+		sidebarMode:    SidebarRequests,
+		requestList:    rl,
+		envSwitcher:    envSwitcher,
+		activeEnvName:  activeEnvName,
 		loadingSpinner: sp,
 	}
+}
+
+func newAppEnvSwitcher(db storage.DB) (*EnvSwitcher, string) {
+	lmdb, ok := db.(*storage.LMDB)
+	if !ok || lmdb == nil || lmdb.DB == nil {
+		return nil, ""
+	}
+
+	switcher := NewEnvSwitcher(env.NewEnvStorage(lmdb))
+	return switcher, switcher.GetActiveEnvName()
 }
 
 func newBlankTab(db storage.DB) *Tab {
@@ -576,15 +601,9 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
-		m.requestList.SetSize(msg.Width, msg.Height)
-		// Always update all components regardless of active tab
-		for _, tab := range m.tabs {
-			if tab.Builder != nil {
-				tab.Builder.Update(msg)
-			}
-			if tab.Viewer != nil {
-				tab.Viewer.Update(msg)
-			}
+		m.applyLayout(CalculateLayout(msg.Width, msg.Height))
+		if m.envSwitcher != nil {
+			m.envSwitcher.Update(msg)
 		}
 		return m, nil
 
@@ -649,13 +668,34 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.envSwitcherOpen && m.envSwitcher != nil {
+			if msg.Code == tea.KeyEscape || msg.String() == "q" {
+				m.closeEnvSwitcher()
+				return m, nil
+			}
+
+			updated, cmd := m.envSwitcher.Update(msg)
+			if es, ok := updated.(*EnvSwitcher); ok {
+				m.envSwitcher = es
+			}
+			for _, envMsg := range m.envSwitcher.GetMessages() {
+				if changed, ok := envMsg.(EnvChangedMsg); ok {
+					m.activeEnvName = changed.EnvName
+					m.closeEnvSwitcher()
+				}
+			}
+			return m, cmd
+		}
 		if m.helpModal {
 			if msg.Code == tea.KeyEscape || msg.String() == "q" || msg.String() == "?" {
 				m.helpModal = false
 			}
 			return m, nil
 		}
-		return m.handleKeyPress(msg)
+		if handled, cmd := m.handleGlobalKeyPress(msg); handled {
+			return m, cmd
+		}
+		return m.routeFocusedKeyPress(msg)
 
 	case BuilderRequestSelectedMsg:
 		m.openInNewTab(msg.Request)
@@ -663,7 +703,17 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case RequestSentMsg:
 		if m.activeTab < len(m.tabs) {
-			m.tabs[m.activeTab].Viewer.SetResponse(msg.Response)
+			tab := m.tabs[m.activeTab]
+			if tab.Builder != nil {
+				tab.Builder.sending = false
+			}
+			if tab.Viewer != nil {
+				if msg.Error != nil {
+					tab.Viewer.SetError(msg.Error)
+				} else {
+					tab.Viewer.SetResponse(msg.Response)
+				}
+			}
 		}
 		return m, nil
 
@@ -673,6 +723,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			requests = []*types.SavedRequest{}
 		}
 		m.requests = requests
+		m.requestList.SetRequests(requests)
 		if msg.Request != nil && m.activeTab < len(m.tabs) {
 			m.tabs[m.activeTab].Name = msg.Request.Name
 			m.tabs[m.activeTab].Request = msg.Request
@@ -685,18 +736,8 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tab := m.tabs[m.activeTab]
 		if tab.Builder != nil {
 			updatedBuilder, cmd := tab.Builder.Update(msg)
-			if updatedBuilder != nil {
-				switch b := updatedBuilder.(type) {
-				case *RequestBuilder:
-					tab.Builder = b
-				}
-			}
-			for _, subMsg := range tab.Builder.GetMessages() {
-				if result, _ := m.Update(subMsg); result != nil {
-					if app, ok := result.(*App); ok {
-						m = app
-					}
-				}
+			if b, ok := updatedBuilder.(*RequestBuilder); ok {
+				tab.Builder = b
 			}
 			if cmd != nil {
 				return m, cmd
@@ -704,11 +745,8 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if tab.Viewer != nil {
 			updatedViewer, cmd := tab.Viewer.Update(msg)
-			if updatedViewer != nil {
-				switch v := updatedViewer.(type) {
-				case *ResponseViewer:
-					tab.Viewer = v
-				}
+			if v, ok := updatedViewer.(*ResponseViewer); ok {
+				tab.Viewer = v
 			}
 			if cmd != nil {
 				return m, cmd
@@ -719,45 +757,35 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleKeyPress handles all keyboard input
-func (m *App) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+// handleGlobalKeyPress handles app-level shortcuts before a focused pane processes the key.
+func (m *App) handleGlobalKeyPress(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	key := msg.String()
-	switch {
-	case IsQuitKey(key):
-		m.quitting = true
-		return m, tea.Quit
 
-	case key == "ctrl+t":
+	switch key {
+	case "ctrl+t":
 		m.openNewTab()
-		return m, nil
-
-	case key == "ctrl+w":
+		return true, nil
+	case "ctrl+w":
 		m.closeActiveTab()
-		return m, nil
-
-	case key == "ctrl+d":
+		return true, nil
+	case "ctrl+d":
 		if m.activeTab < len(m.tabs) && m.tabs[m.activeTab].Request != nil {
 			m.duplicateActiveTab()
 		}
-		return m, nil
-
-	case key == "ctrl+shift+]":
+		return true, nil
+	case "ctrl+shift+]":
 		m.nextTab()
-		return m, nil
-
-	case key == "ctrl+shift+[":
+		return true, nil
+	case "ctrl+shift+[":
 		m.prevTab()
-		return m, nil
-
-	case key == "ctrl+k":
+		return true, nil
+	case "ctrl+k":
 		m.searchModal = NewSearchModal(m.requests, m.width, m.height)
-		return m, nil
-
-	case key == "ctrl+i":
+		return true, nil
+	case "ctrl+i":
 		m.importModal = NewImportModal(m.width, m.height)
-		return m, nil
-
-	case key == "ctrl+r":
+		return true, nil
+	case "ctrl+r":
 		collections := []string{}
 		seen := make(map[string]bool)
 		for _, req := range m.requests {
@@ -767,60 +795,45 @@ func (m *App) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.runnerModal = NewRunnerModal(collections, []string{}, m.width, m.height)
-		return m, nil
-
-	case IsHelpKey(key):
-		m.helpModal = !m.helpModal
-		return m, nil
-
-	case key == "ctrl+e":
-		// TODO: Open env switcher modal
-		return m, nil
-
-	case key == "h":
-		m.sidebarMode = SidebarHistory
-		return m, nil
-
-	case key == "r":
-		m.sidebarMode = SidebarRequests
-		return m, nil
-
-	case IsTabKey(key):
-		switch m.focusedPanel {
-		case PanelSidebar:
-			m.focusedPanel = PanelMain
-		case PanelMain:
-			m.focusedPanel = PanelStatusbar
-		case PanelStatusbar:
-			m.focusedPanel = PanelSidebar
+		return true, nil
+	case "ctrl+1":
+		m.focusedPanel = PanelSidebar
+		return true, nil
+	case "ctrl+2":
+		m.focusedPanel = PanelMain
+		return true, nil
+	case "ctrl+3":
+		m.focusedPanel = PanelResponse
+		return true, nil
+	case "ctrl+e":
+		if m.envSwitcher != nil {
+			m.envSwitcherOpen = true
+			m.envSwitcher.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 		}
-		return m, nil
-
-	case IsShiftTabKey(key):
-		switch m.focusedPanel {
-		case PanelSidebar:
-			m.focusedPanel = PanelStatusbar
-		case PanelMain:
-			m.focusedPanel = PanelSidebar
-		case PanelStatusbar:
-			m.focusedPanel = PanelMain
-		}
-		return m, nil
-
-	case IsNavigateUpKey(key):
-		return m.handleNavigateUp()
-
-	case IsNavigateDownKey(key):
-		return m.handleNavigateDown()
-
-	case IsEnterKey(key):
-		return m.handleEnter()
-
-	case key == " ":
-		return m.handleSpace()
+		return true, nil
+	case "ctrl+c":
+		m.quitting = true
+		return true, tea.Quit
 	}
 
-	return m, nil
+	if m.focusedPanel != PanelMain {
+		switch {
+		case IsQuitKey(key):
+			m.quitting = true
+			return true, tea.Quit
+		case IsHelpKey(key):
+			m.helpModal = !m.helpModal
+			return true, nil
+		case m.focusedPanel == PanelSidebar && key == "h":
+			m.sidebarMode = SidebarHistory
+			return true, nil
+		case m.focusedPanel == PanelSidebar && key == "r":
+			m.sidebarMode = SidebarRequests
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // openNewTab opens a new blank tab
@@ -828,6 +841,9 @@ func (m *App) openNewTab() {
 	tab := newBlankTab(m.db)
 	m.tabs = append(m.tabs, tab)
 	m.activeTab = len(m.tabs) - 1
+	if m.ready {
+		m.applyLayout(CalculateLayout(m.width, m.height))
+	}
 }
 
 // openInNewTab opens a request in a new tab
@@ -835,6 +851,9 @@ func (m *App) openInNewTab(req *types.SavedRequest) {
 	tab := newTabForRequest(m.db, req)
 	m.tabs = append(m.tabs, tab)
 	m.activeTab = len(m.tabs) - 1
+	if m.ready {
+		m.applyLayout(CalculateLayout(m.width, m.height))
+	}
 }
 
 // closeActiveTab closes the current tab; keeps at least one tab open
@@ -842,11 +861,17 @@ func (m *App) closeActiveTab() {
 	if len(m.tabs) <= 1 {
 		m.tabs[0] = newBlankTab(m.db)
 		m.activeTab = 0
+		if m.ready {
+			m.applyLayout(CalculateLayout(m.width, m.height))
+		}
 		return
 	}
 	m.tabs = append(m.tabs[:m.activeTab], m.tabs[m.activeTab+1:]...)
 	if m.activeTab >= len(m.tabs) {
 		m.activeTab = len(m.tabs) - 1
+	}
+	if m.ready {
+		m.applyLayout(CalculateLayout(m.width, m.height))
 	}
 }
 
@@ -898,80 +923,101 @@ func (m *App) duplicateActiveTab() {
 	}
 }
 
-func (m *App) handleNavigateUp() (tea.Model, tea.Cmd) {
-	if m.focusedPanel == PanelSidebar {
-		if _, cmd := m.requestList.Update(tea.KeyPressMsg{Code: tea.KeyUp}); cmd != nil {
+func (m *App) applyLayout(layout Layout) {
+	sidebarWidth, sidebarHeight := panelContentSize(layout.SidebarWidth, layout.SidebarHeight)
+	editorWidth, editorHeight := panelContentSize(layout.EditorWidth, layout.EditorHeight)
+	responseWidth, responseHeight := panelContentSize(layout.ResponseWidth, layout.ResponseHeight)
+
+	if m.requestList != nil {
+		m.requestList.SetSize(sidebarWidth, max(4, sidebarHeight-2))
+	}
+
+	for _, tab := range m.tabs {
+		if tab.Builder != nil {
+			tab.Builder.SetSize(editorWidth, max(8, editorHeight-2))
+		}
+		if tab.Viewer != nil {
+			tab.Viewer.SetSize(responseWidth, max(8, responseHeight-2))
+		}
+	}
+}
+
+func (m *App) closeEnvSwitcher() {
+	m.envSwitcherOpen = false
+	if m.envSwitcher != nil {
+		if active := m.envSwitcher.GetActiveEnvName(); active != "" {
+			m.activeEnvName = active
+		}
+	}
+}
+
+func (m *App) routeFocusedKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch m.focusedPanel {
+	case PanelSidebar:
+		key := msg.String()
+		switch {
+		case IsNavigateUpKey(key):
+			m.requestList.CursorUp()
+			return m, nil
+		case IsNavigateDownKey(key):
+			m.requestList.CursorDown()
+			return m, nil
+		case IsEnterKey(key):
+			if m.sidebarMode == SidebarRequests {
+				if req := m.requestList.GetSelectedRequest(); req != nil {
+					m.openInNewTab(req)
+				}
+			}
+			return m, nil
+		case key == " ":
+			m.requestList.ToggleFolderAtCursor()
+			return m, nil
+		}
+	case PanelMain:
+		if tab := m.ActiveTab(); tab != nil && tab.Builder != nil {
+			updated, cmd := tab.Builder.Update(msg)
+			if builder, ok := updated.(*RequestBuilder); ok {
+				tab.Builder = builder
+			}
+			return m, cmd
+		}
+	case PanelResponse:
+		if tab := m.ActiveTab(); tab != nil && tab.Viewer != nil {
+			updated, cmd := tab.Viewer.Update(msg)
+			if viewer, ok := updated.(*ResponseViewer); ok {
+				tab.Viewer = viewer
+			}
 			return m, cmd
 		}
 	}
-	return m, nil
-}
 
-func (m *App) handleNavigateDown() (tea.Model, tea.Cmd) {
-	if m.focusedPanel == PanelSidebar {
-		if _, cmd := m.requestList.Update(tea.KeyPressMsg{Code: tea.KeyDown}); cmd != nil {
-			return m, cmd
-		}
-	}
-	return m, nil
-}
-
-func (m *App) handleEnter() (tea.Model, tea.Cmd) {
-	if m.focusedPanel == PanelSidebar && m.sidebarMode == SidebarRequests {
-		if req := m.requestList.GetSelectedRequest(); req != nil {
-			m.openInNewTab(req)
-		}
-	}
 	return m, nil
 }
 
 func (m *App) renderHelpOverlay() string {
 	var sb strings.Builder
-	sb.WriteString(Style.Header.Render(" Keyboard Shortcuts "))
+	sb.WriteString(Style.Header.Render("Keyboard Shortcuts"))
 	sb.WriteString("\n\n")
 
-	shortcuts := []struct {
-		key  string
-		desc string
-	}{
-		{"Ctrl+T", "New tab"},
-		{"Ctrl+W", "Close tab"},
-		{"Ctrl+D", "Duplicate tab"},
-		{"Ctrl+Tab", "Next tab"},
-		{"Ctrl+Shift+[", "Previous tab"},
-		{"Ctrl+K", "Global search"},
-		{"?", "Toggle this help"},
-		{"h", "History sidebar"},
-		{"r", "Requests sidebar"},
-		{"Tab / Shift+Tab", "Cycle focus"},
-		{"↑ / ↓ or j/k", "Navigate list"},
-		{"Space", "Toggle folder expand"},
-		{"Enter", "Open request in new tab"},
-		{"q / Ctrl+C", "Quit"},
-	}
-
-	for _, s := range shortcuts {
-		keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
-		line := fmt.Sprintf("  %s  %s", keyStyle.Render(s.key), s.desc)
-		sb.WriteString(Style.ListItem.Render(line))
+	keyStyle := lipgloss.NewStyle().Foreground(Color("primary")).Bold(true)
+	groups := AllShortcuts()
+	for idx, group := range groups {
+		sb.WriteString(Style.PanelTitle.Render(group.Title))
 		sb.WriteString("\n")
+		for _, shortcut := range group.Keys {
+			line := fmt.Sprintf("  %s  %s", keyStyle.Render(shortcut.Key), shortcut.Description)
+			sb.WriteString(Style.ListItem.Render(line))
+			sb.WriteString("\n")
+		}
+		if idx < len(groups)-1 {
+			sb.WriteString("\n")
+		}
 	}
 
-	sb.WriteString("\n")
-	sb.WriteString(Style.Hint.Render("  Press ? or q to close"))
+	sb.WriteString(Style.Hint.Render("Press ? or Esc to close"))
 
-	content := sb.String()
-	modalWidth := 45
-	if modalWidth > m.width-10 {
-		modalWidth = m.width - 10
-	}
-	return lipgloss.NewStyle().
-		Width(modalWidth).
-		Height(m.height-5).
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("39")).
-		Padding(1, 2).
-		Render(content)
+	modalWidth := min(max(54, m.width-18), 82)
+	return Style.Modal.Width(modalWidth).Render(sb.String())
 }
 
 func (m *App) handleSpace() (tea.Model, tea.Cmd) {
@@ -995,146 +1041,154 @@ func (m *App) View() tea.View {
 	}
 
 	if m.searchModal != nil {
-		overlay := m.searchModal.View()
-		bg := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Background(lipgloss.Color("0"))
-		modalWidth := max(min(m.width*80/100, 70), 40)
-		padding := (m.width - modalWidth) / 2
-		if padding < 5 {
-			padding = 5
-		}
-		return m.makeView(lipgloss.JoinVertical(
-			lipgloss.Top,
-			bg.Render(strings.Repeat("\n", 5)),
-			lipgloss.JoinHorizontal(
-				lipgloss.Top,
-				strings.Repeat(" ", padding),
-				lipgloss.NewStyle().Width(modalWidth).Render(overlay.Content),
-			),
-		))
+		return m.renderCenteredBlock(m.searchModal.View().Content)
 	}
 
 	if m.helpModal {
-		return m.makeView(m.renderHelpOverlay())
+		return m.renderCenteredBlock(m.renderHelpOverlay())
+	}
+
+	if m.envSwitcherOpen && m.envSwitcher != nil {
+		content := Style.Modal.
+			Width(min(max(40, m.width-24), 76)).
+			Render(m.envSwitcher.View().Content)
+		return m.renderCenteredBlock(content)
 	}
 
 	if m.importModal != nil {
-		overlay := m.importModal.View()
-		bg := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Background(lipgloss.Color("0"))
-		modalWidth := max(min(m.width*80/100, 70), 50)
-		padding := (m.width - modalWidth) / 2
-		if padding < 5 {
-			padding = 5
-		}
-		return m.makeView(lipgloss.JoinVertical(
-			lipgloss.Top,
-			bg.Render(strings.Repeat("\n", 5)),
-			lipgloss.JoinHorizontal(
-				lipgloss.Top,
-				strings.Repeat(" ", padding),
-				lipgloss.NewStyle().Width(modalWidth).Render(overlay.Content),
-			),
-		))
+		return m.renderCenteredBlock(m.importModal.View().Content)
 	}
 
 	if m.runnerModal != nil {
-		overlay := m.runnerModal.View()
-		bg := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Background(lipgloss.Color("0"))
-		modalWidth := max(min(m.width*80/100, 70), 50)
-		padding := (m.width - modalWidth) / 2
-		if padding < 5 {
-			padding = 5
-		}
-		return m.makeView(lipgloss.JoinVertical(
+		return m.renderCenteredBlock(m.runnerModal.View().Content)
+	}
+
+	return m.makeView(m.renderWorkspace(CalculateLayout(m.width, m.height)))
+}
+
+func (m *App) renderCenteredBlock(content string) tea.View {
+	topPadding := max(1, (m.height-lipgloss.Height(content))/3)
+	leftPadding := max(0, (m.width-lipgloss.Width(content))/2)
+
+	return m.makeView(lipgloss.JoinVertical(
+		lipgloss.Left,
+		strings.Repeat("\n", topPadding),
+		lipgloss.JoinHorizontal(
 			lipgloss.Top,
-			bg.Render(strings.Repeat("\n", 5)),
-			lipgloss.JoinHorizontal(
-				lipgloss.Top,
-				strings.Repeat(" ", padding),
-				lipgloss.NewStyle().Width(modalWidth).Render(overlay.Content),
-			),
-		))
-	}
-
-	layout := CalculateLayout(m.width, m.height)
-	sidebar := m.renderSidebar(layout)
-	main := m.renderMain(layout)
-	status := m.renderStatusBar(layout)
-
-	content := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, main)
-	return m.makeView(lipgloss.JoinVertical(lipgloss.Left, content, status))
+			strings.Repeat(" ", leftPadding),
+			content,
+		),
+	))
 }
 
-// renderSidebar renders the sidebar (requests list or history)
-func (m *App) renderSidebar(layout Layout) string {
-	var sb strings.Builder
+func panelContentSize(width, height int) (int, int) {
+	return max(1, width-4), max(1, height-2)
+}
 
-	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
-	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+func (m *App) renderWorkspace(layout Layout) string {
+	var workspace string
 
-	if m.sidebarMode == SidebarRequests {
-		sb.WriteString(activeStyle.Render(" Requests "))
-		sb.WriteString(inactiveStyle.Render(" History "))
-	} else {
-		sb.WriteString(inactiveStyle.Render(" Requests "))
-		sb.WriteString(activeStyle.Render(" History "))
+	switch layout.Mode {
+	case LayoutThreePane:
+		workspace = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			m.renderSidebarPane(layout.SidebarWidth, layout.SidebarHeight),
+			m.renderEditorPane(layout.EditorWidth, layout.EditorHeight),
+			m.renderResponsePane(layout.ResponseWidth, layout.ResponseHeight),
+		)
+	case LayoutSplitRight:
+		right := lipgloss.JoinVertical(
+			lipgloss.Left,
+			m.renderEditorPane(layout.EditorWidth, layout.EditorHeight),
+			m.renderResponsePane(layout.ResponseWidth, layout.ResponseHeight),
+		)
+		workspace = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			m.renderSidebarPane(layout.SidebarWidth, layout.SidebarHeight),
+			right,
+		)
+	default:
+		workspace = lipgloss.JoinVertical(
+			lipgloss.Left,
+			m.renderSidebarPane(layout.SidebarWidth, layout.SidebarHeight),
+			m.renderEditorPane(layout.EditorWidth, layout.EditorHeight),
+			m.renderResponsePane(layout.ResponseWidth, layout.ResponseHeight),
+		)
 	}
-	sb.WriteString("\n")
 
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		workspace,
+		m.renderStatusBar(layout),
+	)
+}
+
+func (m *App) renderSidebarPane(width, height int) string {
+	contentWidth, contentHeight := panelContentSize(width, height)
+	header := RenderPanelHeader("Requests", fmt.Sprintf("%d saved", len(m.requests)), contentWidth)
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		"",
+		m.renderSidebarBody(contentWidth, max(4, contentHeight-2)),
+	)
+
+	return PanelStyle(m.focusedPanel == PanelSidebar).
+		Width(contentWidth).
+		Height(contentHeight).
+		Render(content)
+}
+
+func (m *App) renderSidebarBody(width, height int) string {
+	switcher := lipgloss.JoinHorizontal(
+		lipgloss.Center,
+		RenderMiniTab("Requests", m.sidebarMode == SidebarRequests),
+		"  ",
+		RenderMiniTab("History", m.sidebarMode == SidebarHistory),
+	)
+
+	body := m.requestList.ViewTree()
 	if m.sidebarMode == SidebarHistory {
-		m.renderHistoryList(&sb)
-	} else {
-		sb.WriteString(m.requestList.ViewTree())
+		body = m.renderHistoryList(width)
 	}
 
-	sidebarContent := sb.String()
-	return Style.Sidebar.
-		Width(layout.SidebarWidth).
-		Height(layout.MainHeight(m.height)).
-		Render(sidebarContent)
+	return lipgloss.NewStyle().
+		Width(width).
+		Height(height).
+		Render(lipgloss.JoinVertical(lipgloss.Left, switcher, "", body))
 }
 
-func (m *App) renderHistoryList(sb *strings.Builder) {
-	hasHistory := false
+func (m *App) renderHistoryList(width int) string {
+	var lines []string
 	for _, req := range m.requests {
 		entries, err := m.db.GetHistory(req.ID, 1)
 		if err != nil || len(entries) == 0 {
 			continue
 		}
+
 		entry := entries[0]
-		hasHistory = true
-		prefix := "  "
-		itemStyle := Style.ListItem
-		methodColor := methodTextColor(req.Method)
-		methodStyle := lipgloss.NewStyle().Foreground(methodColor).Bold(true)
 		name := req.Name
 		if name == "" {
 			name = req.URL
 		}
-		if len(name) > 28 {
-			name = name[:25] + "..."
-		}
-		statusColor := lipgloss.Color("82")
-		if entry.StatusCode >= 400 {
-			statusColor = lipgloss.Color("196")
-		} else if entry.StatusCode >= 300 {
-			statusColor = lipgloss.Color("226")
-		}
-		statusStyle := lipgloss.NewStyle().Foreground(statusColor)
-		durationStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-		line := fmt.Sprintf("%s%s %s [%s %dms] %s",
-			prefix, methodStyle.Render(req.Method), name, statusStyle.Render(fmt.Sprintf("%d", entry.StatusCode)), entry.DurationMs, durationStyle.Render("@"+formatTimestamp(entry.Timestamp)))
-		sb.WriteString(itemStyle.Render(line))
-		sb.WriteString("\n")
+
+		titleWidth := max(10, width-18)
+		title := lipgloss.JoinHorizontal(
+			lipgloss.Center,
+			RenderMethodBadge(req.Method),
+			" ",
+			Style.PlainText.Render(truncateText(name, titleWidth)),
+		)
+		lines = append(lines, title+" "+RenderStatusBadge(fmt.Sprintf("%d", entry.StatusCode), entry.StatusCode))
+		lines = append(lines, "  "+Style.Hint.Render(fmt.Sprintf("%dms  ·  %s", entry.DurationMs, formatTimestamp(entry.Timestamp))))
+		lines = append(lines, "")
 	}
-	if !hasHistory {
-		sb.WriteString(Style.PlainText.Render("\n  No history yet"))
+
+	if len(lines) == 0 {
+		return Style.Hint.Render("No history yet")
 	}
+
+	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
 }
 
 func formatTimestamp(ts int64) string {
@@ -1166,107 +1220,50 @@ func methodTextColor(method string) color.Color {
 	}
 }
 
-func (m *App) renderMain(layout Layout) string {
-	var sb strings.Builder
+func (m *App) renderEditorPane(width, height int) string {
+	contentWidth, contentHeight := panelContentSize(width, height)
+	header := RenderPanelHeader("Request", fmt.Sprintf("Tab %d/%d", m.activeTab+1, max(1, len(m.tabs))), contentWidth)
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		"",
+		m.renderEditorBody(contentWidth, max(8, contentHeight-2)),
+	)
 
-	sb.WriteString(m.renderTabBar())
-	sb.WriteString(m.renderToolbar())
-
-	if m.activeTab < len(m.tabs) {
-		tab := m.tabs[m.activeTab]
-		if tab.Builder != nil {
-			sb.WriteString(tab.Builder.View().Content)
-		}
-	} else {
-		sb.WriteString(m.renderWelcome())
-	}
-
-	mainContent := sb.String()
-	return Style.Main.
-		Width(layout.MainWidth).
-		Height(m.height).
-		Render(mainContent)
+	return PanelStyle(m.focusedPanel == PanelMain).
+		Width(contentWidth).
+		Height(contentHeight).
+		Render(content)
 }
 
-func (m *App) renderToolbar() string {
-	var sb strings.Builder
-
-	toolbarBg := lipgloss.NewStyle().
-		Background(lipgloss.Color("238")).
-		Foreground(lipgloss.Color("252"))
-
-	var method, url string
-	if m.activeTab < len(m.tabs) {
-		tab := m.tabs[m.activeTab]
-		if tab.Request != nil {
-			method = tab.Request.Method
-			url = tab.Request.URL
-		}
+func (m *App) renderEditorBody(width, height int) string {
+	if tab := m.ActiveTab(); tab != nil && tab.Builder != nil {
+		return lipgloss.NewStyle().
+			Width(width).
+			Height(height).
+			Render(tab.Builder.View().Content)
 	}
 
-	saveStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("39"))
-	dupStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("226"))
-	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
-
-	if method != "" {
-		methodColor := methodTextColor(method)
-		methodStyle := lipgloss.NewStyle().Foreground(methodColor).Bold(true)
-		displayURL := url
-		if len(displayURL) > 50 {
-			displayURL = displayURL[:47] + "..."
-		}
-		toolbarLine := fmt.Sprintf("  %s  %s    %s  %s  %s",
-			methodStyle.Render(method),
-			saveStyle.Render("[Ctrl+S save]"),
-			dupStyle.Render("[Ctrl+D dup]"),
-			hintStyle.Render("[Ctrl+Enter send]"),
-			Style.Hint.Render(displayURL),
-		)
-		sb.WriteString(toolbarBg.Render(toolbarLine))
-	} else {
-		sb.WriteString(toolbarBg.Render("  New Request    " + hintStyle.Render("[Ctrl+Enter send]")))
-	}
-
-	sb.WriteString("\n")
-	return sb.String()
+	return lipgloss.NewStyle().
+		Width(width).
+		Height(height).
+		Render(m.renderWelcome())
 }
 
-// renderTabBar renders the tab bar
-func (m *App) renderTabBar() string {
-	var sb strings.Builder
+func (m *App) renderResponsePane(width, height int) string {
+	contentWidth, contentHeight := panelContentSize(width, height)
+	header := RenderPanelHeader("Response", m.responsePaneMeta(), contentWidth)
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		"",
+		m.renderResponseBody(contentWidth, max(8, contentHeight-2)),
+	)
 
-	bgStyle := lipgloss.NewStyle().Background(lipgloss.Color("236"))
-
-	for i, tab := range m.tabs {
-		name := tab.Name
-		if len(name) > 18 {
-			name = name[:15] + "..."
-		}
-		if i == m.activeTab {
-			activeStyle := lipgloss.NewStyle().
-				Background(lipgloss.Color("39")).
-				Foreground(lipgloss.Color("15")).
-				Bold(true).
-				Padding(0, 1)
-			sb.WriteString(activeStyle.Render(" " + name + " "))
-		} else {
-			inactiveStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("240")).
-				Padding(0, 1)
-			sb.WriteString(inactiveStyle.Render(" " + name + " "))
-		}
-	}
-
-	newTabStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("39")).
-		Padding(0, 1)
-	sb.WriteString(newTabStyle.Render("[+]"))
-
-	sb.WriteString("\n")
-	return bgStyle.Render(sb.String())
+	return PanelStyle(m.focusedPanel == PanelResponse).
+		Width(contentWidth).
+		Height(contentHeight).
+		Render(content)
 }
 
 // renderWelcome renders the welcome screen
@@ -1274,26 +1271,60 @@ func (m *App) renderWelcome() string {
 	var sb strings.Builder
 	sb.WriteString("\n")
 	sb.WriteString("\n")
-	sb.WriteString(Style.WelcomeText.Render("  Welcome to Gurl TUI!"))
+	sb.WriteString(Style.WelcomeText.Render("  Welcome to Gurl TUI"))
 	sb.WriteString("\n")
 	sb.WriteString("\n")
-	sb.WriteString(Style.PlainText.Render("  Use ↑/↓ to navigate requests"))
+	sb.WriteString(Style.PlainText.Render("  Use Ctrl+1 to browse requests and Enter to open one"))
 	sb.WriteString("\n")
-	sb.WriteString(Style.PlainText.Render("  Press Enter to open in new tab"))
+	sb.WriteString(Style.PlainText.Render("  Use Ctrl+2 to edit and Ctrl+Enter to send"))
 	sb.WriteString("\n")
-	sb.WriteString(Style.PlainText.Render("  Press Tab to switch panels"))
+	sb.WriteString(Style.PlainText.Render("  Use Ctrl+3 to inspect the response pane"))
 	sb.WriteString("\n")
 	sb.WriteString("\n")
-	sb.WriteString(Style.Hint.Render("  Ctrl+T: new tab  |  Ctrl+W: close tab  |  Ctrl+D: duplicate"))
+	sb.WriteString(Style.Hint.Render("  Ctrl+T new tab  ·  Ctrl+W close tab  ·  Ctrl+D duplicate"))
 	return sb.String()
+}
+
+func (m *App) renderResponseBody(width, height int) string {
+	if tab := m.ActiveTab(); tab != nil && tab.Viewer != nil {
+		return lipgloss.NewStyle().
+			Width(width).
+			Height(height).
+			Render(tab.Viewer.View().Content)
+	}
+
+	return lipgloss.NewStyle().
+		Width(width).
+		Height(height).
+		Render(Style.Hint.Render("No response yet"))
+}
+
+func (m *App) responsePaneMeta() string {
+	tab := m.ActiveTab()
+	if tab == nil || tab.Viewer == nil {
+		return "Preview"
+	}
+
+	switch tab.Viewer.ActiveTab() {
+	case TabHeaders:
+		return "Headers"
+	case TabCookies:
+		return "Cookies"
+	case TabTiming:
+		return "Timing"
+	case TabDiff:
+		return "Diff"
+	default:
+		return "Preview"
+	}
 }
 
 // renderStatusBar renders the bottom status bar
 func (m *App) renderStatusBar(layout Layout) string {
 	statusBar := NewStatusBar(m)
 	return Style.StatusBar.
-		Width(m.width).
-		Height(layout.StatusHeight).
+		Width(layout.Width).
+		Height(layout.FooterHeight).
 		Render(statusBar.View())
 }
 
@@ -1304,6 +1335,14 @@ func (m *App) GetRequestCount() int {
 
 // GetCurrentEnv returns the current environment name
 func (m *App) GetCurrentEnv() string {
+	if m.activeEnvName != "" {
+		return m.activeEnvName
+	}
+	if m.envSwitcher != nil {
+		if active := m.envSwitcher.GetActiveEnvName(); active != "" {
+			return active
+		}
+	}
 	return "default"
 }
 
@@ -1318,4 +1357,32 @@ func (m *App) ActiveTab() *Tab {
 // TabCount returns the number of open tabs
 func (m *App) TabCount() int {
 	return len(m.tabs)
+}
+
+func (m *App) DisplayVersion() string {
+	if strings.TrimSpace(m.version) == "" {
+		return "dev"
+	}
+	return m.version
+}
+
+func (m *App) StateLabel() string {
+	switch {
+	case m.envSwitcherOpen:
+		return "ENV"
+	case m.searchModal != nil:
+		return "SEARCH"
+	case m.importModal != nil:
+		return "IMPORT"
+	case m.runnerModal != nil:
+		return "RUNNER"
+	case m.helpModal:
+		return "HELP"
+	}
+
+	if tab := m.ActiveTab(); tab != nil && tab.Builder != nil && tab.Builder.IsSending() {
+		return "SENDING"
+	}
+
+	return "READY"
 }

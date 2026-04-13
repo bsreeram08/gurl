@@ -45,6 +45,7 @@ type ResponseViewer struct {
 	copied       bool
 	saved        bool
 	diffResult   string
+	errMsg       string
 }
 
 // NewResponseViewer creates a new response viewer component
@@ -63,12 +64,24 @@ func (rv *ResponseViewer) SetResponse(resp *client.Response) {
 		rv.prevResponse = rv.response
 	}
 	rv.response = resp
+	rv.errMsg = ""
 	rv.copied = false
 	rv.saved = false
 	rv.diffResult = ""
 	if rv.prevResponse != nil && rv.response != nil && rv.activeTab == TabDiff {
 		rv.computeDiff()
 	}
+	rv.updateViewportContent()
+}
+
+// SetError renders an execution failure in the response pane.
+func (rv *ResponseViewer) SetError(err error) {
+	if err == nil {
+		rv.errMsg = ""
+	} else {
+		rv.errMsg = err.Error()
+	}
+	rv.response = nil
 	rv.updateViewportContent()
 }
 
@@ -86,24 +99,27 @@ func (rv *ResponseViewer) computeDiff() {
 
 // updateViewportContent updates the viewport with current tab content
 func (rv *ResponseViewer) updateViewportContent() {
-	if rv.response == nil {
-		return
-	}
-
 	var content string
-	switch rv.activeTab {
-	case TabBody:
-		content = rv.formatBody()
-	case TabHeaders:
-		content = rv.formatHeaders()
-	case TabCookies:
-		content = rv.formatCookies()
-	case TabTiming:
-		content = rv.formatTiming()
-	case TabDiff:
-		content = rv.diffResult
-		if content == "" {
-			content = "  No previous response to diff against.\n  Send a request, then send another to compare."
+	switch {
+	case rv.errMsg != "":
+		content = "Request failed:\n\n" + rv.errMsg
+	case rv.response == nil:
+		content = "Send a request to inspect the response here."
+	default:
+		switch rv.activeTab {
+		case TabBody:
+			content = rv.formatBody()
+		case TabHeaders:
+			content = rv.formatHeaders()
+		case TabCookies:
+			content = rv.formatCookies()
+		case TabTiming:
+			content = rv.formatTiming()
+		case TabDiff:
+			content = rv.diffResult
+			if content == "" {
+				content = "No previous response to diff against.\nSend a request, then send another to compare."
+			}
 		}
 	}
 
@@ -303,6 +319,15 @@ func (rv *ResponseViewer) SetTab(tab ResponseTab) {
 	rv.updateViewportContent()
 }
 
+// SetSize updates the response pane viewport size.
+func (rv *ResponseViewer) SetSize(width, height int) {
+	rv.width = width
+	rv.height = height
+	rv.viewport.SetWidth(max(20, width-2))
+	rv.viewport.SetHeight(max(8, height-5))
+	rv.updateViewportContent()
+}
+
 // handleKeyPress handles keyboard input
 func (rv *ResponseViewer) handleKeyPress(msg tea.KeyPressMsg) bool {
 	// In v2, printable characters have non-empty Text field
@@ -353,60 +378,58 @@ func (rv *ResponseViewer) handleKeyPress(msg tea.KeyPressMsg) bool {
 
 // View renders the response viewer
 func (rv *ResponseViewer) View() tea.View {
-	var content string
-	if rv.response == nil {
-		content = Style.WelcomeText.Render("  Send a request to see the response")
-	} else {
-		var sb strings.Builder
+	var sb strings.Builder
 
-		// Status line with status code, time, size
-		statusColor := rv.statusCodeColor()
-		statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Bold(true)
-
-		sb.WriteString(fmt.Sprintf("  %s %s %s\n",
-			statusStyle.Render(fmt.Sprintf("%d %s", rv.response.StatusCode, http.StatusText(rv.response.StatusCode))),
-			Style.PlainText.Render(rv.response.Duration.String()),
-			Style.PlainText.Render(formatSize(rv.response.Size)),
-		))
-
-		// Tab bar
-		sb.WriteString(rv.renderTabBar())
+	if rv.errMsg != "" {
+		sb.WriteString(RenderStatusBadge("ERROR", 500))
 		sb.WriteString("\n")
-
-		// Content based on active tab
-		switch rv.activeTab {
-		case TabBody:
-			sb.WriteString(rv.viewport.View())
-		case TabHeaders:
-			sb.WriteString(rv.formatHeaders())
-		case TabCookies:
-			sb.WriteString(rv.formatCookies())
-		case TabTiming:
-			sb.WriteString(rv.formatTiming())
-		}
-
-		// Copy/save feedback
-		if rv.copied {
-			sb.WriteString(Style.Hint.Render("  Copied!"))
-		} else if rv.saved {
-			sb.WriteString(Style.Hint.Render("  Saved!"))
-		}
-
-		content = sb.String()
+		sb.WriteString(Style.Hint.Render("Preview"))
+		sb.WriteString("\n\n")
+		sb.WriteString(Style.PlainText.Render(rv.errMsg))
+		return tea.NewView(sb.String())
 	}
-	return tea.NewView(content)
+
+	if rv.response == nil {
+		sb.WriteString(Style.WelcomeText.Render("Send a request to see the response"))
+		sb.WriteString("\n\n")
+		sb.WriteString(Style.Hint.Render("Ctrl+2 returns to the editor. Ctrl+Enter sends the active request."))
+		return tea.NewView(sb.String())
+	}
+
+	status := RenderStatusBadge(fmt.Sprintf("%d %s", rv.response.StatusCode, http.StatusText(rv.response.StatusCode)), rv.response.StatusCode)
+	meta := Style.Hint.Render(fmt.Sprintf("%s  |  %s", rv.response.Duration, formatSize(rv.response.Size)))
+	gap := rv.width - lipgloss.Width(status) - lipgloss.Width(meta)
+	if gap < 1 {
+		gap = 1
+	}
+	sb.WriteString(status)
+	sb.WriteString(strings.Repeat(" ", gap))
+	sb.WriteString(meta)
+	sb.WriteString("\n")
+	sb.WriteString(rv.renderTabBar())
+	sb.WriteString("\n\n")
+	sb.WriteString(rv.viewport.View())
+
+	if rv.copied {
+		sb.WriteString("\n")
+		sb.WriteString(Style.Hint.Render("Copied response body"))
+	} else if rv.saved {
+		sb.WriteString("\n")
+		sb.WriteString(Style.Hint.Render("Saved response body"))
+	}
+
+	return tea.NewView(sb.String())
 }
 
 // renderTabBar renders the tab bar
 func (rv *ResponseViewer) renderTabBar() string {
-	tabs := []string{"Body", "Headers", "Cookies", "Timing", "Diff"}
+	tabs := []string{"Preview", "Headers", "Cookies", "Timing", "Diff"}
 	var sb strings.Builder
 
 	for i, tab := range tabs {
-		if ResponseTab(i) == rv.activeTab {
-			sb.WriteString(Style.SelectedItem.Render(fmt.Sprintf(" [%s] ", tab)))
-		} else {
-			sb.WriteString(Style.ListItem.Render(fmt.Sprintf(" %s ", tab)))
+		sb.WriteString(RenderMiniTab(tab, ResponseTab(i) == rv.activeTab))
+		if i < len(tabs)-1 {
+			sb.WriteString("  ")
 		}
 	}
 
@@ -417,11 +440,7 @@ func (rv *ResponseViewer) renderTabBar() string {
 func (rv *ResponseViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		rv.width = msg.Width
-		rv.height = msg.Height
-		rv.viewport.SetWidth(msg.Width - 4)
-		rv.viewport.SetHeight(msg.Height - 8)
-		rv.updateViewportContent()
+		rv.SetSize(msg.Width, msg.Height)
 		return rv, nil
 
 	case tea.KeyPressMsg:

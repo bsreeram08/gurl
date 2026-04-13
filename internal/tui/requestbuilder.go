@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -23,9 +23,12 @@ type RequestBuilder struct {
 	editing *types.SavedRequest // Working copy being edited
 
 	// UI State
-	width         int
-	height        int
-	activeSection Section // Currently focused section
+	width           int
+	height          int
+	activeSection   Section // Currently focused section
+	activeHeaderRow int
+	activeQueryRow  int
+	activeAuthField int
 
 	// Method selector
 	methodIndex int
@@ -149,21 +152,27 @@ func NewRequestBuilder(db storage.DB) *RequestBuilder {
 	}
 
 	rb := &RequestBuilder{
-		db:             db,
-		methods:        methods,
-		methodIndex:    0,
-		urlInput:       urlInput,
-		bodyInput:      bodyInput,
-		contentType:    "json",
-		authType:       "none",
-		authInputs:     authInputs,
-		headerInputs:   []headerRow{},
-		queryInputs:    []queryRow{},
-		loadingSpinner: loadingSpinner,
+		db:              db,
+		methods:         methods,
+		methodIndex:     0,
+		activeSection:   SectionURL,
+		activeHeaderRow: 0,
+		activeQueryRow:  0,
+		activeAuthField: 0,
+		urlInput:        urlInput,
+		bodyInput:       bodyInput,
+		contentType:     "json",
+		authType:        "none",
+		authInputs:      authInputs,
+		headerInputs:    []headerRow{},
+		queryInputs:     []queryRow{},
+		loadingSpinner:  loadingSpinner,
 	}
 
 	// Add one empty header row by default
 	rb.addHeaderRow()
+	rb.addQueryRow()
+	rb.syncFocus()
 
 	return rb
 }
@@ -212,14 +221,18 @@ func (rb *RequestBuilder) LoadRequest(req *types.SavedRequest) {
 
 	// Set headers
 	rb.headerInputs = []headerRow{}
+	rb.activeHeaderRow = 0
 	for _, h := range req.Headers {
 		row := rb.addHeaderRow()
 		row.keyInput.SetValue(h.Key)
 		row.valueInput.SetValue(h.Value)
 	}
-	if len(req.Headers) == 0 {
-		rb.addHeaderRow()
-	}
+	rb.ensureTrailingHeaderRow()
+
+	// Set query params from the request URL
+	rb.queryInputs = []queryRow{}
+	rb.activeQueryRow = 0
+	rb.loadQueryParams(req.URL)
 
 	// Set auth
 	if req.AuthConfig != nil {
@@ -235,6 +248,9 @@ func (rb *RequestBuilder) LoadRequest(req *types.SavedRequest) {
 
 	// Set content type from headers if present
 	rb.contentType = detectContentType(req.Headers, req.Body)
+	rb.activeSection = SectionURL
+	rb.activeAuthField = 0
+	rb.syncFocus()
 }
 
 // NewRequest creates a blank request for a new request
@@ -247,8 +263,15 @@ func (rb *RequestBuilder) NewRequest() {
 	rb.bodyInput.SetValue("")
 	rb.headerInputs = []headerRow{}
 	rb.addHeaderRow()
+	rb.queryInputs = []queryRow{}
+	rb.addQueryRow()
 	rb.authType = "none"
 	rb.contentType = "json"
+	rb.activeSection = SectionURL
+	rb.activeHeaderRow = 0
+	rb.activeQueryRow = 0
+	rb.activeAuthField = 0
+	rb.syncFocus()
 }
 
 // Section navigation
@@ -269,6 +292,7 @@ func (rb *RequestBuilder) nextSection() {
 	case SectionSend:
 		rb.activeSection = SectionMethod
 	}
+	rb.syncFocus()
 }
 
 func (rb *RequestBuilder) prevSection() {
@@ -288,6 +312,7 @@ func (rb *RequestBuilder) prevSection() {
 	case SectionSend:
 		rb.activeSection = SectionAuth
 	}
+	rb.syncFocus()
 }
 
 // Header row management
@@ -318,6 +343,9 @@ func (rb *RequestBuilder) removeHeaderRow(index int) {
 	if len(rb.headerInputs) == 0 {
 		rb.addHeaderRow()
 	}
+	if rb.activeHeaderRow >= len(rb.headerInputs) {
+		rb.activeHeaderRow = len(rb.headerInputs) - 1
+	}
 }
 
 // Query param row management
@@ -347,17 +375,16 @@ func (rb *RequestBuilder) removeQueryRow(index int) {
 	if len(rb.queryInputs) == 0 {
 		rb.addQueryRow()
 	}
+	if rb.activeQueryRow >= len(rb.queryInputs) {
+		rb.activeQueryRow = len(rb.queryInputs) - 1
+	}
 }
 
 // Update implements tea.Model.Update
 func (rb *RequestBuilder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		rb.width = msg.Width
-		rb.height = msg.Height
-		// Resize body input to available space
-		rb.bodyInput.SetWidth(msg.Width - 20) // Account for padding and borders
-		rb.bodyInput.SetHeight(msg.Height - 15) // Account for headers, tabs, etc.
+		rb.SetSize(msg.Width, msg.Height)
 		return rb, nil
 
 	case tea.KeyPressMsg:
@@ -393,12 +420,24 @@ func (rb *RequestBuilder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return rb, nil
 }
 
+// SetSize updates the editor viewport dimensions.
+func (rb *RequestBuilder) SetSize(width, height int) {
+	rb.width = width
+	rb.height = height
+
+	bodyWidth := max(24, width-8)
+	bodyHeight := max(8, height/3)
+
+	rb.bodyInput.SetWidth(bodyWidth)
+	rb.bodyInput.SetHeight(bodyHeight)
+}
+
 // handleKeyPress handles keyboard input
 func (rb *RequestBuilder) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	keyStr := msg.String()
 
-	// Handle sending - Ctrl+J (or Ctrl+Enter) in send section
-	if (keyStr == "ctrl+j" || keyStr == "ctrl+enter") && rb.activeSection == SectionSend {
+	// Send from anywhere in the editor.
+	if keyStr == "ctrl+j" || keyStr == "ctrl+enter" {
 		return rb, rb.sendRequest()
 	}
 
@@ -513,121 +552,354 @@ func (rb *RequestBuilder) handleMethodKey(msg tea.KeyPressMsg) (tea.Model, tea.C
 }
 
 func (rb *RequestBuilder) handleHeadersKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	// 'a' adds a new header
-	if len(msg.Text) > 0 && msg.Text == "a" {
-		rb.addHeaderRow()
-		return rb, nil
-	}
-
-	// 'd' deletes focused header
-	if len(msg.Text) > 0 && msg.Text == "d" {
-		// Find focused row and remove it
-		for i := range rb.headerInputs {
-			if rb.headerInputs[i].keyInput.Focused() || rb.headerInputs[i].valueInput.Focused() {
-				rb.removeHeaderRow(i)
-				break
-			}
-		}
-		return rb, nil
-	}
-
-	// Escape exits headers section
 	if msg.Code == tea.KeyEscape {
 		rb.nextSection()
 		return rb, nil
 	}
 
-	// Update header inputs
-	for i := range rb.headerInputs {
-		var cmd tea.Cmd
-		rb.headerInputs[i].keyInput, cmd = rb.headerInputs[i].keyInput.Update(msg)
-		if cmd != nil {
-			return rb, cmd
+	switch msg.Code {
+	case tea.KeyUp:
+		if rb.activeHeaderRow > 0 {
+			rb.focusHeaderCell(rb.activeHeaderRow-1, rb.headerInputs[rb.activeHeaderRow].focused)
 		}
-		rb.headerInputs[i].valueInput, cmd = rb.headerInputs[i].valueInput.Update(msg)
-		if cmd != nil {
-			return rb, cmd
+		return rb, nil
+	case tea.KeyDown:
+		if rb.activeHeaderRow < len(rb.headerInputs)-1 {
+			rb.focusHeaderCell(rb.activeHeaderRow+1, rb.headerInputs[rb.activeHeaderRow].focused)
+		}
+		return rb, nil
+	case tea.KeyLeft:
+		rb.focusHeaderCell(rb.activeHeaderRow, true)
+		return rb, nil
+	case tea.KeyRight:
+		rb.focusHeaderCell(rb.activeHeaderRow, false)
+		return rb, nil
+	case tea.KeyEnter:
+		if rb.headerInputs[rb.activeHeaderRow].focused {
+			rb.focusHeaderCell(rb.activeHeaderRow, false)
+			return rb, nil
+		}
+		if rb.activeHeaderRow == len(rb.headerInputs)-1 {
+			rb.addHeaderRow()
+		}
+		rb.focusHeaderCell(min(rb.activeHeaderRow+1, len(rb.headerInputs)-1), true)
+		return rb, nil
+	case tea.KeyBackspace:
+		if rb.isHeaderRowEmpty(rb.activeHeaderRow) && len(rb.headerInputs) > 1 {
+			current := rb.activeHeaderRow
+			rb.removeHeaderRow(current)
+			rb.focusHeaderCell(max(0, min(current, len(rb.headerInputs)-1)), true)
+			return rb, nil
 		}
 	}
 
+	var cmd tea.Cmd
+	if rb.headerInputs[rb.activeHeaderRow].focused {
+		rb.headerInputs[rb.activeHeaderRow].keyInput, cmd = rb.headerInputs[rb.activeHeaderRow].keyInput.Update(msg)
+	} else {
+		rb.headerInputs[rb.activeHeaderRow].valueInput, cmd = rb.headerInputs[rb.activeHeaderRow].valueInput.Update(msg)
+	}
+	if cmd != nil {
+		return rb, cmd
+	}
+
+	rb.ensureTrailingHeaderRow()
 	return rb, nil
 }
 
 func (rb *RequestBuilder) handleQueryParamsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	// 'a' adds a new param
-	if len(msg.Text) > 0 && msg.Text == "a" {
-		rb.addQueryRow()
-		return rb, nil
-	}
-
-	// 'd' deletes focused param
-	if len(msg.Text) > 0 && msg.Text == "d" {
-		for i := range rb.queryInputs {
-			if rb.queryInputs[i].keyInput.Focused() || rb.queryInputs[i].valueInput.Focused() {
-				rb.removeQueryRow(i)
-				break
-			}
-		}
-		return rb, nil
-	}
-
-	// Escape exits section
 	if msg.Code == tea.KeyEscape {
 		rb.nextSection()
 		return rb, nil
 	}
 
-	// Update query inputs
-	for i := range rb.queryInputs {
-		var cmd tea.Cmd
-		rb.queryInputs[i].keyInput, cmd = rb.queryInputs[i].keyInput.Update(msg)
-		if cmd != nil {
-			return rb, cmd
+	switch msg.Code {
+	case tea.KeyUp:
+		if rb.activeQueryRow > 0 {
+			rb.focusQueryCell(rb.activeQueryRow-1, rb.queryInputs[rb.activeQueryRow].focused)
 		}
-		rb.queryInputs[i].valueInput, cmd = rb.queryInputs[i].valueInput.Update(msg)
-		if cmd != nil {
-			return rb, cmd
+		return rb, nil
+	case tea.KeyDown:
+		if rb.activeQueryRow < len(rb.queryInputs)-1 {
+			rb.focusQueryCell(rb.activeQueryRow+1, rb.queryInputs[rb.activeQueryRow].focused)
 		}
+		return rb, nil
+	case tea.KeyLeft:
+		rb.focusQueryCell(rb.activeQueryRow, true)
+		return rb, nil
+	case tea.KeyRight:
+		rb.focusQueryCell(rb.activeQueryRow, false)
+		return rb, nil
+	case tea.KeyEnter:
+		if rb.queryInputs[rb.activeQueryRow].focused {
+			rb.focusQueryCell(rb.activeQueryRow, false)
+			return rb, nil
+		}
+		if rb.activeQueryRow == len(rb.queryInputs)-1 {
+			rb.addQueryRow()
+		}
+		rb.focusQueryCell(min(rb.activeQueryRow+1, len(rb.queryInputs)-1), true)
+		return rb, nil
+	case tea.KeyBackspace:
+		if rb.isQueryRowEmpty(rb.activeQueryRow) && len(rb.queryInputs) > 1 {
+			current := rb.activeQueryRow
+			rb.removeQueryRow(current)
+			rb.focusQueryCell(max(0, min(current, len(rb.queryInputs)-1)), true)
+			return rb, nil
+		}
+	}
+
+	var cmd tea.Cmd
+	if rb.queryInputs[rb.activeQueryRow].focused {
+		rb.queryInputs[rb.activeQueryRow].keyInput, cmd = rb.queryInputs[rb.activeQueryRow].keyInput.Update(msg)
+	} else {
+		rb.queryInputs[rb.activeQueryRow].valueInput, cmd = rb.queryInputs[rb.activeQueryRow].valueInput.Update(msg)
+	}
+	if cmd != nil {
+		return rb, cmd
+	}
+
+	rb.ensureTrailingQueryRow()
+	return rb, nil
+}
+
+func (rb *RequestBuilder) handleAuthKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.Code == tea.KeyEscape {
+		rb.nextSection()
+		return rb, nil
+	}
+
+	switch msg.String() {
+	case "[":
+		rb.cycleAuthType(-1)
+		return rb, nil
+	case "]":
+		rb.cycleAuthType(1)
+		return rb, nil
+	}
+
+	keys := rb.currentAuthKeys()
+	if len(keys) == 0 {
+		return rb, nil
+	}
+
+	switch msg.Code {
+	case tea.KeyUp:
+		if rb.activeAuthField > 0 {
+			rb.activeAuthField--
+			rb.syncFocus()
+		}
+		return rb, nil
+	case tea.KeyDown:
+		if rb.activeAuthField < len(keys)-1 {
+			rb.activeAuthField++
+			rb.syncFocus()
+		}
+		return rb, nil
+	}
+
+	key := keys[rb.activeAuthField]
+	input := rb.authInputs[key]
+	var cmd tea.Cmd
+	input, cmd = input.Update(msg)
+	rb.authInputs[key] = input
+	if cmd != nil {
+		return rb, cmd
 	}
 
 	return rb, nil
 }
 
-func (rb *RequestBuilder) handleAuthKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	// Escape exits section
-	if msg.Code == tea.KeyEscape {
-		rb.nextSection()
-		return rb, nil
+func (rb *RequestBuilder) syncFocus() {
+	rb.urlInput.Blur()
+	rb.bodyInput.Blur()
+
+	for i := range rb.headerInputs {
+		rb.headerInputs[i].keyInput.Blur()
+		rb.headerInputs[i].valueInput.Blur()
+	}
+	for i := range rb.queryInputs {
+		rb.queryInputs[i].keyInput.Blur()
+		rb.queryInputs[i].valueInput.Blur()
+	}
+	for key, input := range rb.authInputs {
+		input.Blur()
+		rb.authInputs[key] = input
 	}
 
-	// Number keys for auth type selection
-	if len(msg.Text) > 0 {
-		switch msg.Text {
-		case "1":
-			rb.authType = "none"
-		case "2":
-			rb.authType = "basic"
-		case "3":
-			rb.authType = "bearer"
-		case "4":
-			rb.authType = "apikey"
+	switch rb.activeSection {
+	case SectionURL:
+		rb.urlInput.Focus()
+	case SectionHeaders:
+		rb.ensureTrailingHeaderRow()
+		rb.focusHeaderCell(rb.activeHeaderRow, rb.headerInputs[rb.activeHeaderRow].focused)
+	case SectionQueryParams:
+		rb.ensureTrailingQueryRow()
+		rb.focusQueryCell(rb.activeQueryRow, rb.queryInputs[rb.activeQueryRow].focused)
+	case SectionBody:
+		rb.bodyInput.Focus()
+	case SectionAuth:
+		rb.activeAuthField = max(0, min(rb.activeAuthField, len(rb.currentAuthKeys())-1))
+		rb.focusAuthField(rb.activeAuthField)
+	}
+}
+
+func (rb *RequestBuilder) focusHeaderCell(row int, key bool) {
+	if len(rb.headerInputs) == 0 {
+		rb.addHeaderRow()
+	}
+	row = max(0, min(row, len(rb.headerInputs)-1))
+	rb.activeHeaderRow = row
+	for i := range rb.headerInputs {
+		rb.headerInputs[i].keyInput.Blur()
+		rb.headerInputs[i].valueInput.Blur()
+		rb.headerInputs[i].focused = key
+	}
+	rb.headerInputs[row].focused = key
+	if key {
+		rb.headerInputs[row].keyInput.Focus()
+	} else {
+		rb.headerInputs[row].valueInput.Focus()
+	}
+}
+
+func (rb *RequestBuilder) focusQueryCell(row int, key bool) {
+	if len(rb.queryInputs) == 0 {
+		rb.addQueryRow()
+	}
+	row = max(0, min(row, len(rb.queryInputs)-1))
+	rb.activeQueryRow = row
+	for i := range rb.queryInputs {
+		rb.queryInputs[i].keyInput.Blur()
+		rb.queryInputs[i].valueInput.Blur()
+		rb.queryInputs[i].focused = key
+	}
+	rb.queryInputs[row].focused = key
+	if key {
+		rb.queryInputs[row].keyInput.Focus()
+	} else {
+		rb.queryInputs[row].valueInput.Focus()
+	}
+}
+
+func (rb *RequestBuilder) focusAuthField(index int) {
+	keys := rb.currentAuthKeys()
+	if len(keys) == 0 {
+		return
+	}
+	index = max(0, min(index, len(keys)-1))
+	rb.activeAuthField = index
+
+	for key, input := range rb.authInputs {
+		input.Blur()
+		rb.authInputs[key] = input
+	}
+
+	activeKey := keys[index]
+	input := rb.authInputs[activeKey]
+	input.Focus()
+	rb.authInputs[activeKey] = input
+}
+
+func (rb *RequestBuilder) currentAuthKeys() []string {
+	switch rb.authType {
+	case "basic":
+		return []string{"username", "password"}
+	case "bearer":
+		return []string{"token"}
+	case "apikey":
+		return []string{"api_key", "api_value", "api_header"}
+	default:
+		return nil
+	}
+}
+
+func (rb *RequestBuilder) cycleAuthType(delta int) {
+	authTypes := []string{"none", "basic", "bearer", "apikey"}
+	current := 0
+	for i, authType := range authTypes {
+		if authType == rb.authType {
+			current = i
+			break
 		}
 	}
+	current = (current + delta + len(authTypes)) % len(authTypes)
+	rb.authType = authTypes[current]
+	rb.activeAuthField = 0
+	rb.syncFocus()
+}
 
-	// Update auth inputs if auth type is set
-	if rb.authType != "none" {
-		for key, input := range rb.authInputs {
-			var cmd tea.Cmd
-			input, cmd = input.Update(msg)
-			if cmd != nil {
-				rb.authInputs[key] = input
-				return rb, cmd
+func (rb *RequestBuilder) ensureTrailingHeaderRow() {
+	if len(rb.headerInputs) == 0 {
+		rb.addHeaderRow()
+	}
+
+	for len(rb.headerInputs) > 1 && rb.isHeaderRowEmpty(len(rb.headerInputs)-1) && rb.isHeaderRowEmpty(len(rb.headerInputs)-2) {
+		rb.headerInputs = rb.headerInputs[:len(rb.headerInputs)-1]
+	}
+
+	last := rb.headerInputs[len(rb.headerInputs)-1]
+	if last.keyInput.Value() != "" || last.valueInput.Value() != "" {
+		rb.addHeaderRow()
+	}
+
+	if rb.activeHeaderRow >= len(rb.headerInputs) {
+		rb.activeHeaderRow = len(rb.headerInputs) - 1
+	}
+}
+
+func (rb *RequestBuilder) ensureTrailingQueryRow() {
+	if len(rb.queryInputs) == 0 {
+		rb.addQueryRow()
+	}
+
+	for len(rb.queryInputs) > 1 && rb.isQueryRowEmpty(len(rb.queryInputs)-1) && rb.isQueryRowEmpty(len(rb.queryInputs)-2) {
+		rb.queryInputs = rb.queryInputs[:len(rb.queryInputs)-1]
+	}
+
+	last := rb.queryInputs[len(rb.queryInputs)-1]
+	if last.keyInput.Value() != "" || last.valueInput.Value() != "" {
+		rb.addQueryRow()
+	}
+
+	if rb.activeQueryRow >= len(rb.queryInputs) {
+		rb.activeQueryRow = len(rb.queryInputs) - 1
+	}
+}
+
+func (rb *RequestBuilder) isHeaderRowEmpty(index int) bool {
+	if index < 0 || index >= len(rb.headerInputs) {
+		return true
+	}
+	row := rb.headerInputs[index]
+	return strings.TrimSpace(row.keyInput.Value()) == "" && strings.TrimSpace(row.valueInput.Value()) == ""
+}
+
+func (rb *RequestBuilder) isQueryRowEmpty(index int) bool {
+	if index < 0 || index >= len(rb.queryInputs) {
+		return true
+	}
+	row := rb.queryInputs[index]
+	return strings.TrimSpace(row.keyInput.Value()) == "" && strings.TrimSpace(row.valueInput.Value()) == ""
+}
+
+func (rb *RequestBuilder) loadQueryParams(rawURL string) {
+	if parsed, err := url.Parse(rawURL); err == nil {
+		values := parsed.Query()
+		for key, list := range values {
+			if len(list) == 0 {
+				row := rb.addQueryRow()
+				row.keyInput.SetValue(key)
+				continue
 			}
-			rb.authInputs[key] = input
+			for _, value := range list {
+				row := rb.addQueryRow()
+				row.keyInput.SetValue(key)
+				row.valueInput.SetValue(value)
+			}
 		}
 	}
-
-	return rb, nil
+	rb.ensureTrailingQueryRow()
 }
 
 // sendRequest sends the HTTP request asynchronously via a tea.Cmd.
@@ -685,6 +957,20 @@ func (rb *RequestBuilder) syncEditingFromForm() {
 
 	// Sync body
 	rb.editing.Body = rb.bodyInput.Value()
+
+	// Sync query params back into the URL.
+	if parsed, err := url.Parse(rb.urlInput.Value()); err == nil {
+		values := url.Values{}
+		for _, row := range rb.queryInputs {
+			key := strings.TrimSpace(row.keyInput.Value())
+			if key == "" {
+				continue
+			}
+			values.Add(key, row.valueInput.Value())
+		}
+		parsed.RawQuery = values.Encode()
+		rb.editing.URL = parsed.String()
+	}
 
 	// Sync auth
 	if rb.authType != "none" {
@@ -914,257 +1200,211 @@ func detectContentType(headers []types.Header, body string) string {
 	return "raw"
 }
 
-// View implements tea.Model.View
+// View implements tea.Model.View.
 func (rb *RequestBuilder) View() tea.View {
 	var content string
 	if rb.editing == nil {
 		content = rb.welcomeView()
 	} else {
-		var sb strings.Builder
+		sections := []string{
+			rb.renderMethodURL(),
+			rb.renderActionRow(),
+			rb.renderEditorTabs(),
+		}
 
-		// Method + URL section
-		sb.WriteString(rb.renderMethodURL())
-		sb.WriteString("\n")
+		switch rb.activeSurface() {
+		case "query":
+			sections = append(sections, rb.renderQueryParams())
+		case "auth":
+			sections = append(sections, rb.renderAuth())
+		default:
+			sections = append(sections, rb.renderHeaders(), rb.renderBody())
+		}
 
-		// Headers section
-		sb.WriteString(rb.renderHeaders())
-		sb.WriteString("\n")
-
-		// Query params section
-		sb.WriteString(rb.renderQueryParams())
-		sb.WriteString("\n")
-
-		// Body section
-		sb.WriteString(rb.renderBody())
-		sb.WriteString("\n")
-
-		// Auth section
-		sb.WriteString(rb.renderAuth())
-		sb.WriteString("\n")
-
-		// Send section
-		sb.WriteString(rb.renderSend())
-
-		content = sb.String()
+		sections = append(sections, rb.renderSend())
+		content = strings.Join(sections, "\n\n")
 	}
 	return tea.NewView(content)
 }
 
-func (rb *RequestBuilder) welcomeView() string {
-	style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("82")).
-		Bold(true)
+func (rb *RequestBuilder) activeSurface() string {
+	switch rb.activeSection {
+	case SectionQueryParams:
+		return "query"
+	case SectionAuth:
+		return "auth"
+	default:
+		return "overview"
+	}
+}
 
-	return style.Render("  Welcome to Gurl TUI!") + "\n\n" +
-		Style.PlainText.Render("  Select a request from the sidebar to edit") + "\n" +
-		Style.Hint.Render("  Press 'n' to create a new request")
+func (rb *RequestBuilder) welcomeView() string {
+	lines := []string{
+		Style.WelcomeText.Render("Start with a saved request or a blank editor"),
+		Style.PlainText.Render("Use Ctrl+1 to browse requests and Ctrl+2 to return here."),
+		Style.Hint.Render("Ctrl+T opens a fresh tab. Ctrl+K searches across saved requests."),
+	}
+	return strings.Join(lines, "\n\n")
 }
 
 func (rb *RequestBuilder) renderMethodURL() string {
-	method := rb.methods[rb.methodIndex]
-	methodColor := getMethodColor(method)
+	method := RenderMethodBadge(rb.methods[rb.methodIndex])
+	urlWidth := max(18, rb.width-lipgloss.Width(method)-6)
 
-	methodStyle := lipgloss.NewStyle().
-		Foreground(methodColor).
-		Bold(true)
-
-	selected := rb.activeSection == SectionMethod
-	prefix := "  "
-	if selected {
-		prefix = "▶ "
-	}
-
-	url := rb.urlInput.View()
-	if rb.activeSection == SectionURL {
-	} else {
-		if rb.urlInput.Value() == "" {
-			url = Style.Hint.Render("Enter URL...")
+	urlView := rb.urlInput.View()
+	if rb.activeSection != SectionURL {
+		if strings.TrimSpace(rb.urlInput.Value()) == "" {
+			urlView = Style.Hint.Render("https://api.example.com/v1/resource")
+		} else {
+			urlView = Style.URL.Render(truncateText(rb.urlInput.Value(), urlWidth))
 		}
 	}
 
-	var result strings.Builder
-	result.WriteString(prefix + methodStyle.Render(method) + " " + url)
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		lipgloss.JoinHorizontal(lipgloss.Center, method, " ", lipgloss.NewStyle().Width(urlWidth).Render(urlView)),
+		Style.Hint.Render("Shift+Tab method  ·  Tab headers  ·  Ctrl+Enter send"),
+	)
 
-	if rb.showSuggestions && len(rb.suggestions) > 0 {
-		result.WriteString("\n")
-		for i, suggestion := range rb.suggestions {
-			rowPrefix := "  "
-			if i == rb.suggestionIndex {
-				rowPrefix = "▶ "
-			}
-			result.WriteString(rowPrefix + Style.PlainText.Render(suggestion) + "\n")
-		}
+	return SectionStyle(rb.activeSection == SectionMethod || rb.activeSection == SectionURL).
+		Width(max(24, rb.width)).
+		Render(content)
+}
+
+func (rb *RequestBuilder) renderActionRow() string {
+	title := "New Request"
+	if rb.editing != nil && rb.editing.Name != "" {
+		title = rb.editing.Name
 	}
 
-	return result.String()
+	sendLabel := "Send (Ctrl+Enter)"
+	if rb.sending {
+		sendLabel = rb.loadingSpinner.View() + " Sending"
+	}
+
+	left := Style.PlainText.Copy().Bold(true).Render(truncateText(title, max(12, rb.width-34)))
+	right := lipgloss.JoinHorizontal(
+		lipgloss.Center,
+		RenderActionButton("Save", false, false),
+		" ",
+		RenderActionButton(sendLabel, true, rb.activeSection == SectionSend || rb.sending),
+	)
+
+	gap := rb.width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		gap = 1
+	}
+
+	return left + strings.Repeat(" ", gap) + right
+}
+
+func (rb *RequestBuilder) renderEditorTabs() string {
+	return lipgloss.JoinHorizontal(
+		lipgloss.Center,
+		RenderMiniTab("Overview", rb.activeSurface() == "overview"),
+		"  ",
+		RenderMiniTab("Query", rb.activeSurface() == "query"),
+		"  ",
+		RenderMiniTab("Auth", rb.activeSurface() == "auth"),
+	)
 }
 
 func (rb *RequestBuilder) renderHeaders() string {
-	selected := rb.activeSection == SectionHeaders
-	prefix := "  "
-	if selected {
-		prefix = "▶ "
-	}
-
-	var sb strings.Builder
-	sb.WriteString(prefix)
-	sb.WriteString(Style.Header.Render("Headers"))
-	sb.WriteString(" (a=add, d=delete, tab=next)")
-	sb.WriteString("\n")
-
+	lines := []string{Style.Header.Render("HEADERS")}
 	for i, row := range rb.headerInputs {
-		rowPrefix := "    "
-		sb.WriteString(rowPrefix)
-		sb.WriteString(fmt.Sprintf("%d. ", i+1))
-		sb.WriteString(row.keyInput.View())
-		sb.WriteString(" : ")
-		sb.WriteString(row.valueInput.View())
-		sb.WriteString("\n")
+		prefix := "  "
+		if rb.activeSection == SectionHeaders && i == rb.activeHeaderRow {
+			prefix = "▶ "
+		}
+
+		keyView := row.keyInput.View()
+		valueView := row.valueInput.View()
+		lines = append(lines, prefix+keyView+"  "+Style.Hint.Render("->")+"  "+valueView)
 	}
 
-	return sb.String()
+	lines = append(lines, Style.Hint.Render("Enter next cell  ·  ↑/↓ rows  ·  ←/→ key/value"))
+	return SectionStyle(rb.activeSection == SectionHeaders).
+		Width(max(24, rb.width)).
+		Render(strings.Join(lines, "\n"))
 }
 
 func (rb *RequestBuilder) renderQueryParams() string {
-	selected := rb.activeSection == SectionQueryParams
-	prefix := "  "
-	if selected {
-		prefix = "▶ "
-	}
-
-	var sb strings.Builder
-	sb.WriteString(prefix)
-	sb.WriteString(Style.Header.Render("Query Params"))
-	sb.WriteString(" (a=add, d=delete, tab=next)")
-	sb.WriteString("\n")
-
+	lines := []string{Style.Header.Render("QUERY PARAMS")}
 	for i, row := range rb.queryInputs {
-		rowPrefix := "    "
-		sb.WriteString(rowPrefix)
-		sb.WriteString(fmt.Sprintf("%d. ", i+1))
-		sb.WriteString(row.keyInput.View())
-		sb.WriteString(" : ")
-		sb.WriteString(row.valueInput.View())
-		sb.WriteString("\n")
+		prefix := "  "
+		if rb.activeSection == SectionQueryParams && i == rb.activeQueryRow {
+			prefix = "▶ "
+		}
+
+		keyView := row.keyInput.View()
+		valueView := row.valueInput.View()
+		lines = append(lines, prefix+keyView+"  "+Style.Hint.Render("=")+"  "+valueView)
 	}
 
-	return sb.String()
+	lines = append(lines, Style.Hint.Render("Enter next row  ·  ↑/↓ rows  ·  Esc auth"))
+	return SectionStyle(rb.activeSection == SectionQueryParams).
+		Width(max(24, rb.width)).
+		Render(strings.Join(lines, "\n"))
 }
 
 func (rb *RequestBuilder) renderBody() string {
-	selected := rb.activeSection == SectionBody
-	prefix := "  "
-	if selected {
-		prefix = "▶ "
-	}
+	formats := lipgloss.JoinHorizontal(
+		lipgloss.Center,
+		RenderMiniTab("JSON", rb.contentType == "json"),
+		"  ",
+		RenderMiniTab("XML", rb.contentType == "xml"),
+		"  ",
+		RenderMiniTab("FORM", rb.contentType == "form"),
+		"  ",
+		RenderMiniTab("RAW", rb.contentType == "raw"),
+	)
 
-	var sb strings.Builder
-	sb.WriteString(prefix)
-	sb.WriteString(Style.Header.Render("Body"))
-	sb.WriteString(" [")
-	sb.WriteString(rb.contentType)
-	sb.WriteString("]")
-	sb.WriteString(" (tab=next)")
-	sb.WriteString("\n")
+	header := RenderPanelHeader("BODY", formats, max(12, rb.width-4))
+	content := header + "\n" + rb.bodyInput.View()
 
-	bodyView := rb.bodyInput.View()
-	// Add indent
-	lines := strings.Split(bodyView, "\n")
-	for i, line := range lines {
-		if i == 0 && selected {
-			// First line already has cursor
-			sb.WriteString("    ")
-			sb.WriteString(line)
-		} else {
-			sb.WriteString("    ")
-			sb.WriteString(line)
-		}
-		if i < len(lines)-1 {
-			sb.WriteString("\n")
-		}
-	}
-
-	return sb.String()
+	return SectionStyle(rb.activeSection == SectionBody).
+		Width(max(24, rb.width)).
+		Render(content)
 }
 
 func (rb *RequestBuilder) renderAuth() string {
-	selected := rb.activeSection == SectionAuth
-	prefix := "  "
-	if selected {
-		prefix = "▶ "
+	authTabs := lipgloss.JoinHorizontal(
+		lipgloss.Center,
+		RenderMiniTab("None", rb.authType == "none"),
+		"  ",
+		RenderMiniTab("Basic", rb.authType == "basic"),
+		"  ",
+		RenderMiniTab("Bearer", rb.authType == "bearer"),
+		"  ",
+		RenderMiniTab("API Key", rb.authType == "apikey"),
+	)
+
+	lines := []string{
+		RenderPanelHeader("AUTH", authTabs, max(12, rb.width-4)),
 	}
 
-	var sb strings.Builder
-	sb.WriteString(prefix)
-	sb.WriteString(Style.Header.Render("Auth"))
-	sb.WriteString(" (1=none, 2=basic, 3=bearer, 4=apikey)")
-	sb.WriteString("\n")
-
-	authLabel := "None"
-	authStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	switch rb.authType {
-	case "basic":
-		authLabel = "Basic"
-		authStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("green"))
-	case "bearer":
-		authLabel = "Bearer"
-		authStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("blue"))
-	case "apikey":
-		authLabel = "API Key"
-		authStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("yellow"))
+	keys := rb.currentAuthKeys()
+	if len(keys) == 0 {
+		lines = append(lines, Style.Hint.Render("No auth applied. Use [ or ] to choose a strategy."))
+	} else {
+		for i, key := range keys {
+			label := strings.ReplaceAll(strings.ReplaceAll(key, "_", " "), "api ", "API ")
+			prefix := "  "
+			if rb.activeAuthField == i {
+				prefix = "▶ "
+			}
+			lines = append(lines, prefix+strings.Title(label)+": "+rb.authInputs[key].View())
+		}
 	}
 
-	sb.WriteString("    Auth: ")
-	sb.WriteString(authStyle.Render(authLabel))
-	sb.WriteString("\n")
-
-	// Show auth inputs based on type
-	switch rb.authType {
-	case "basic":
-		sb.WriteString("    Username: ")
-		sb.WriteString(rb.authInputs["username"].View())
-		sb.WriteString("\n")
-		sb.WriteString("    Password: ")
-		sb.WriteString(rb.authInputs["password"].View())
-		sb.WriteString("\n")
-	case "bearer":
-		sb.WriteString("    Token: ")
-		sb.WriteString(rb.authInputs["token"].View())
-		sb.WriteString("\n")
-	case "apikey":
-		sb.WriteString("    Key: ")
-		sb.WriteString(rb.authInputs["api_key"].View())
-		sb.WriteString(" Value: ")
-		sb.WriteString(rb.authInputs["api_value"].View())
-		sb.WriteString(" Header: ")
-		sb.WriteString(rb.authInputs["api_header"].View())
-		sb.WriteString("\n")
-	}
-
-	return sb.String()
+	lines = append(lines, Style.Hint.Render("[ / ] auth type  ·  ↑/↓ fields  ·  Esc send"))
+	return SectionStyle(rb.activeSection == SectionAuth).
+		Width(max(24, rb.width)).
+		Render(strings.Join(lines, "\n"))
 }
 
 func (rb *RequestBuilder) renderSend() string {
-	selected := rb.activeSection == SectionSend
-	prefix := "  "
-	if selected {
-		prefix = "▶ "
-	}
-
-	var sb strings.Builder
-
-	if rb.sending {
-		sb.WriteString(prefix)
-		sb.WriteString(rb.loadingSpinner.View())
-		sb.WriteString(" Sending...")
-	} else {
-		sb.WriteString(prefix)
-		sb.WriteString(Style.Hint.Render("[Enter] Send  "))
-		sb.WriteString(Style.Hint.Render("[Ctrl+S] Save  "))
-		sb.WriteString(Style.Hint.Render("[Tab] Next Section"))
-	}
-
-	return sb.String()
+	return Style.Hint.Render("Ctrl+1 requests  ·  Ctrl+2 editor  ·  Ctrl+3 response  ·  Tab sections")
 }
 
 // Init implements tea.Model.Init

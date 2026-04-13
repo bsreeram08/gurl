@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"charm.land/bubbletea/v2"
@@ -11,8 +12,8 @@ import (
 )
 
 const (
-	MinVisibleItems   = 5
-	DefaultItemHeight = 1
+	MinVisibleItems   = 1
+	DefaultItemHeight = 4
 )
 
 // RequestList is a simple sidebar list with keyboard navigation and custom virtualization.
@@ -118,51 +119,33 @@ func (rl *RequestList) ViewTree() string {
 		return Style.PlainText.Render("\n  No requests saved.\n  Use 'gurl save' to add one.")
 	}
 
-	scrollIndicator := ""
-	if rl.scrollOffset > 0 {
-		scrollIndicator += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("▲\n")
-	}
-
 	var sb strings.Builder
 	end := rl.scrollOffset + rl.visibleCount
 	if end > len(rl.items) {
 		end = len(rl.items)
 	}
 
+	if rl.scrollOffset > 0 {
+		sb.WriteString(Style.Hint.Render(fmt.Sprintf("Showing %d-%d of %d", rl.scrollOffset+1, end, len(rl.items))))
+		sb.WriteString("\n\n")
+	}
+
 	for i := rl.scrollOffset; i < end; i++ {
 		req := rl.items[i]
-		methodColor := getMethodColor(req.Method)
-		methodStyle := lipgloss.NewStyle().Foreground(methodColor).Bold(true)
-
-		name := req.Name
-		maxName := rl.width - 12
-		if maxName < 10 {
-			maxName = 10
+		contentWidth := max(20, rl.width-3)
+		card := rl.renderRequestCard(req, i == rl.cursor, contentWidth)
+		sb.WriteString(card)
+		if i < end-1 {
+			sb.WriteString("\n")
 		}
-		if len(name) > maxName {
-			name = name[:maxName-3] + "..."
-		}
-
-		line := fmt.Sprintf("%s %s", methodStyle.Render(req.Method), name)
-
-		if req.Collection != "" {
-			collStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-			line += collStyle.Render(" [" + req.Collection + "]")
-		}
-
-		if i == rl.cursor {
-			sb.WriteString(Style.SelectedItem.Render("▶ " + line))
-		} else {
-			sb.WriteString(Style.ListItem.Render("  " + line))
-		}
-		sb.WriteString("\n")
 	}
 
 	if end < len(rl.items) {
-		scrollIndicator += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("▼")
+		sb.WriteString("\n")
+		sb.WriteString(Style.Hint.Render(fmt.Sprintf("More below (%d remaining)", len(rl.items)-end)))
 	}
 
-	return scrollIndicator + sb.String()
+	return sb.String()
 }
 
 func (rl *RequestList) View() tea.View { return tea.NewView(rl.ViewTree()) }
@@ -183,3 +166,63 @@ func (rl *RequestList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (rl *RequestList) Init() tea.Cmd { return nil }
+
+func (rl *RequestList) renderRequestCard(req *types.SavedRequest, selected bool, width int) string {
+	title := req.Name
+	if title == "" {
+		title = req.URL
+	}
+
+	primaryWidth := max(12, width-12)
+	subtitle, meta := requestCardLines(req)
+
+	header := lipgloss.JoinHorizontal(
+		lipgloss.Center,
+		RenderMethodBadge(req.Method),
+		" ",
+		Style.PlainText.Copy().Bold(true).Render(truncateText(title, primaryWidth)),
+	)
+
+	lines := []string{
+		header,
+		Style.Hint.Render("  " + truncateText(subtitle, max(10, width-2))),
+		Style.Hint.Render("  " + truncateText(meta, max(10, width-2))),
+	}
+
+	style := Style.Card.Width(width)
+	if selected {
+		style = Style.CardSelected.Width(width)
+	}
+
+	return style.Render(strings.Join(lines, "\n"))
+}
+
+func requestCardLines(req *types.SavedRequest) (string, string) {
+	host := req.URL
+	path := req.URL
+
+	if parsed, err := url.Parse(req.URL); err == nil {
+		if parsed.Host != "" {
+			host = parsed.Host
+		}
+		switch {
+		case parsed.Path != "":
+			path = parsed.Path
+		case parsed.Host != "":
+			path = parsed.Host
+		}
+		if parsed.RawQuery != "" {
+			path += "?" + parsed.RawQuery
+		}
+	}
+
+	metaParts := []string{host}
+	if req.Collection != "" {
+		metaParts = append(metaParts, "Collection: "+req.Collection)
+	}
+	if req.Folder != "" {
+		metaParts = append(metaParts, "Folder: "+req.Folder)
+	}
+
+	return path, strings.Join(metaParts, "  ·  ")
+}

@@ -25,7 +25,7 @@ and executing your saved API requests in a 3-panel layout.`,
 			config := &types.Config{}
 
 			// Create the TUI app
-			app := tui.NewApp(db, config)
+			app := tui.NewAppWithVersion(db, config, CurrentVersion)
 
 			// Run the bubbletea program
 			p := tea.NewProgram(app)
@@ -42,7 +42,7 @@ and executing your saved API requests in a 3-panel layout.`,
 // RunTUI is a helper to launch the TUI programmatically
 func RunTUI(db storage.DB) error {
 	config := &types.Config{}
-	app := tui.NewApp(db, config)
+	app := tui.NewAppWithVersion(db, config, CurrentVersion)
 
 	p := tea.NewProgram(app)
 
@@ -53,7 +53,7 @@ func RunTUI(db storage.DB) error {
 // ExitWithTUI runs the TUI and exits with appropriate code
 func ExitWithTUI(db storage.DB) {
 	config := &types.Config{}
-	app := tui.NewApp(db, config)
+	app := tui.NewAppWithVersion(db, config, CurrentVersion)
 
 	p := tea.NewProgram(app)
 

@@ -4,51 +4,38 @@ import (
 	"charm.land/bubbletea/v2"
 )
 
-// KeyBindings contains common key bindings for consistent keyboard shortcuts
-// Using switch on key.String() as required by the spec
+// KeyBindings contains common key bindings for consistent keyboard shortcuts.
 type KeyBindings struct{}
 
-// Global keys
 var QuitKeys = []string{"q", "ctrl+c"}
 var HelpKey = "?"
 var TabKey = "tab"
 var ShiftTabKey = "shift+tab"
 var EscapeKey = "esc"
 
-// Navigation keys
 var NavigateUpKeys = []string{"up", "k"}
 var NavigateDownKeys = []string{"down", "j"}
 
-// Enter key for selection
 var EnterKey = "enter"
 
-// Request builder keys
 var SendRequestKeys = []string{"ctrl+enter"}
 var SaveRequestKeys = []string{"ctrl+s"}
 var EditRequestKeys = []string{"ctrl+e"}
 
-// New request
 var NewRequestKey = "n"
-
-// Filter
 var FilterKey = "/"
-
-// Environment switcher
 var EnvSwitchKey = "ctrl+e"
 
-// Response viewer keys
 var ResponseTabKeys = map[string]string{
 	"t": "time",
 	"h": "headers",
 	"b": "body",
-	"c": "copy",
+	"d": "diff",
 }
 
-// Sidebar specific keys
 var CollapseKey = "left"
 var ExpandKey = "right"
 
-// IsQuitKey checks if the key should quit the app
 func IsQuitKey(key string) bool {
 	for _, k := range QuitKeys {
 		if key == k {
@@ -58,12 +45,10 @@ func IsQuitKey(key string) bool {
 	return false
 }
 
-// IsHelpKey checks if the key toggles help
 func IsHelpKey(key string) bool {
-	return key == HelpKey || key == EscapeKey
+	return key == HelpKey
 }
 
-// IsNavigateUpKey checks if the key navigates up
 func IsNavigateUpKey(key string) bool {
 	for _, k := range NavigateUpKeys {
 		if key == k {
@@ -73,7 +58,6 @@ func IsNavigateUpKey(key string) bool {
 	return false
 }
 
-// IsNavigateDownKey checks if the key navigates down
 func IsNavigateDownKey(key string) bool {
 	for _, k := range NavigateDownKeys {
 		if key == k {
@@ -83,27 +67,22 @@ func IsNavigateDownKey(key string) bool {
 	return false
 }
 
-// IsTabKey checks if the key switches panels
 func IsTabKey(key string) bool {
 	return key == TabKey
 }
 
-// IsShiftTabKey checks if the key switches panels in reverse
 func IsShiftTabKey(key string) bool {
 	return key == ShiftTabKey
 }
 
-// IsEnterKey checks if the key selects
 func IsEnterKey(key string) bool {
 	return key == EnterKey
 }
 
-// IsEscapeKey checks if the key is escape
 func IsEscapeKey(key string) bool {
 	return key == EscapeKey
 }
 
-// IsSendRequestKey checks if the key sends a request
 func IsSendRequestKey(key string) bool {
 	for _, k := range SendRequestKeys {
 		if key == k {
@@ -113,7 +92,6 @@ func IsSendRequestKey(key string) bool {
 	return false
 }
 
-// IsSaveRequestKey checks if the key saves a request
 func IsSaveRequestKey(key string) bool {
 	for _, k := range SaveRequestKeys {
 		if key == k {
@@ -123,7 +101,6 @@ func IsSaveRequestKey(key string) bool {
 	return false
 }
 
-// IsEditRequestKey checks if the key edits a request
 func IsEditRequestKey(key string) bool {
 	for _, k := range EditRequestKeys {
 		if key == k {
@@ -133,76 +110,65 @@ func IsEditRequestKey(key string) bool {
 	return false
 }
 
-// IsNewRequestKey checks if the key creates a new request
 func IsNewRequestKey(key string) bool {
 	return key == NewRequestKey
 }
 
-// IsFilterKey checks if the key opens filter
 func IsFilterKey(key string) bool {
 	return key == FilterKey
 }
 
-// IsEnvSwitchKey checks if the key switches environment
 func IsEnvSwitchKey(key string) bool {
 	return key == EnvSwitchKey
 }
 
-// IsCollapseKey checks if the key collapses a folder
 func IsCollapseKey(key string) bool {
 	return key == CollapseKey
 }
 
-// IsExpandKey checks if the key expands a folder
 func IsExpandKey(key string) bool {
 	return key == ExpandKey
 }
 
-// IsResponseTabKey checks if the key switches response tabs
 func IsResponseTabKey(key string) bool {
 	_, ok := ResponseTabKeys[key]
 	return ok
 }
 
-// GetResponseTab returns the tab name for a key, or empty string if not a response tab key
 func GetResponseTab(key string) string {
 	return ResponseTabKeys[key]
 }
 
-// ShortcutGroup represents a group of shortcuts for help display
 type ShortcutGroup struct {
 	Title   string
 	Keys    []Shortcut
-	Context string // "global", "sidebar", "request_builder", "response", "environment"
+	Context string
 }
 
-// Shortcut represents a single keyboard shortcut
 type Shortcut struct {
 	Key         string
 	Description string
 }
 
-// GlobalShortcuts returns all global shortcuts
 func GlobalShortcuts() []ShortcutGroup {
 	return []ShortcutGroup{
 		{
 			Title:   "Global",
 			Context: "global",
 			Keys: []Shortcut{
-				{Key: "?", Description: "Toggle help"},
-				{Key: "q", Description: "Quit"},
-				{Key: "Tab", Description: "Switch panel"},
-				{Key: "Shift+Tab", Description: "Switch panel (reverse)"},
-				{Key: "Ctrl+E", Description: "Switch environment"},
-				{Key: "Ctrl+Enter", Description: "Send request"},
-				{Key: "Ctrl+S", Description: "Save request"},
-				{Key: "n", Description: "New request"},
+				{Key: "Ctrl+1 / Ctrl+2 / Ctrl+3", Description: "Focus requests, editor, or response"},
+				{Key: "Ctrl+T", Description: "New tab"},
+				{Key: "Ctrl+W", Description: "Close tab"},
+				{Key: "Ctrl+D", Description: "Duplicate tab"},
+				{Key: "Ctrl+Shift+[ / ]", Description: "Cycle open tabs"},
+				{Key: "Ctrl+K", Description: "Search requests"},
+				{Key: "Ctrl+E", Description: "Environment switcher"},
+				{Key: "Ctrl+C", Description: "Quit"},
 			},
 		},
 	}
 }
 
-// SidebarShortcuts returns shortcuts for sidebar navigation
 func SidebarShortcuts() []ShortcutGroup {
 	return []ShortcutGroup{
 		{
@@ -211,61 +177,60 @@ func SidebarShortcuts() []ShortcutGroup {
 			Keys: []Shortcut{
 				{Key: "↑/k", Description: "Move up"},
 				{Key: "↓/j", Description: "Move down"},
-				{Key: "Enter", Description: "Select request"},
-				{Key: "/", Description: "Filter requests"},
-				{Key: "Esc", Description: "Clear filter"},
-				{Key: "←", Description: "Collapse folder"},
-				{Key: "→", Description: "Expand folder"},
+				{Key: "Enter", Description: "Open request"},
+				{Key: "h / r", Description: "Toggle history or requests"},
+				{Key: "?", Description: "Open help"},
+				{Key: "q", Description: "Quit"},
 			},
 		},
 	}
 }
 
-// RequestBuilderShortcuts returns shortcuts for request builder
 func RequestBuilderShortcuts() []ShortcutGroup {
 	return []ShortcutGroup{
 		{
 			Title:   "Request Builder",
 			Context: "request_builder",
 			Keys: []Shortcut{
+				{Key: "Tab / Shift+Tab", Description: "Move between editor sections"},
 				{Key: "Ctrl+Enter", Description: "Send request"},
 				{Key: "Ctrl+S", Description: "Save request"},
-				{Key: "Ctrl+E", Description: "Edit request"},
+				{Key: "[ / ]", Description: "Cycle auth type in auth view"},
 			},
 		},
 	}
 }
 
-// ResponseShortcuts returns shortcuts for response viewer
 func ResponseShortcuts() []ShortcutGroup {
 	return []ShortcutGroup{
 		{
 			Title:   "Response Viewer",
 			Context: "response",
 			Keys: []Shortcut{
-				{Key: "t", Description: "Time tab"},
+				{Key: "b", Description: "Preview tab"},
 				{Key: "h", Description: "Headers tab"},
-				{Key: "b", Description: "Body tab"},
-				{Key: "c", Description: "Copy to clipboard"},
+				{Key: "t", Description: "Timing tab"},
+				{Key: "d", Description: "Diff tab"},
+				{Key: "y", Description: "Copy response body"},
 			},
 		},
 	}
 }
 
-// EnvironmentShortcuts returns shortcuts for environment switcher
 func EnvironmentShortcuts() []ShortcutGroup {
 	return []ShortcutGroup{
 		{
 			Title:   "Environment",
 			Context: "environment",
 			Keys: []Shortcut{
-				{Key: "e", Description: "Switch environment"},
+				{Key: "↑/↓", Description: "Navigate environments"},
+				{Key: "Enter", Description: "Activate environment"},
+				{Key: "q / Esc", Description: "Close switcher"},
 			},
 		},
 	}
 }
 
-// AllShortcuts returns all shortcut groups
 func AllShortcuts() []ShortcutGroup {
 	all := GlobalShortcuts()
 	all = append(all, SidebarShortcuts()...)
@@ -275,7 +240,6 @@ func AllShortcuts() []ShortcutGroup {
 	return all
 }
 
-// ShortcutsForContext returns shortcuts for a specific context
 func ShortcutsForContext(context string) []ShortcutGroup {
 	switch context {
 	case "sidebar":
@@ -291,14 +255,13 @@ func ShortcutsForContext(context string) []ShortcutGroup {
 	}
 }
 
-// HandleKeyMsg handles a key message and returns whether it was handled
 func (kb KeyBindings) HandleKeyMsg(msg tea.KeyMsg) bool {
 	key := msg.String()
 	switch key {
-	case "q", "ctrl+c", "?", "escape", "tab", "shift+tab",
-		"up", "k", "down", "j", "enter",
+	case "q", "ctrl+c", "?", "up", "k", "down", "j", "enter",
 		"ctrl+enter", "ctrl+s", "ctrl+e", "n", "/",
-		"left", "right", "t", "h", "b", "c":
+		"left", "right", "t", "h", "b", "d", "y",
+		"ctrl+1", "ctrl+2", "ctrl+3", "tab", "shift+tab":
 		return true
 	}
 	return false

@@ -61,7 +61,7 @@ The database uses goleveldb (LevelDB port) for high-performance key-value storag
 
 **Plugin System Layer** - Three plugin types: MiddlewarePlugin runs before/after requests, OutputPlugin formats responses, CommandPlugin adds new CLI commands. All plugins are discovered from `~/.config/gurl/plugins/`.
 
-**TUI Layer** - Built with bubbletea for interactive terminal UI. Provides sidebar navigation, request builder, and response viewer in a full-screen terminal application.
+**TUI Layer** - Built with bubbletea for interactive terminal UI. Provides a full-screen three-pane workspace for browsing requests, editing them, and inspecting responses.
 
 ## Request Lifecycle
 
