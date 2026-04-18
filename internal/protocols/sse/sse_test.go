@@ -413,16 +413,21 @@ func TestSSE_MultipleEvents(t *testing.T) {
 	var receivedData []string
 	timeout := time.After(5 * time.Second)
 
-	for i := 0; i < 3; i++ {
+	for len(receivedData) < 3 {
 		select {
-		case event := <-events:
+		case event, ok := <-events:
+			if !ok {
+				events = nil
+				continue
+			}
 			receivedData = append(receivedData, event.Data)
 		case err, ok := <-errors:
 			if ok && err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
+			errors = nil
 		case <-timeout:
-			t.Fatalf("Timeout waiting for event %d", i+1)
+			t.Fatalf("Timeout waiting for events, got %d so far", len(receivedData))
 		}
 	}
 
@@ -476,9 +481,13 @@ func TestSSE_IDPersistence(t *testing.T) {
 	}
 	timeout := time.After(5 * time.Second)
 
-	for i := 0; i < 3; i++ {
+	for len(received) < 3 {
 		select {
-		case event := <-events:
+		case event, ok := <-events:
+			if !ok {
+				events = nil
+				continue
+			}
 			received = append(received, struct {
 				ID   string
 				Data string
@@ -487,8 +496,9 @@ func TestSSE_IDPersistence(t *testing.T) {
 			if ok && err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
+			errors = nil
 		case <-timeout:
-			t.Fatalf("Timeout waiting for event %d", i+1)
+			t.Fatalf("Timeout waiting for events, got %d so far", len(received))
 		}
 	}
 
@@ -531,6 +541,7 @@ func TestSSE_ChunkedTransfer(t *testing.T) {
 
 		// Send chunked data
 		w.Write([]byte("data: chunk1\n"))
+		w.Write([]byte("\n"))
 		flusher.Flush()
 
 		time.Sleep(10 * time.Millisecond)
@@ -551,14 +562,19 @@ func TestSSE_ChunkedTransfer(t *testing.T) {
 	var receivedData []string
 	timeout := time.After(5 * time.Second)
 
-	for i := 0; i < 2; i++ {
+	for len(receivedData) < 2 {
 		select {
-		case event := <-events:
+		case event, ok := <-events:
+			if !ok {
+				events = nil
+				continue
+			}
 			receivedData = append(receivedData, event.Data)
 		case err, ok := <-errors:
 			if ok && err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
+			errors = nil
 		case <-timeout:
 			t.Fatal("Timeout waiting for events")
 		}

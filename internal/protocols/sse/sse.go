@@ -103,17 +103,10 @@ func (c *Client) Connect(ctx context.Context, url string, opts ...Option) (<-cha
 		req.Header.Set(k, v)
 	}
 
-	if o.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, o.timeout)
-		defer cancel()
-	}
-
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
 
 	eventChan := make(chan Event, 100)
 	errorChan := make(chan error, 1)
@@ -123,7 +116,8 @@ func (c *Client) Connect(ctx context.Context, url string, opts ...Option) (<-cha
 	return eventChan, errorChan, nil
 }
 
-func (c *Client) readEvents(body io.Reader, eventChan chan<- Event, errorChan chan<- error, filterTypes []string, lastEventID string, maxScanTokenSize int) {
+func (c *Client) readEvents(body io.ReadCloser, eventChan chan<- Event, errorChan chan<- error, filterTypes []string, lastEventID string, maxScanTokenSize int) {
+	defer body.Close()
 	defer close(eventChan)
 	defer close(errorChan)
 
@@ -140,17 +134,11 @@ func (c *Client) readEvents(body io.Reader, eventChan chan<- Event, errorChan ch
 	var currentEvent Event
 	currentEvent.ID = lastEventID
 	var dataBuilder strings.Builder
-
-	// Track seen event IDs for deduplication
-	seenIDs := make(map[string]bool)
-	if lastEventID != "" {
-		seenIDs[lastEventID] = true
-	}
+	var hasFields bool
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Check for token truncation (bufio.Scanner returns.ErrFinalToken when hitting max token size)
 		if len(line) >= maxScanTokenSize {
 			select {
 			case errorChan <- fmt.Errorf("SSE line exceeded maximum token size of %d bytes; consider using WithMaxScanTokenSize to increase limit", maxScanTokenSize):
@@ -159,36 +147,25 @@ func (c *Client) readEvents(body io.Reader, eventChan chan<- Event, errorChan ch
 		}
 
 		if line == "" {
-			if dataBuilder.Len() > 0 {
-				currentEvent.Data = dataBuilder.String()
-				dataBuilder.Reset()
-
-				// Check for duplicate event ID
-				if currentEvent.ID != "" && seenIDs[currentEvent.ID] {
-					// Skip duplicate - reset and continue
-					if currentEvent.ID != "" {
-						lastEventID = currentEvent.ID
-					}
-					currentEvent = Event{ID: lastEventID}
-					continue
+			if hasFields {
+				if dataBuilder.Len() > 0 {
+					currentEvent.Data = dataBuilder.String()
+					dataBuilder.Reset()
 				}
 
 				if len(filterTypes) == 0 || contains(filterTypes, currentEvent.Type) {
-					// Send with backpressure check
 					select {
 					case eventChan <- currentEvent:
-						// Successfully sent
 					default:
-						// Channel full - log warning and drop event
 						fmt.Printf("SSE warning: event channel full, dropping event (ID=%s, Type=%s)\n", currentEvent.ID, currentEvent.Type)
 					}
 				}
 
 				if currentEvent.ID != "" {
-					seenIDs[currentEvent.ID] = true
 					lastEventID = currentEvent.ID
 				}
 				currentEvent = Event{ID: lastEventID}
+				hasFields = false
 			}
 			continue
 		}
@@ -200,6 +177,8 @@ func (c *Client) readEvents(body io.Reader, eventChan chan<- Event, errorChan ch
 		} else {
 			continue
 		}
+
+		hasFields = true
 
 		switch field {
 		case "data":
@@ -221,19 +200,14 @@ func (c *Client) readEvents(body io.Reader, eventChan chan<- Event, errorChan ch
 		}
 	}
 
-	if dataBuilder.Len() > 0 || currentEvent.Data != "" {
-		if dataBuilder.Len() > 0 {
-			currentEvent.Data = dataBuilder.String()
-		}
-		// Check for duplicate before final event
-		if currentEvent.ID != "" && seenIDs[currentEvent.ID] {
-			// Skip duplicate
-		} else if currentEvent.Data != "" && (len(filterTypes) == 0 || contains(filterTypes, currentEvent.Type)) {
-			select {
-			case eventChan <- currentEvent:
-			default:
-				fmt.Printf("SSE warning: event channel full, dropping final event (ID=%s, Type=%s)\n", currentEvent.ID, currentEvent.Type)
-			}
+	if dataBuilder.Len() > 0 {
+		currentEvent.Data = dataBuilder.String()
+	}
+	if currentEvent.Data != "" && (len(filterTypes) == 0 || contains(filterTypes, currentEvent.Type)) {
+		select {
+		case eventChan <- currentEvent:
+		default:
+			fmt.Printf("SSE warning: event channel full, dropping final event (ID=%s, Type=%s)\n", currentEvent.ID, currentEvent.Type)
 		}
 	}
 
