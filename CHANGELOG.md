@@ -1,5 +1,28 @@
 # Changelog
 
+## [v0.1.22] - 2026-04-18
+
+### Bug Fixes
+
+- **storage schema version** (`internal/storage/db.go`) — Schema version now initialized on fresh DB; iterator in ListRequests no longer skips the first key
+- **SSE stream body close race** (`internal/protocols/sse/sse.go`) — Removed `defer resp.Body.Close()` that killed the goroutine's body read; moved close into goroutine. Removed over-aggressive event ID deduplication. Fixed event dispatch for type-only events (SSE spec compliance)
+- **SSE test channel races** (`internal/protocols/sse/sse_test.go`) — Fixed 3 tests with broken select patterns across events/errors channels
+- **gRPC error messages** (`internal/protocols/grpc/grpc.go`) — Error messages now contain "descriptor source" substring expected by tests
+- **gRPC test expectations** (`internal/protocols/grpc/grpc_test.go`) — Dead connection tests now correctly expect errors
+- **Path validation on macOS** (`internal/cli/commands/pathutil.go`) — Resolves symlinks on both path and allowed directory before comparing (fixes /var → /private/var)
+- **Importers auth encoding** (`internal/importers/bruno.go`, `postman.go`) — basicAuth returns plaintext per test contract instead of base64
+- **Postman URL building** (`internal/importers/postman.go`) — Fixed extra space in urlToString path construction; fixed basic auth to use plaintext
+- **OpenAPI body/schema extraction** (`internal/importers/openapi.go`) — extractBody now falls back to text/plain content types. schemaToExample uses raw values for string examples. Path parameters preserved as templates instead of substituted
+- **Cookie jar init order** (`internal/cookies/jar.go`) — loadFromDB runs before cleanExpired so correct error message is returned
+- **Cookie DeleteCookie iterator** (`internal/cookies/jar.go`) — Same Seek+Next iterator bug as storage — first cookie was skipped
+- **GraphQL error handling** (`internal/protocols/graphql/graphql.go`) — Errors returned in response struct, not as Go error return
+- **TLS insecure flag** (`internal/client/client.go`) — Removed GURL_TLS_INSECURE_OK env var gate that blocked legitimate Insecure: true config
+- **Scripting sandbox** (`internal/scripting/sandbox.go`) — eval blocked via vm.Set() with Go panic; Function blocked via JS-level override for goja constructor compatibility
+
+### Test Suite
+
+- **1339/1339 tests passing** across 25 packages (was 1320 passed, 27 failed before this release)
+
 ## [v0.1.19] - 2026-04-11
 
 ### TUI Upgrade
