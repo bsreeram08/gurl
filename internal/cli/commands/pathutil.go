@@ -30,22 +30,10 @@ func ValidateSafePath(path string, allowedDir string) error {
 		resolvedAllowed += string(os.PathSeparator)
 	}
 
-	// First: check the unresolved path for ".." escapes.
-	if !strings.HasPrefix(absPath, resolvedAllowed) {
-		return fmt.Errorf("path escapes allowed directory: %s", path)
-	}
-
-	// Second: attempt to resolve symlinks and verify the resolved path stays
-	// within the allowed directory. EvalSymlinks returns an error if the final
-	// target doesn't exist; in that case we additionally resolve the parent
-	// directory to catch symlink escapes where only the leaf file is missing.
 	resolvedPath, err := filepath.EvalSymlinks(absPath)
 	if err != nil {
-		// File doesn't exist — resolve the parent directory via symlinks to
-		// check whether the symlink chain escapes, even though the leaf is absent.
 		resolvedParent, parentErr := filepath.EvalSymlinks(filepath.Dir(absPath))
 		if parentErr != nil {
-			// Parent can't be resolved — likely a broken symlink; reject.
 			return fmt.Errorf("path escapes allowed directory: %s", path)
 		}
 		resolvedPath = filepath.Join(resolvedParent, filepath.Base(absPath))
