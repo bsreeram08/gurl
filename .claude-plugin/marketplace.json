@@ -1,0 +1,26 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "gurl-plugins",
+  "version": "1.0.0",
+  "description": "gurl — API development CLI plugins including brutal code review (hound), agent skills, and more.",
+  "owner": {
+    "name": "Sree Ram",
+    "email": "sreeram@sreerams.in",
+    "url": "https://github.com/bsreeram08"
+  },
+  "plugins": [
+    {
+      "name": "hound",
+      "description": "Brutal code review. Technically precise, no sugarcoating. Verdict is binary: ACK (acceptable) or NAK (reject and fix first).",
+      "version": "1.0.0",
+      "author": {
+        "name": "Sree Ram",
+        "email": "sreeram@sreerams.in",
+        "url": "https://github.com/bsreeram08"
+      },
+      "source": "./hound",
+      "category": "productivity",
+      "keywords": ["code-review", "security", "go", "linting", "quality"]
+    }
+  ]
+}

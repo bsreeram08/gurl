@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "hound",
+  "version": "1.0.0",
+  "description": "Brutal code review. Technically precise, no sugarcoating. ACK or NAK.",
+  "author": {
+    "name": "Sree Ram",
+    "email": "sreeram@sreerams.in",
+    "url": "https://github.com/bsreeram08"
+  },
+  "homepage": "https://github.com/bsreeram08/gurl/tree/main/hound",
+  "repository": "https://github.com/bsreeram08/gurl",
+  "license": "MIT",
+  "keywords": ["code-review", "security", "go", "linting"]
+}
