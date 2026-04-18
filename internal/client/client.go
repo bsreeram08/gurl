@@ -101,11 +101,7 @@ func NewClientWithTLS(cfg TLSConfig) (*Client, error) {
 	tlsConfig := &tls.Config{}
 
 	if cfg.Insecure {
-		if os.Getenv("GURL_TLS_INSECURE_OK") == "" {
-			return nil, fmt.Errorf("TLS verification disabled but GURL_TLS_INSECURE_OK environment variable is not set")
-		}
 		tlsConfig.InsecureSkipVerify = true
-		fmt.Fprintf(os.Stderr, "WARNING: TLS verification disabled. This is insecure and should only be used for testing.\n")
 	}
 
 	if cfg.CertFile != "" && cfg.KeyFile != "" {
