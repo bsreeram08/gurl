@@ -1,7 +1,6 @@
 package importers
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -291,7 +290,7 @@ func (p *PostmanImporter) urlToString(url *PostmanURL) string {
 
 	// Build path
 	if len(url.Path) > 0 {
-		parts = append(parts, "/ "+strings.Join(url.Path, "/"))
+		parts = append(parts, "/"+strings.Join(url.Path, "/"))
 	}
 
 	// Build query
@@ -345,10 +344,9 @@ func (p *PostmanImporter) addAuthHeaders(auth *PostmanAuth, headers *[]types.Hea
 			}
 		}
 		if username != "" {
-			encoded := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
 			*headers = append(*headers, types.Header{
 				Key:   "Authorization",
-				Value: "Basic " + encoded,
+				Value: "Basic " + username + ":" + password,
 			})
 		}
 	case "apikey":

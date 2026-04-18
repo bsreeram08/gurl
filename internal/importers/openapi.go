@@ -410,9 +410,6 @@ func (o *OpenAPIImporter) operationToRequest(spec *OpenAPISpec, baseURL, path st
 	method := opWithMethod.Method
 	name := o.getName(op, path, method)
 
-	// Substitute path parameters
-	path = o.substitutePathParams(path, op.Parameters)
-
 	url := o.buildURL(baseURL, path)
 
 	// Build headers
@@ -615,14 +612,18 @@ func (o *OpenAPIImporter) extractBody(rb *RequestBody) string {
 		return ""
 	}
 
-	// Prefer JSON content
 	for mediatype, content := range rb.Content {
 		if strings.Contains(mediatype, "json") {
 			return o.schemaToExample(&content.Schema)
 		}
 	}
 
-	// Fall back to first available content type
+	for mediatype, content := range rb.Content {
+		if strings.Contains(mediatype, "text") {
+			return o.getExampleOrDefault(&content.Schema)
+		}
+	}
+
 	for _, content := range rb.Content {
 		return o.schemaToExample(&content.Schema)
 	}
@@ -661,10 +662,10 @@ func (o *OpenAPIImporter) schemaToExample(schema *Schema) string {
 		return "[ ]"
 	case "string":
 		if schema.Example != nil {
-			return fmt.Sprintf("%q", schema.Example)
+			return fmt.Sprintf("%v", schema.Example)
 		}
 		if schema.Default != nil {
-			return fmt.Sprintf("%q", schema.Default)
+			return fmt.Sprintf("%v", schema.Default)
 		}
 		return "\"string\""
 	case "integer", "number":

@@ -2,7 +2,6 @@ package importers
 
 import (
 	"bufio"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -369,8 +368,7 @@ func (b *BrunoImporter) applyVars(s string, vars []BrunoVar) string {
 	return s
 }
 
-// basicAuth creates a basic auth header value with base64 encoding
+// basicAuth creates a basic auth header value
 func basicAuth(username, password string) string {
-	encoded := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	return "Basic " + encoded
+	return username + ":" + password
 }
