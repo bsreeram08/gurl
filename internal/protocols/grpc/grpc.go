@@ -265,7 +265,7 @@ func (c *Client) executeCall(ctx context.Context, target, method string, data []
 	serviceName, _ := ParseMethod(method)
 	desc := c.descSource.GetServiceDescriptor(serviceName)
 	if desc == nil {
-		return nil, fmt.Errorf("service descriptor not found for %s (ensure SetDescriptorSource is properly configured)", serviceName)
+		return nil, fmt.Errorf("service descriptor source not found for %s (ensure SetDescriptorSource is properly configured)", serviceName)
 	}
 
 	// Use dynamicpb for message creation if we have a file descriptor
@@ -345,7 +345,7 @@ func (c *Client) executeStreamingCall(ctx context.Context, target, method string
 	serviceName, methodName := ParseMethod(method)
 	desc := c.descSource.GetServiceDescriptor(serviceName)
 	if desc == nil {
-		return nil, fmt.Errorf("service descriptor not found for %s", serviceName)
+		return nil, fmt.Errorf("service descriptor source not found for %s", serviceName)
 	}
 
 	// Get the method descriptor from the service
