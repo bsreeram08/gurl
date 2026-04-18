@@ -149,10 +149,5 @@ func (c *Client) Execute(ctx context.Context, endpoint string, req Request, opts
 		graphqlResp.Data = nil
 	}
 
-	// Check for GraphQL errors before returning
-	if len(graphqlResp.Errors) > 0 {
-		return &graphqlResp, fmt.Errorf("GraphQL error: %s", graphqlResp.Errors[0].Message)
-	}
-
 	return &graphqlResp, nil
 }
