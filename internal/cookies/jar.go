@@ -58,13 +58,12 @@ func NewCookieJar(db CookieDB) (*CookieJar, error) {
 		return nil, fmt.Errorf("failed to open cookie db: %w", err)
 	}
 
-	// Clean expired cookies on startup
-	if err := cj.cleanExpired(); err != nil {
-		return nil, fmt.Errorf("failed to clean expired cookies: %w", err)
-	}
-
 	if err := cj.loadFromDB(); err != nil {
 		return nil, fmt.Errorf("failed to load cookies from db: %w", err)
+	}
+
+	if err := cj.cleanExpired(); err != nil {
+		return nil, fmt.Errorf("failed to clean expired cookies: %w", err)
 	}
 
 	return cj, nil
@@ -311,13 +310,11 @@ func (c *LMDBCookieDB) GetAllCookiesForDomain(domain string) ([]*cookieJarEntry,
 }
 
 func (c *LMDBCookieDB) DeleteCookie(host, name string) error {
-	// Use prefix iteration to find the exact cookie key
 	prefix := fmt.Sprintf("%s%s:", cookieKeyPrefix, host)
 	iter := c.db.NewIterator(nil, nil)
 	defer iter.Release()
 
-	iter.Seek([]byte(prefix))
-	for iter.Next() {
+	for iter.Seek([]byte(prefix)); iter.Valid(); iter.Next() {
 		key := string(iter.Key())
 		// Check if key still has our prefix (might be at a different key)
 		if len(key) < len(prefix) || key[:len(prefix)] != prefix {
