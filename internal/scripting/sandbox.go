@@ -64,8 +64,6 @@ func registerSandboxRestricted(vm *goja.Runtime) {
 	_, _ = vm.RunString(`
 		(function() {
 			var originalRequire = typeof require !== 'undefined' ? require : null;
-			var originalEval = eval;
-			var originalFunction = Function;
 
 			global.require = function(module) {
 				var blocked = ` + blockedArrayJS + `;
@@ -78,19 +76,24 @@ func registerSandboxRestricted(vm *goja.Runtime) {
 				throw new Error('Module "' + module + '" is not available');
 			};
 
-			eval = function() {
-				throw new Error("eval is not allowed in sandbox");
-			};
-
-			Function = function() {
-				throw new Error("Function is not allowed in sandbox");
-			};
-
 			if (typeof window !== 'undefined') {
 				window.require = global.require;
-				window.eval = eval;
-				window.Function = Function;
 			}
+		})();
+	`)
+
+	vm.Set("eval", func(call goja.FunctionCall) goja.Value {
+		panic(vm.NewTypeError("eval is not allowed in sandbox"))
+	})
+
+	_, _ = vm.RunString(`
+		(function() {
+			var origFunction = Function;
+			var blocked = function() {
+				throw new Error("Function is not allowed in sandbox");
+			};
+			Function = blocked;
+			global.Function = blocked;
 		})();
 	`)
 
