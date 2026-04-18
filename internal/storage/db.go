@@ -90,6 +90,24 @@ func (db *LMDB) Open() error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
+	// Initialize or migrate schema version
+	const currentSchemaVersion = 3
+	data, err := db.DB.Get([]byte("schema_version"), nil)
+	if err != nil || data == nil {
+		// Fresh DB or legacy DB without version key — write current version
+		versionData, _ := json.Marshal(currentSchemaVersion)
+		if err := db.DB.Put([]byte("schema_version"), versionData, &opt.WriteOptions{Sync: true}); err != nil {
+			return fmt.Errorf("failed to write schema version: %w", err)
+		}
+	} else {
+		var version int
+		if err := json.Unmarshal(data, &version); err == nil && version < currentSchemaVersion {
+			// Migrate: update to current version
+			versionData, _ := json.Marshal(currentSchemaVersion)
+			db.DB.Put([]byte("schema_version"), versionData, &opt.WriteOptions{Sync: true})
+		}
+	}
+
 	return nil
 }
 
@@ -301,15 +319,12 @@ func (db *LMDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, error) {
 		tagKey := fmt.Sprintf("idx:tag:%s", opts.Tag)
 		requestIDs = db.getFromIndex(tagKey)
 	default:
-		// List all requests - use prefix iteration with byte range ["request:", "request;"]
 		iter := db.DB.NewIterator(nil, nil)
 		defer iter.Release()
 
 		seekKey := []byte("request:")
-		iter.Seek(seekKey)
-		for iter.Next() {
+		for iter.Seek(seekKey); iter.Valid(); iter.Next() {
 			key := string(iter.Key())
-			// Stop when we go past "request:" prefix (next char after ':' is ';' in ascii)
 			if len(key) < 8 || key[:8] != "request:" {
 				break
 			}
