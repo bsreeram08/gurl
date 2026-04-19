@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/sreeram/gurl/internal/client"
+	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 )
@@ -92,6 +94,9 @@ type queryRow struct {
 type BuilderRequestSelectedMsg struct {
 	Request *types.SavedRequest
 }
+
+// RequestSendRequestedMsg is emitted when the editor requests sending the active request.
+type RequestSendRequestedMsg struct{}
 
 // RequestSentMsg is sent when a request completes
 type RequestSentMsg struct {
@@ -380,6 +385,25 @@ func (rb *RequestBuilder) removeQueryRow(index int) {
 	}
 }
 
+func (rb *RequestBuilder) loadQueryParams(rawURL string) {
+	if parsed, err := url.Parse(rawURL); err == nil {
+		values := parsed.Query()
+		for key, list := range values {
+			if len(list) == 0 {
+				row := rb.addQueryRow()
+				row.keyInput.SetValue(key)
+				continue
+			}
+			for _, value := range list {
+				row := rb.addQueryRow()
+				row.keyInput.SetValue(key)
+				row.valueInput.SetValue(value)
+			}
+		}
+	}
+	rb.ensureTrailingQueryRow()
+}
+
 // Update implements tea.Model.Update
 func (rb *RequestBuilder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -438,7 +462,7 @@ func (rb *RequestBuilder) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 
 	// Send from anywhere in the editor.
 	if keyStr == "ctrl+j" || keyStr == "ctrl+enter" {
-		return rb, rb.sendRequest()
+		return rb, rb.requestSendRequested()
 	}
 
 	// Ctrl+C cancels (but doesn't quit)
@@ -512,7 +536,7 @@ func (rb *RequestBuilder) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 
 	case SectionSend:
 		if msg.Code == tea.KeyEnter {
-			return rb, rb.sendRequest()
+			return rb, rb.requestSendRequested()
 		}
 		return rb, nil
 	}
@@ -883,33 +907,136 @@ func (rb *RequestBuilder) isQueryRowEmpty(index int) bool {
 	return strings.TrimSpace(row.keyInput.Value()) == "" && strings.TrimSpace(row.valueInput.Value()) == ""
 }
 
-func (rb *RequestBuilder) loadQueryParams(rawURL string) {
-	if parsed, err := url.Parse(rawURL); err == nil {
-		values := parsed.Query()
-		for key, list := range values {
-			if len(list) == 0 {
-				row := rb.addQueryRow()
-				row.keyInput.SetValue(key)
-				continue
-			}
-			for _, value := range list {
-				row := rb.addQueryRow()
-				row.keyInput.SetValue(key)
-				row.valueInput.SetValue(value)
-			}
+// collectVarAwareRequest builds a request for execution, resolving template variables.
+func (rb *RequestBuilder) collectVarAwareRequest(vars map[string]string) (client.Request, error) {
+	rb.syncEditingFromForm()
+	if rb.editing == nil {
+		return client.Request{}, fmt.Errorf("no request loaded")
+	}
+
+	execReq := *rb.editing
+	execReq.PathParams = append([]types.Var{}, rb.editing.PathParams...)
+	for i, p := range execReq.PathParams {
+		if value, ok := vars[p.Name]; ok {
+			execReq.PathParams[i].Example = value
 		}
 	}
-	rb.ensureTrailingQueryRow()
+
+	if err := template.ResolvePathParamsInRequest(&execReq); err != nil {
+		return client.Request{}, fmt.Errorf("failed to resolve path params: %w", err)
+	}
+
+	resolvedURL, err := template.Substitute(execReq.URL, vars)
+	if err != nil {
+		return client.Request{}, fmt.Errorf("failed to substitute URL: %w", err)
+	}
+
+	headers := make([]client.Header, 0, len(rb.editing.Headers)+1)
+	for _, h := range rb.editing.Headers {
+		resolvedKey, err := template.Substitute(h.Key, vars)
+		if err != nil {
+			return client.Request{}, fmt.Errorf("failed to substitute header key: %w", err)
+		}
+		resolvedValue, err := template.Substitute(h.Value, vars)
+		if err != nil {
+			return client.Request{}, fmt.Errorf("failed to substitute header value: %w", err)
+		}
+		headers = append(headers, client.Header{Key: resolvedKey, Value: resolvedValue})
+	}
+
+	resolvedBody := rb.editing.Body
+	if rb.editing.Body != "" {
+		resolvedBody, err = template.Substitute(rb.editing.Body, vars)
+		if err != nil {
+			return client.Request{}, fmt.Errorf("failed to substitute body: %w", err)
+		}
+	}
+
+	// Add auth headers
+	authRequest := client.Request{
+		Method:  rb.editing.Method,
+		URL:     resolvedURL,
+		Headers: headers,
+		Body:    resolvedBody,
+	}
+
+	if rb.editing.AuthConfig != nil {
+		switch rb.editing.AuthConfig.Type {
+		case "basic":
+			username, err := template.Substitute(rb.editing.AuthConfig.Params["username"], vars)
+			if err != nil {
+				return client.Request{}, fmt.Errorf("failed to substitute basic username: %w", err)
+			}
+			password, err := template.Substitute(rb.editing.AuthConfig.Params["password"], vars)
+			if err != nil {
+				return client.Request{}, fmt.Errorf("failed to substitute basic password: %w", err)
+			}
+			authRequest.Headers = append(authRequest.Headers, client.Header{
+				Key:   "Authorization",
+				Value: "Basic " + basicAuth(username, password),
+			})
+		case "bearer":
+			token, err := template.Substitute(rb.editing.AuthConfig.Params["token"], vars)
+			if err != nil {
+				return client.Request{}, fmt.Errorf("failed to substitute bearer token: %w", err)
+			}
+			authRequest.Headers = append(authRequest.Headers, client.Header{
+				Key:   "Authorization",
+				Value: "Bearer " + token,
+			})
+		case "apikey":
+			headerKey, err := template.Substitute(rb.editing.AuthConfig.Params["header"], vars)
+			if err != nil {
+				return client.Request{}, fmt.Errorf("failed to substitute api header: %w", err)
+			}
+			if headerKey == "" {
+				headerKey = "X-API-Key"
+			}
+			headerValue, err := template.Substitute(rb.editing.AuthConfig.Params["value"], vars)
+			if err != nil {
+				return client.Request{}, fmt.Errorf("failed to substitute api value: %w", err)
+			}
+			authRequest.Headers = append(authRequest.Headers, client.Header{
+				Key:   headerKey,
+				Value: headerValue,
+			})
+		}
+	}
+
+	authRequest.Method = rb.editing.Method
+	if authRequest.Method == "" {
+		authRequest.Method = "GET"
+	}
+
+	return authRequest, nil
 }
 
-// sendRequest sends the HTTP request asynchronously via a tea.Cmd.
-func (rb *RequestBuilder) sendRequest() tea.Cmd {
+// sendRequestWithVars sends the HTTP request asynchronously via a tea.Cmd.
+func (rb *RequestBuilder) sendRequestWithVars(vars map[string]string) tea.Cmd {
 	rb.sending = true
-	clientReq := rb.buildClientRequest()
+	clientReq, err := rb.collectVarAwareRequest(vars)
+	if err != nil {
+		rb.sending = false
+		return func() tea.Msg {
+			return RequestSentMsg{Response: nil, Error: err}
+		}
+	}
+
 	return func() tea.Msg {
 		resp, err := client.Execute(clientReq)
 		return RequestSentMsg{Response: &resp, Error: err}
 	}
+}
+
+func (rb *RequestBuilder) requestSendRequested() tea.Cmd {
+	return func() tea.Msg {
+		return RequestSendRequestedMsg{}
+	}
+}
+
+// sendRequest sends the HTTP request asynchronously via a tea.Cmd.
+func (rb *RequestBuilder) sendRequest() tea.Cmd {
+	return rb.requestSendRequested()
 }
 
 // saveRequest saves the current request to the database via a tea.Cmd.
@@ -1240,9 +1367,9 @@ func (rb *RequestBuilder) activeSurface() string {
 
 func (rb *RequestBuilder) welcomeView() string {
 	lines := []string{
-		Style.WelcomeText.Render("Start with a saved request or a blank editor"),
-		Style.PlainText.Render("Use Ctrl+1 to browse requests and Ctrl+2 to return here."),
-		Style.Hint.Render("Ctrl+T opens a fresh tab. Ctrl+K searches across saved requests."),
+		Style.WelcomeText.Render("TUI-native request editing"),
+		Style.PlainText.Render("Open a saved request from the left pane or stay here and build one from scratch."),
+		Style.Hint.Render("Tab moves through sections. Ctrl+S saves. Ctrl+Enter sends."),
 	}
 	return strings.Join(lines, "\n\n")
 }
@@ -1263,7 +1390,7 @@ func (rb *RequestBuilder) renderMethodURL() string {
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		lipgloss.JoinHorizontal(lipgloss.Center, method, " ", lipgloss.NewStyle().Width(urlWidth).Render(urlView)),
-		Style.Hint.Render("Shift+Tab method  ·  Tab headers  ·  Ctrl+Enter send"),
+		Style.Hint.Render("Tab next section  ·  Shift+Tab previous  ·  Ctrl+Enter send"),
 	)
 
 	return SectionStyle(rb.activeSection == SectionMethod || rb.activeSection == SectionURL).
@@ -1277,18 +1404,12 @@ func (rb *RequestBuilder) renderActionRow() string {
 		title = rb.editing.Name
 	}
 
-	sendLabel := "Send (Ctrl+Enter)"
+	right := Style.Hint.Render("Ctrl+S save  ·  Ctrl+Enter send")
 	if rb.sending {
-		sendLabel = rb.loadingSpinner.View() + " Sending"
+		right = Style.TabActive.Render(rb.loadingSpinner.View() + " sending")
 	}
 
 	left := Style.PlainText.Copy().Bold(true).Render(truncateText(title, max(12, rb.width-34)))
-	right := lipgloss.JoinHorizontal(
-		lipgloss.Center,
-		RenderActionButton("Save", false, false),
-		" ",
-		RenderActionButton(sendLabel, true, rb.activeSection == SectionSend || rb.sending),
-	)
 
 	gap := rb.width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
@@ -1301,25 +1422,27 @@ func (rb *RequestBuilder) renderActionRow() string {
 func (rb *RequestBuilder) renderEditorTabs() string {
 	return lipgloss.JoinHorizontal(
 		lipgloss.Center,
+		Style.Hint.Render("surface"),
+		" ",
 		RenderMiniTab("Overview", rb.activeSurface() == "overview"),
-		"  ",
+		" ",
 		RenderMiniTab("Query", rb.activeSurface() == "query"),
-		"  ",
+		" ",
 		RenderMiniTab("Auth", rb.activeSurface() == "auth"),
 	)
 }
 
 func (rb *RequestBuilder) renderHeaders() string {
-	lines := []string{Style.Header.Render("HEADERS")}
+	lines := []string{RenderPanelHeader("HEADERS", fmt.Sprintf("%d set", rb.countPopulatedHeaders()), max(12, rb.width-4))}
 	for i, row := range rb.headerInputs {
 		prefix := "  "
 		if rb.activeSection == SectionHeaders && i == rb.activeHeaderRow {
-			prefix = "▶ "
+			prefix = "> "
 		}
 
 		keyView := row.keyInput.View()
 		valueView := row.valueInput.View()
-		lines = append(lines, prefix+keyView+"  "+Style.Hint.Render("->")+"  "+valueView)
+		lines = append(lines, prefix+keyView+"  "+Style.Hint.Render("→")+"  "+valueView)
 	}
 
 	lines = append(lines, Style.Hint.Render("Enter next cell  ·  ↑/↓ rows  ·  ←/→ key/value"))
@@ -1329,11 +1452,11 @@ func (rb *RequestBuilder) renderHeaders() string {
 }
 
 func (rb *RequestBuilder) renderQueryParams() string {
-	lines := []string{Style.Header.Render("QUERY PARAMS")}
+	lines := []string{RenderPanelHeader("QUERY", fmt.Sprintf("%d set", rb.countPopulatedQueryParams()), max(12, rb.width-4))}
 	for i, row := range rb.queryInputs {
 		prefix := "  "
 		if rb.activeSection == SectionQueryParams && i == rb.activeQueryRow {
-			prefix = "▶ "
+			prefix = "> "
 		}
 
 		keyView := row.keyInput.View()
@@ -1348,19 +1471,8 @@ func (rb *RequestBuilder) renderQueryParams() string {
 }
 
 func (rb *RequestBuilder) renderBody() string {
-	formats := lipgloss.JoinHorizontal(
-		lipgloss.Center,
-		RenderMiniTab("JSON", rb.contentType == "json"),
-		"  ",
-		RenderMiniTab("XML", rb.contentType == "xml"),
-		"  ",
-		RenderMiniTab("FORM", rb.contentType == "form"),
-		"  ",
-		RenderMiniTab("RAW", rb.contentType == "raw"),
-	)
-
-	header := RenderPanelHeader("BODY", formats, max(12, rb.width-4))
-	content := header + "\n" + rb.bodyInput.View()
+	header := RenderPanelHeader("BODY", strings.ToUpper(rb.contentType), max(12, rb.width-4))
+	content := header + "\n" + rb.bodyInput.View() + "\n" + Style.Hint.Render("Body editor")
 
 	return SectionStyle(rb.activeSection == SectionBody).
 		Width(max(24, rb.width)).
@@ -1368,19 +1480,8 @@ func (rb *RequestBuilder) renderBody() string {
 }
 
 func (rb *RequestBuilder) renderAuth() string {
-	authTabs := lipgloss.JoinHorizontal(
-		lipgloss.Center,
-		RenderMiniTab("None", rb.authType == "none"),
-		"  ",
-		RenderMiniTab("Basic", rb.authType == "basic"),
-		"  ",
-		RenderMiniTab("Bearer", rb.authType == "bearer"),
-		"  ",
-		RenderMiniTab("API Key", rb.authType == "apikey"),
-	)
-
 	lines := []string{
-		RenderPanelHeader("AUTH", authTabs, max(12, rb.width-4)),
+		RenderPanelHeader("AUTH", rb.authTypeLabel(), max(12, rb.width-4)),
 	}
 
 	keys := rb.currentAuthKeys()
@@ -1391,7 +1492,7 @@ func (rb *RequestBuilder) renderAuth() string {
 			label := strings.ReplaceAll(strings.ReplaceAll(key, "_", " "), "api ", "API ")
 			prefix := "  "
 			if rb.activeAuthField == i {
-				prefix = "▶ "
+				prefix = "> "
 			}
 			lines = append(lines, prefix+strings.Title(label)+": "+rb.authInputs[key].View())
 		}
@@ -1404,7 +1505,40 @@ func (rb *RequestBuilder) renderAuth() string {
 }
 
 func (rb *RequestBuilder) renderSend() string {
-	return Style.Hint.Render("Ctrl+1 requests  ·  Ctrl+2 editor  ·  Ctrl+3 response  ·  Tab sections")
+	return Style.Hint.Render("Ctrl+1 requests  ·  Ctrl+2 editor  ·  Ctrl+3 response  ·  Tab sections  ·  ? help")
+}
+
+func (rb *RequestBuilder) countPopulatedHeaders() int {
+	count := 0
+	for _, row := range rb.headerInputs {
+		if strings.TrimSpace(row.keyInput.Value()) != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func (rb *RequestBuilder) countPopulatedQueryParams() int {
+	count := 0
+	for _, row := range rb.queryInputs {
+		if strings.TrimSpace(row.keyInput.Value()) != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func (rb *RequestBuilder) authTypeLabel() string {
+	switch rb.authType {
+	case "basic":
+		return "BASIC"
+	case "bearer":
+		return "BEARER"
+	case "apikey":
+		return "API KEY"
+	default:
+		return "NONE"
+	}
 }
 
 // Init implements tea.Model.Init

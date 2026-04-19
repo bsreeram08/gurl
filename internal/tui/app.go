@@ -13,6 +13,7 @@ import (
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/google/uuid"
+	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/importers"
 	"github.com/sreeram/gurl/internal/runner"
@@ -515,6 +516,8 @@ type App struct {
 	activeEnvName   string
 	helpModal       bool
 	loadingSpinner  spinner.Model
+	variablePrompt  *VariablePrompt
+	quickTuiMode    bool
 }
 
 // NewApp creates a new TUI application
@@ -543,6 +546,7 @@ func NewAppWithVersion(db storage.DB, config *types.Config, version string) *App
 		envSwitcher:    envSwitcher,
 		activeEnvName:  activeEnvName,
 		loadingSpinner: sp,
+		quickTuiMode:   false,
 	}
 }
 
@@ -594,6 +598,19 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Update spinner when loading
 	if !m.ready {
 		m.loadingSpinner, _ = m.loadingSpinner.Update(msg)
+	}
+
+	if m.variablePrompt != nil {
+		updated, cmd := m.variablePrompt.Update(msg)
+		if updated == nil {
+			m.variablePrompt = nil
+		} else if vp, ok := updated.(*VariablePrompt); ok {
+			m.variablePrompt = vp
+		}
+		if cmd != nil {
+			return m, cmd
+		}
+		return m, nil
 	}
 
 	switch msg := msg.(type) {
@@ -729,6 +746,21 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tabs[m.activeTab].Request = msg.Request
 		}
 		return m, nil
+
+	case RequestSendRequestedMsg:
+		return m, m.requestSendWithVarsFlow(nil)
+
+	case VariablePromptDoneMsg:
+		m.variablePrompt = nil
+		if msg.Cancelled {
+			return m, nil
+		}
+		if m.activeTab < len(m.tabs) {
+			if cmd := m.sendActiveRequestWithVars(msg.Variables); cmd != nil {
+				return m, cmd
+			}
+		}
+		return m, nil
 	}
 
 	// Route to active tab's components
@@ -755,6 +787,162 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m *App) requestSendWithVarsFlow(overrides map[string]string) tea.Cmd {
+	if m.activeTab >= len(m.tabs) {
+		return nil
+	}
+
+	tab := m.tabs[m.activeTab]
+	if tab == nil || tab.Builder == nil {
+		return nil
+	}
+
+	req := tab.Builder.GetEditingRequest()
+	if req == nil {
+		return nil
+	}
+
+	vars := m.collectDefaults(req)
+	for k, v := range m.collectActiveEnvVars() {
+		vars[k] = v
+	}
+	for k, v := range overrides {
+		vars[k] = v
+	}
+
+	missing := m.missingTemplateVars(req, vars)
+	if len(missing) > 0 {
+		if m.quickTuiMode {
+			return func() tea.Msg {
+				return RequestSentMsg{Response: nil, Error: fmt.Errorf("missing template variables: %s", strings.Join(missing, ", "))}
+			}
+		}
+
+		name := req.Name
+		if name == "" {
+			name = "Request"
+		}
+		m.variablePrompt = NewVariablePrompt(name, missing, vars)
+		return nil
+	}
+
+	return m.sendActiveRequestWithVars(vars)
+}
+
+func (m *App) sendActiveRequestWithVars(vars map[string]string) tea.Cmd {
+	if m.activeTab >= len(m.tabs) {
+		return nil
+	}
+
+	tab := m.tabs[m.activeTab]
+	if tab == nil || tab.Builder == nil {
+		return nil
+	}
+
+	return tab.Builder.sendRequestWithVars(vars)
+}
+
+// SetQuickMode enables a minimal execution mode that skips modal variable prompting.
+func (m *App) SetQuickMode(enabled bool) {
+	if m != nil {
+		m.quickTuiMode = enabled
+	}
+}
+
+func (m *App) collectDefaults(req *types.SavedRequest) map[string]string {
+	vars := make(map[string]string)
+	if req == nil {
+		return vars
+	}
+
+	for _, v := range req.Variables {
+		if v.Name == "" {
+			continue
+		}
+		vars[v.Name] = v.Example
+	}
+
+	for _, p := range req.PathParams {
+		if p.Name == "" {
+			continue
+		}
+		if p.Example != "" {
+			vars[p.Name] = p.Example
+		}
+	}
+
+	return vars
+}
+
+func (m *App) collectActiveEnvVars() map[string]string {
+	vars := make(map[string]string)
+	if m.envSwitcher != nil {
+		for k, v := range m.envSwitcher.GetActiveEnvVariables() {
+			vars[k] = v
+		}
+	}
+	return vars
+}
+
+func (m *App) missingTemplateVars(req *types.SavedRequest, provided map[string]string) []string {
+	seen := make(map[string]bool)
+	ordered := make([]string, 0)
+
+	add := func(name string) {
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		ordered = append(ordered, name)
+	}
+
+	appendNames := func(values []string) {
+		for _, name := range values {
+			add(name)
+		}
+	}
+
+	appendNames(template.ExtractVarNames(req.URL))
+	appendNames(template.ExtractVarNames(req.Body))
+
+	for _, h := range req.Headers {
+		appendNames(template.ExtractVarNames(h.Key))
+		appendNames(template.ExtractVarNames(h.Value))
+	}
+
+	if req.AuthConfig != nil {
+		switch req.AuthConfig.Type {
+		case "basic":
+			appendNames(template.ExtractVarNames(req.AuthConfig.Params["username"]))
+			appendNames(template.ExtractVarNames(req.AuthConfig.Params["password"]))
+		case "bearer":
+			appendNames(template.ExtractVarNames(req.AuthConfig.Params["token"]))
+		case "apikey":
+			appendNames(template.ExtractVarNames(req.AuthConfig.Params["header"]))
+			appendNames(template.ExtractVarNames(req.AuthConfig.Params["value"]))
+		}
+	}
+
+	for _, p := range req.PathParams {
+		add(p.Name)
+	}
+
+	if len(ordered) == 0 {
+		for _, v := range template.GetVariablesFromRequest(req) {
+			add(v.Name)
+		}
+	}
+
+	missing := make([]string, 0, len(ordered))
+	for _, name := range ordered {
+		if value, ok := provided[name]; !ok || strings.TrimSpace(value) == "" {
+			missing = append(missing, name)
+		}
+	}
+
+	return missing
 }
 
 // handleGlobalKeyPress handles app-level shortcuts before a focused pane processes the key.
@@ -1040,6 +1228,10 @@ func (m *App) View() tea.View {
 		return m.makeView(m.loadingSpinner.View() + " Loading...")
 	}
 
+	if m.variablePrompt != nil {
+		return m.renderCenteredBlock(m.variablePrompt.View().Content)
+	}
+
 	if m.searchModal != nil {
 		return m.renderCenteredBlock(m.searchModal.View().Content)
 	}
@@ -1271,17 +1463,17 @@ func (m *App) renderWelcome() string {
 	var sb strings.Builder
 	sb.WriteString("\n")
 	sb.WriteString("\n")
-	sb.WriteString(Style.WelcomeText.Render("  Welcome to Gurl TUI"))
+	sb.WriteString(Style.WelcomeText.Render("  Welcome to Gurl"))
 	sb.WriteString("\n")
 	sb.WriteString("\n")
-	sb.WriteString(Style.PlainText.Render("  Use Ctrl+1 to browse requests and Enter to open one"))
+	sb.WriteString(Style.PlainText.Render("  j/k moves through saved requests in the left pane"))
 	sb.WriteString("\n")
-	sb.WriteString(Style.PlainText.Render("  Use Ctrl+2 to edit and Ctrl+Enter to send"))
+	sb.WriteString(Style.PlainText.Render("  Enter opens a request, Tab moves sections, Ctrl+Enter sends"))
 	sb.WriteString("\n")
-	sb.WriteString(Style.PlainText.Render("  Use Ctrl+3 to inspect the response pane"))
+	sb.WriteString(Style.PlainText.Render("  Ctrl+1 / Ctrl+2 / Ctrl+3 jump between requests, editor, and response"))
 	sb.WriteString("\n")
 	sb.WriteString("\n")
-	sb.WriteString(Style.Hint.Render("  Ctrl+T new tab  ·  Ctrl+W close tab  ·  Ctrl+D duplicate"))
+	sb.WriteString(Style.Hint.Render("  Ctrl+T new tab  ·  Ctrl+W close tab  ·  Ctrl+K search  ·  ? help"))
 	return sb.String()
 }
 
@@ -1302,7 +1494,7 @@ func (m *App) renderResponseBody(width, height int) string {
 func (m *App) responsePaneMeta() string {
 	tab := m.ActiveTab()
 	if tab == nil || tab.Viewer == nil {
-		return "Preview"
+		return "Body"
 	}
 
 	switch tab.Viewer.ActiveTab() {
@@ -1315,7 +1507,7 @@ func (m *App) responsePaneMeta() string {
 	case TabDiff:
 		return "Diff"
 	default:
-		return "Preview"
+		return "Body"
 	}
 }
 

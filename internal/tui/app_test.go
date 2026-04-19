@@ -809,6 +809,124 @@ func TestApp_GetCurrentEnv(t *testing.T) {
 	}
 }
 
+func TestApp_RequestSendWithVarsFlow_OpensPromptOnMissingValues(t *testing.T) {
+	db := &MockDB{}
+	config := &types.Config{}
+	app := NewApp(db, config)
+
+	app.openInNewTab(&types.SavedRequest{
+		ID:   "req-1",
+		Name: "Send with vars",
+		URL:  "https://{{host}}/v1",
+	})
+
+	cmd := app.requestSendWithVarsFlow(nil)
+	if cmd != nil {
+		t.Fatal("expected nil command when vars are missing")
+	}
+	if app.variablePrompt == nil {
+		t.Fatal("expected variable prompt to open for missing variables")
+	}
+	if len(app.variablePrompt.varNames) != 1 || app.variablePrompt.varNames[0] != "host" {
+		t.Fatalf("expected prompt varNames to be [host], got %#v", app.variablePrompt.varNames)
+	}
+}
+
+func TestApp_RequestSendWithVarsFlow_AppliesDefaultsWithoutPrompt(t *testing.T) {
+	db := &MockDB{}
+	config := &types.Config{}
+	app := NewApp(db, config)
+
+	app.openInNewTab(&types.SavedRequest{
+		ID:   "req-1",
+		Name: "Send with defaults",
+		URL:  "https://{{host}}/v1",
+		Variables: []types.Var{{
+			Name:    "host",
+			Example: "https://api.internal",
+		}},
+	})
+
+	cmd := app.requestSendWithVarsFlow(nil)
+	if cmd == nil {
+		t.Fatal("expected non-nil command when defaults satisfy required vars")
+	}
+	if app.variablePrompt != nil {
+		t.Fatal("did not expect variable prompt when required vars have defaults")
+	}
+}
+
+func TestApp_MissingTemplateVars_ConsidersAllRequestFields(t *testing.T) {
+	db := &MockDB{}
+	config := &types.Config{}
+	app := NewApp(db, config)
+
+	req := &types.SavedRequest{
+		URL:  "https://{{host}}/{{id}}",
+		Body: `{"tenant":"{{tenant}}"}`,
+		Headers: []types.Header{{
+			Key:   "X-{{region}}",
+			Value: "{{token}}",
+		}},
+		AuthConfig: &types.AuthConfig{
+			Type: "basic",
+			Params: map[string]string{
+				"username": "{{user}}",
+				"password": "{{pass}}",
+			},
+		},
+		PathParams: []types.Var{{Name: "path_id"}},
+	}
+
+	missing := app.missingTemplateVars(req, map[string]string{
+		"host":   "https://api.internal",
+		"id":     "1",
+		"tenant": "acme",
+	})
+
+	if len(missing) != 5 {
+		t.Fatalf("expected 5 missing vars, got %d: %#v", len(missing), missing)
+	}
+
+	missingSet := map[string]bool{}
+	for _, m := range missing {
+		missingSet[m] = true
+	}
+
+	expected := []string{"region", "token", "user", "pass", "path_id"}
+	for _, name := range expected {
+		if !missingSet[name] {
+			t.Errorf("expected missing variable %q", name)
+		}
+	}
+}
+
+func TestApp_RequestSendWithVarsFlow_QuickModeReportsMissing(t *testing.T) {
+	db := &MockDB{}
+	config := &types.Config{}
+	app := NewApp(db, config)
+	app.SetQuickMode(true)
+
+	app.openInNewTab(&types.SavedRequest{
+		ID:   "req-1",
+		Name: "Quick",
+		URL:  "https://{{host}}/v1",
+	})
+
+	cmd := app.requestSendWithVarsFlow(nil)
+	if cmd == nil {
+		t.Fatal("expected a command in quick mode when vars are missing")
+	}
+
+	msg := cmd().(RequestSentMsg)
+	if msg.Error == nil {
+		t.Fatal("expected missing variable error in quick mode")
+	}
+	if !strings.Contains(msg.Error.Error(), "missing template variables") {
+		t.Fatalf("unexpected error: %v", msg.Error)
+	}
+}
+
 func containsStr(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {

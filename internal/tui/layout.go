@@ -40,19 +40,19 @@ func CalculateLayout(width, height int) Layout {
 	workspaceHeight := max(2, height-footerHeight)
 
 	if width >= 140 {
-		sidebarWidth := max(32, width*40/100)
-		editorWidth := max(42, width*35/100)
+		sidebarWidth := max(28, width*30/100)
+		editorWidth := max(46, width*40/100)
 		responseWidth := width - sidebarWidth - editorWidth
 
-		if responseWidth < 30 {
-			shortfall := 30 - responseWidth
+		if responseWidth < 32 {
+			shortfall := 32 - responseWidth
 
-			editorShrink := min(shortfall, max(0, editorWidth-40))
+			editorShrink := min(shortfall, max(0, editorWidth-44))
 			editorWidth -= editorShrink
 			shortfall -= editorShrink
 
 			if shortfall > 0 {
-				sidebarShrink := min(shortfall, max(0, sidebarWidth-30))
+				sidebarShrink := min(shortfall, max(0, sidebarWidth-26))
 				sidebarWidth -= sidebarShrink
 			}
 
@@ -77,11 +77,11 @@ func CalculateLayout(width, height int) Layout {
 	}
 
 	if width >= 100 {
-		sidebarWidth := max(30, width*38/100)
-		sidebarWidth = min(sidebarWidth, width-46)
+		sidebarWidth := max(26, width*28/100)
+		sidebarWidth = min(sidebarWidth, width-50)
 
 		rightWidth := width - sidebarWidth
-		editorHeight := max(12, workspaceHeight*58/100)
+		editorHeight := max(12, workspaceHeight*54/100)
 		editorHeight = min(editorHeight, workspaceHeight-10)
 		responseHeight := workspaceHeight - editorHeight
 
@@ -102,8 +102,8 @@ func CalculateLayout(width, height int) Layout {
 		}
 	}
 
-	sidebarHeight := max(7, workspaceHeight*28/100)
-	editorHeight := max(10, workspaceHeight*40/100)
+	sidebarHeight := max(6, workspaceHeight*24/100)
+	editorHeight := max(10, workspaceHeight*42/100)
 	responseHeight := workspaceHeight - sidebarHeight - editorHeight
 
 	if responseHeight < 8 {

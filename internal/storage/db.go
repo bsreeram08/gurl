@@ -48,21 +48,30 @@ type LMDB struct {
 	mu     sync.Mutex
 }
 
-// NewLMDB creates a new LMDB instance
-func NewLMDB() (*LMDB, error) {
+func resolveDBPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get home directory: %w", err)
+		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 
 	dbDir := filepath.Join(homeDir, ".local", "share", "gurl")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create db directory: %w", err)
+		return "", fmt.Errorf("failed to create db directory: %w", err)
 	}
 
 	dbPath := filepath.Join(dbDir, "gurl.db")
 	if envPath := os.Getenv("GURL_DB_PATH"); envPath != "" {
 		dbPath = envPath
+	}
+
+	return dbPath, nil
+}
+
+// NewLMDB creates a new LMDB instance
+func NewLMDB() (*LMDB, error) {
+	dbPath, err := resolveDBPath()
+	if err != nil {
+		return nil, err
 	}
 
 	return &LMDB{
@@ -75,6 +84,13 @@ func NewLMDBWithPath(dbPath string) *LMDB {
 	return &LMDB{
 		dbPath: dbPath,
 	}
+}
+
+func (db *LMDB) Path() string {
+	if db == nil {
+		return ""
+	}
+	return db.dbPath
 }
 
 // Open opens the database

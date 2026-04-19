@@ -13,7 +13,7 @@ import (
 
 const (
 	MinVisibleItems   = 1
-	DefaultItemHeight = 4
+	DefaultItemHeight = 3
 )
 
 // RequestList is a simple sidebar list with keyboard navigation and custom virtualization.
@@ -133,8 +133,8 @@ func (rl *RequestList) ViewTree() string {
 	for i := rl.scrollOffset; i < end; i++ {
 		req := rl.items[i]
 		contentWidth := max(20, rl.width-3)
-		card := rl.renderRequestCard(req, i == rl.cursor, contentWidth)
-		sb.WriteString(card)
+		row := rl.renderRequestCard(req, i == rl.cursor, contentWidth)
+		sb.WriteString(row)
 		if i < end-1 {
 			sb.WriteString("\n")
 		}
@@ -173,27 +173,35 @@ func (rl *RequestList) renderRequestCard(req *types.SavedRequest, selected bool,
 		title = req.URL
 	}
 
-	primaryWidth := max(12, width-12)
+	primaryWidth := max(12, width-10)
 	subtitle, meta := requestCardLines(req)
+	prefix := "  "
+	titleStyle := Style.PlainText.Copy().Bold(true)
+	if selected {
+		prefix = "> "
+		titleStyle = Style.SelectedItem.Copy().Bold(true)
+	}
 
 	header := lipgloss.JoinHorizontal(
 		lipgloss.Center,
+		prefix,
 		RenderMethodBadge(req.Method),
 		" ",
-		Style.PlainText.Copy().Bold(true).Render(truncateText(title, primaryWidth)),
+		titleStyle.Render(truncateText(title, primaryWidth)),
 	)
 
 	lines := []string{
 		header,
 		Style.Hint.Render("  " + truncateText(subtitle, max(10, width-2))),
-		Style.Hint.Render("  " + truncateText(meta, max(10, width-2))),
+	}
+	if meta != "" {
+		lines = append(lines, Style.Hint.Render("  "+truncateText(meta, max(10, width-2))))
 	}
 
 	style := Style.Card.Width(width)
 	if selected {
 		style = Style.CardSelected.Width(width)
 	}
-
 	return style.Render(strings.Join(lines, "\n"))
 }
 

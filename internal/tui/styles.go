@@ -153,7 +153,7 @@ var Style = struct {
 		Foreground(Color("text")),
 
 	StatusBar: lipgloss.NewStyle().
-		Background(Color("background")).
+		Background(Color("surface")).
 		Foreground(Color("textDim")),
 
 	Header: lipgloss.NewStyle().
@@ -213,32 +213,28 @@ var Style = struct {
 		Foreground(Color("text")),
 
 	Modal: lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(Color("focus")).
-		Background(Color("surface")).
 		Foreground(Color("text")).
 		Padding(1, 2),
 
 	Card: lipgloss.NewStyle().
-		Background(Color("surfaceAlt")).
-		Padding(0, 1),
+		Foreground(Color("text")).
+		Padding(0, 0),
 
 	CardSelected: lipgloss.NewStyle().
-		Background(Color("selected")).
-		BorderLeft(true).
-		BorderForeground(Color("primary")).
-		Padding(0, 1),
+		Foreground(Color("primary")).
+		Bold(true).
+		Padding(0, 0),
 
 	Section: lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(Color("border")).
-		Background(Color("surfaceAlt")).
 		Padding(0, 1),
 
 	SectionFocused: lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(Color("focus")).
-		Background(Color("surfaceAlt")).
 		Padding(0, 1),
 
 	TabActive: lipgloss.NewStyle().
@@ -249,15 +245,13 @@ var Style = struct {
 		Foreground(Color("textDim")),
 
 	ButtonPrimary: lipgloss.NewStyle().
-		Foreground(lipgloss.Color("16")).
-		Background(Color("primary")).
+		Foreground(Color("primary")).
 		Bold(true).
-		Padding(0, 1),
+		Padding(0, 0),
 
 	ButtonSecondary: lipgloss.NewStyle().
-		Foreground(Color("text")).
-		Background(Color("selected")).
-		Padding(0, 1),
+		Foreground(Color("textDim")).
+		Padding(0, 0),
 }
 
 // SetTheme changes the active color theme for all styles.
@@ -273,9 +267,8 @@ func PanelStyle(focused bool) lipgloss.Style {
 	}
 
 	return lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(borderColor).
-		Background(Color("surface")).
 		Foreground(Color("text")).
 		Padding(0, 1)
 }
@@ -307,9 +300,9 @@ func RenderPanelHeader(title, meta string, width int) string {
 // RenderMiniTab renders a compact tab label.
 func RenderMiniTab(label string, active bool) string {
 	if active {
-		return Style.TabActive.Render(label)
+		return Style.TabActive.Render("[" + strings.ToLower(label) + "]")
 	}
-	return Style.TabInactive.Render(label)
+	return Style.TabInactive.Render(strings.ToLower(label))
 }
 
 // RenderActionButton renders a toolbar button.
@@ -321,28 +314,28 @@ func RenderActionButton(label string, primary bool, active bool) string {
 	if active {
 		style = style.Copy().Underline(true)
 	}
-	return style.Render(label)
+	return style.Render("[" + label + "]")
 }
 
 // RenderMethodBadge renders a filled HTTP method pill.
 func RenderMethodBadge(method string) string {
-	fg, bg := methodBadgePalette(method)
+	fg, _ := methodBadgePalette(method)
+	label := strings.ToUpper(method)
+	if len(label) < 6 {
+		label += strings.Repeat(" ", 6-len(label))
+	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(fg)).
-		Background(lipgloss.Color(bg)).
 		Bold(true).
-		Padding(0, 1).
-		Render(strings.ToUpper(method))
+		Render(label)
 }
 
 // RenderStatusBadge renders a response status badge.
 func RenderStatusBadge(label string, statusCode int) string {
-	fg, bg := statusBadgePalette(statusCode)
+	fg, _ := statusBadgePalette(statusCode)
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(fg)).
-		Background(lipgloss.Color(bg)).
 		Bold(true).
-		Padding(0, 1).
 		Render(label)
 }
 

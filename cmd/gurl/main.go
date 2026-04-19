@@ -40,21 +40,17 @@ func main() {
 }
 
 func run() error {
-	// Initialize database
-	db, err := storage.NewLMDB()
+	// Initialize database handles lazily so interactive commands don't hold a DB lock while idle.
+	db, err := storage.NewLazyDB()
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
-	}
-	defer db.Close() // Will run even on os.Exit
-
-	if err := db.Open(); err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
 	}
 
 	// Initialize plugin registry
 	pluginDir := getPluginDir()
 	loader := plugins.NewLoader(pluginDir, nil)
 	pluginRegistry, _ = loader.LoadAll()
+	envStorage := env.NewEnvStorageWithPath(db.Path())
 
 	app := &cli.Command{
 		Name:    "gurl",
@@ -71,7 +67,7 @@ Quick Start:
   gurl delete "old request"`,
 		Commands: []*cli.Command{
 			commands.SaveCommand(db),
-			commands.RunCommand(db, env.NewEnvStorage(db)),
+			commands.RunCommand(db, envStorage),
 			commands.ListCommand(db),
 			commands.DeleteCommand(db),
 			commands.RenameCommand(db),
@@ -83,12 +79,12 @@ Quick Start:
 			commands.ShowCommand(db),
 			commands.ExportCommand(db),
 			commands.ImportCommand(db),
-			commands.EnvCommand(env.NewEnvStorage(db)),
+			commands.EnvCommand(envStorage),
 			commands.PasteCommand(db),
-			commands.CollectionCommand(db, env.NewEnvStorage(db)),
+			commands.CollectionCommand(db, envStorage),
 			commands.SequenceCommand(db),
 			commands.UpdateCommand(),
-			commands.TUICommand(db),
+			commands.ShellCommand(db, envStorage),
 			commands.CodegenCommand(db),
 			graphql.GraphQLCommand(db),
 		},

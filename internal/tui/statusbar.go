@@ -20,18 +20,25 @@ func NewStatusBar(app *App) *StatusBar {
 // View renders the status bar content
 func (s *StatusBar) View() string {
 	left := strings.Join([]string{
-		Style.FooterLabel.Render("ENV:"),
+		Style.FooterLabel.Render("env"),
 		Style.StatusEnv.Render(s.app.GetCurrentEnv()),
-		Style.FooterLabel.Render("| Requests:"),
+		Style.FooterLabel.Render("·"),
+		Style.FooterLabel.Render("req"),
 		Style.StatusCount.Render(fmt.Sprintf("%d", s.app.GetRequestCount())),
-		Style.FooterLabel.Render("| Tabs:"),
+		Style.FooterLabel.Render("·"),
+		Style.FooterLabel.Render("tabs"),
 		Style.FooterValue.Render(fmt.Sprintf("%d", s.app.TabCount())),
+		Style.FooterLabel.Render("·"),
+		Style.FooterLabel.Render("focus"),
+		Style.FooterValue.Render(s.focusLabel()),
 	}, " ")
 
 	right := strings.Join([]string{
+		Style.Hint.Render(s.contextHint()),
+		Style.FooterLabel.Render("·"),
 		Style.StatusVersion.Render(s.app.DisplayVersion()),
-		Style.FooterLabel.Render("|"),
-		Style.StatusState.Render(s.app.StateLabel()),
+		Style.FooterLabel.Render("·"),
+		Style.StatusState.Render(strings.ToLower(s.app.StateLabel())),
 	}, " ")
 
 	gap := s.app.width - lipgloss.Width(left) - lipgloss.Width(right)
@@ -40,4 +47,32 @@ func (s *StatusBar) View() string {
 	}
 
 	return left + strings.Repeat(" ", gap) + right
+}
+
+func (s *StatusBar) focusLabel() string {
+	switch s.app.focusedPanel {
+	case PanelSidebar:
+		return "requests"
+	case PanelMain:
+		return "editor"
+	case PanelResponse:
+		return "response"
+	default:
+		return "global"
+	}
+}
+
+func (s *StatusBar) contextHint() string {
+	switch {
+	case s.app.searchModal != nil || s.app.importModal != nil || s.app.runnerModal != nil || s.app.variablePrompt != nil || s.app.envSwitcherOpen || s.app.helpModal:
+		return "enter confirm · esc close"
+	case s.app.focusedPanel == PanelSidebar:
+		return "j/k move · enter open · h/r toggle"
+	case s.app.focusedPanel == PanelMain:
+		return "tab section · ctrl+s save · ctrl+enter send"
+	case s.app.focusedPanel == PanelResponse:
+		return "j/k scroll · b/h/c/t/d view · y copy"
+	default:
+		return "? help"
+	}
 }

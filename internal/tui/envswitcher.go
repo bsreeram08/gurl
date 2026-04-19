@@ -879,6 +879,60 @@ func Getenv(envName string, key string, envStorage *env.EnvStorage) (string, boo
 	return val, ok
 }
 
+// GetActiveEnv returns the active environment instance, if resolved.
+func (es *EnvSwitcher) GetActiveEnv() *env.Environment {
+	if es == nil {
+		return nil
+	}
+	if es.activeEnvName != "" {
+		envObj := es.GetEnvByName(es.activeEnvName)
+		if envObj != nil {
+			return envObj
+		}
+	}
+	if es.activeEnvID != "" {
+		if envObj := es.GetEnvByID(es.activeEnvID); envObj != nil {
+			return envObj
+		}
+	}
+	if es.cursor >= 0 && es.cursor < len(es.envs) {
+		return es.envs[es.cursor]
+	}
+	return nil
+}
+
+// GetEnvByName returns an environment by name.
+func (es *EnvSwitcher) GetEnvByName(name string) *env.Environment {
+	if es == nil || name == "" {
+		return nil
+	}
+	for _, e := range es.envs {
+		if e.Name == name {
+			return e
+		}
+	}
+	if es.envStorage != nil {
+		e, err := es.envStorage.GetEnvByName(name)
+		if err == nil {
+			return e
+		}
+	}
+	return nil
+}
+
+// GetActiveEnvVariables returns active environment variables.
+func (es *EnvSwitcher) GetActiveEnvVariables() map[string]string {
+	vars := make(map[string]string)
+	envObj := es.GetActiveEnv()
+	if envObj == nil {
+		return vars
+	}
+	for k, v := range envObj.Variables {
+		vars[k] = v
+	}
+	return vars
+}
+
 // ReadDotenvFile reads a .env file and returns the variables
 func ReadDotenvFile(path string) (map[string]string, error) {
 	return env.ParseDotenvFile(path)

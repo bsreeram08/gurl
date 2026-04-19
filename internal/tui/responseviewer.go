@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/atotto/clipboard"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atotto/clipboard"
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/formatter"
 	"github.com/sreeram/gurl/internal/protocols/sse"
@@ -104,7 +104,7 @@ func (rv *ResponseViewer) updateViewportContent() {
 	case rv.errMsg != "":
 		content = "Request failed:\n\n" + rv.errMsg
 	case rv.response == nil:
-		content = "Send a request to inspect the response here."
+		content = "Send a request to inspect the response body here."
 	default:
 		switch rv.activeTab {
 		case TabBody:
@@ -383,14 +383,14 @@ func (rv *ResponseViewer) View() tea.View {
 	if rv.errMsg != "" {
 		sb.WriteString(RenderStatusBadge("ERROR", 500))
 		sb.WriteString("\n")
-		sb.WriteString(Style.Hint.Render("Preview"))
+		sb.WriteString(Style.Hint.Render("Body"))
 		sb.WriteString("\n\n")
 		sb.WriteString(Style.PlainText.Render(rv.errMsg))
 		return tea.NewView(sb.String())
 	}
 
 	if rv.response == nil {
-		sb.WriteString(Style.WelcomeText.Render("Send a request to see the response"))
+		sb.WriteString(Style.WelcomeText.Render("Response pane is waiting"))
 		sb.WriteString("\n\n")
 		sb.WriteString(Style.Hint.Render("Ctrl+2 returns to the editor. Ctrl+Enter sends the active request."))
 		return tea.NewView(sb.String())
@@ -423,7 +423,7 @@ func (rv *ResponseViewer) View() tea.View {
 
 // renderTabBar renders the tab bar
 func (rv *ResponseViewer) renderTabBar() string {
-	tabs := []string{"Preview", "Headers", "Cookies", "Timing", "Diff"}
+	tabs := []string{"Body", "Headers", "Cookies", "Timing", "Diff"}
 	var sb strings.Builder
 
 	for i, tab := range tabs {

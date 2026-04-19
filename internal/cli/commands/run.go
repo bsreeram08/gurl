@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -18,7 +20,6 @@ import (
 	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/scripting"
 	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/internal/tui"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 )
@@ -95,9 +96,9 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 				if err != nil {
 					return fmt.Errorf("failed to list requests: %w", err)
 				}
-				chosen, err := tui.RunPicker(requests)
+				chosen, err := promptSelectRequest(bufio.NewReader(os.Stdin), os.Stdout, requests, "Run request by number or exact name: ")
 				if err != nil {
-					return fmt.Errorf("picker error: %w", err)
+					return fmt.Errorf("request selection failed: %w", err)
 				}
 				if chosen == "" {
 					return nil
@@ -441,7 +442,7 @@ func convertHeaders(headers []types.Header) []client.Header {
 	return result
 }
 
-func printResponse(out *os.File, method string, url string, resp client.Response, format string) error {
+func printResponse(out io.Writer, method string, url string, resp client.Response, format string) error {
 	if outputPlugin, found := outputPluginRegistry.GetOutputByFormat(format); found {
 		ctx := &plugins.ResponseContext{
 			Request: &client.Request{
@@ -450,7 +451,7 @@ func printResponse(out *os.File, method string, url string, resp client.Response
 			},
 			Response: &resp,
 		}
-		_, err := out.WriteString(outputPlugin.Render(ctx))
+		_, err := io.WriteString(out, outputPlugin.Render(ctx))
 		return err
 	}
 
@@ -466,7 +467,7 @@ func printResponse(out *os.File, method string, url string, resp client.Response
 		return err
 	case "table":
 		if tableOutput := formatter.FormatTableFromBytes(resp.Body); tableOutput != "" {
-			_, err := out.WriteString(tableOutput)
+			_, err := io.WriteString(out, tableOutput)
 			return err
 		}
 		_, err := out.Write(resp.Body)

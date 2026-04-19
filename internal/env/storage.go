@@ -10,14 +10,45 @@ import (
 )
 
 type EnvStorage struct {
-	db *storage.LMDB
+	db     *storage.LMDB
+	dbPath string
 }
 
 func NewEnvStorage(db *storage.LMDB) *EnvStorage {
-	return &EnvStorage{db: db}
+	dbPath := ""
+	if db != nil {
+		dbPath = db.Path()
+	}
+	return &EnvStorage{db: db, dbPath: dbPath}
+}
+
+func NewEnvStorageWithPath(dbPath string) *EnvStorage {
+	return &EnvStorage{dbPath: dbPath}
+}
+
+func (s *EnvStorage) openDB() (*storage.LMDB, func() error, error) {
+	if s.db != nil && s.db.DB != nil {
+		return s.db, func() error { return nil }, nil
+	}
+	if s.dbPath == "" {
+		return nil, nil, fmt.Errorf("environment storage database is not configured")
+	}
+
+	db := storage.NewLMDBWithPath(s.dbPath)
+	if err := db.Open(); err != nil {
+		return nil, nil, err
+	}
+
+	return db, db.Close, nil
 }
 
 func (s *EnvStorage) SaveEnv(env *Environment) error {
+	db, closeDB, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
 	if env.ID == "" {
 		env.ID = uuid.New().String()
 	}
@@ -43,12 +74,12 @@ func (s *EnvStorage) SaveEnv(env *Environment) error {
 	}
 
 	dbKey := fmt.Sprintf("env:%s", env.ID)
-	if err := s.db.DB.Put([]byte(dbKey), data, nil); err != nil {
+	if err := db.DB.Put([]byte(dbKey), data, nil); err != nil {
 		return fmt.Errorf("failed to save environment: %w", err)
 	}
 
 	nameKey := fmt.Sprintf("idx:env:name:%s", env.Name)
-	if err := s.db.DB.Put([]byte(nameKey), []byte(env.ID), nil); err != nil {
+	if err := db.DB.Put([]byte(nameKey), []byte(env.ID), nil); err != nil {
 		return fmt.Errorf("failed to update env name index: %w", err)
 	}
 
@@ -56,8 +87,18 @@ func (s *EnvStorage) SaveEnv(env *Environment) error {
 }
 
 func (s *EnvStorage) GetEnv(id string) (*Environment, error) {
+	db, closeDB, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer closeDB()
+
+	return s.getEnvWithDB(db, id)
+}
+
+func (s *EnvStorage) getEnvWithDB(db *storage.LMDB, id string) (*Environment, error) {
 	dbKey := fmt.Sprintf("env:%s", id)
-	data, err := s.db.DB.Get([]byte(dbKey), nil)
+	data, err := db.DB.Get([]byte(dbKey), nil)
 	if err != nil {
 		return nil, fmt.Errorf("environment not found: %s", id)
 	}
@@ -86,26 +127,38 @@ func (s *EnvStorage) GetEnv(id string) (*Environment, error) {
 }
 
 func (s *EnvStorage) DeleteEnv(id string) error {
-	env, err := s.GetEnv(id)
+	db, closeDB, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
+	env, err := s.getEnvWithDB(db, id)
 	if err != nil {
 		return err
 	}
 
 	key := fmt.Sprintf("env:%s", id)
-	if err := s.db.DB.Delete([]byte(key), nil); err != nil {
+	if err := db.DB.Delete([]byte(key), nil); err != nil {
 		return fmt.Errorf("failed to delete environment: %w", err)
 	}
 
 	nameKey := fmt.Sprintf("idx:env:name:%s", env.Name)
-	s.db.DB.Delete([]byte(nameKey), nil)
+	db.DB.Delete([]byte(nameKey), nil)
 
 	return nil
 }
 
 func (s *EnvStorage) ListEnvs() ([]*Environment, error) {
+	db, closeDB, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer closeDB()
+
 	var envs []*Environment
 
-	iter := s.db.DB.NewIterator(nil, nil)
+	iter := db.DB.NewIterator(nil, nil)
 	defer iter.Release()
 
 	for iter.Next() {
@@ -124,17 +177,29 @@ func (s *EnvStorage) ListEnvs() ([]*Environment, error) {
 }
 
 func (s *EnvStorage) GetEnvByName(name string) (*Environment, error) {
+	db, closeDB, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer closeDB()
+
 	nameKey := fmt.Sprintf("idx:env:name:%s", name)
-	idData, err := s.db.DB.Get([]byte(nameKey), nil)
+	idData, err := db.DB.Get([]byte(nameKey), nil)
 	if err != nil {
 		return nil, fmt.Errorf("environment not found: %s", name)
 	}
 
-	return s.GetEnv(string(idData))
+	return s.getEnvWithDB(db, string(idData))
 }
 
 func (s *EnvStorage) GetActiveEnv() (string, error) {
-	data, err := s.db.DB.Get([]byte("cfg:activeEnv"), nil)
+	db, closeDB, err := s.openDB()
+	if err != nil {
+		return "", err
+	}
+	defer closeDB()
+
+	data, err := db.DB.Get([]byte("cfg:activeEnv"), nil)
 	if err == leveldb.ErrNotFound {
 		return "", nil
 	}
@@ -145,13 +210,19 @@ func (s *EnvStorage) GetActiveEnv() (string, error) {
 }
 
 func (s *EnvStorage) SetActiveEnv(name string) error {
+	db, closeDB, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
 	if name == "" {
-		if err := s.db.DB.Delete([]byte("cfg:activeEnv"), nil); err != nil && err != leveldb.ErrNotFound {
+		if err := db.DB.Delete([]byte("cfg:activeEnv"), nil); err != nil && err != leveldb.ErrNotFound {
 			return fmt.Errorf("failed to clear active env: %w", err)
 		}
 		return nil
 	}
-	if err := s.db.DB.Put([]byte("cfg:activeEnv"), []byte(name), nil); err != nil {
+	if err := db.DB.Put([]byte("cfg:activeEnv"), []byte(name), nil); err != nil {
 		return fmt.Errorf("failed to set active env: %w", err)
 	}
 	return nil
