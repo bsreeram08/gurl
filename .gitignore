@@ -1,25 +1,18 @@
-# Binaries
-gurl
-gurl.exe
-dist/
+```
+# Dependencies
+vendor/
 
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-
-# Test coverage
+# Build artifacts
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.exe
 *.out
-coverage.txt
+
+# Go-specific
 *.test
-
-# Planning docs (local only)
-PLAN.md
-PRD.md
-.sisyphus/
-
-# Local tooling
-.claude/
-.factory/
+*.prof
+cover.out
+```
