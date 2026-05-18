@@ -5,7 +5,7 @@ weight: 1
 
 ## Prerequisites
 
-Gurl requires no runtime dependencies — it ships as a single static binary. Go is only needed if you are building from source (Go 1.26.3+).
+Gurl requires no runtime dependencies — it ships as a single static binary. Go is only needed if you are building from source (Go 1.25.0+, with Go 1.26.3 recommended as the development toolchain).
 
 ## Homebrew (macOS / Linux)
 
@@ -58,7 +58,7 @@ sudo mv gurl /usr/local/bin/gurl
 
 ## Install via Go
 
-For users with Go 1.26.3+ installed:
+For users with Go 1.25.0+ installed:
 
 ```bash
 go install github.com/sreeram/gurl/cmd/gurl@latest

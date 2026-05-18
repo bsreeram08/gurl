@@ -1,6 +1,8 @@
 module github.com/sreeram/gurl
 
-go 1.26.3
+go 1.25.0
+
+toolchain go1.26.3
 
 require (
 	charm.land/bubbles/v2 v2.1.0
