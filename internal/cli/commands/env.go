@@ -354,21 +354,29 @@ func parseEnvSetArgs(args cli.Args) ([]string, error) {
 		return nil, nil
 	}
 
-	if args.Len() == 2 {
-		pair := args.Get(1)
-		if !strings.Contains(pair, "=") {
-			return nil, fmt.Errorf("invalid env set syntax: expected KEY=VALUE or KEY VALUE after environment name")
-		}
-		return []string{pair}, nil
+	positional := make([]string, 0, args.Len()-1)
+	for i := 1; i < args.Len(); i++ {
+		positional = append(positional, args.Get(i))
 	}
 
-	if args.Len() == 3 {
-		key := args.Get(1)
+	allAssignments := true
+	for _, arg := range positional {
+		if !strings.Contains(arg, "=") {
+			allAssignments = false
+			break
+		}
+	}
+	if allAssignments {
+		return positional, nil
+	}
+
+	if len(positional) == 2 && !strings.Contains(positional[0], "=") {
+		key := positional[0]
 		if key == "" {
 			return nil, fmt.Errorf("invalid variable format: KEY cannot be empty")
 		}
-		return []string{key + "=" + args.Get(2)}, nil
+		return []string{key + "=" + positional[1]}, nil
 	}
 
-	return nil, fmt.Errorf("invalid env set syntax: expected 'env set <env> KEY=VALUE' or 'env set <env> KEY VALUE'")
+	return nil, fmt.Errorf("invalid env set syntax: expected 'env set <env> KEY=VALUE [KEY=VALUE...]' or 'env set <env> KEY VALUE'")
 }
