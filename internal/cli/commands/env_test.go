@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/sreeram/gurl/internal/env"
@@ -372,6 +373,38 @@ func TestEnvSet(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "sets variable from positional KEY=VALUE",
+			setup: func(db *mockEnvDB) {
+				helperCreateTestEnv(db, "dev", nil)
+			},
+			args:    []string{"set", "dev", "API_KEY=secret123"},
+			wantErr: false,
+		},
+		{
+			name: "sets multiple variables from positional KEY=VALUE args",
+			setup: func(db *mockEnvDB) {
+				helperCreateTestEnv(db, "dev", nil)
+			},
+			args:    []string{"set", "dev", "API_URL=https://api", "DEBUG=true"},
+			wantErr: false,
+		},
+		{
+			name: "sets variable from positional KEY VALUE",
+			setup: func(db *mockEnvDB) {
+				helperCreateTestEnv(db, "dev", nil)
+			},
+			args:    []string{"set", "dev", "API_KEY", "secret123"},
+			wantErr: false,
+		},
+		{
+			name: "rejects positional key without value",
+			setup: func(db *mockEnvDB) {
+				helperCreateTestEnv(db, "dev", nil)
+			},
+			args:    []string{"set", "dev", "API_KEY"},
+			wantErr: true,
+		},
+		{
 			name:    "fails when environment does not exist",
 			setup:   func(db *mockEnvDB) {},
 			args:    []string{"set", "nonexistent", "--var", "FOO=bar"},
@@ -401,6 +434,27 @@ func TestEnvSet(t *testing.T) {
 			}
 			if !tt.wantErr && err != nil {
 				t.Errorf("unexpected error: %v", err)
+			}
+			if !tt.wantErr && len(tt.args) >= 3 && strings.HasPrefix(tt.args[2], "API_KEY") {
+				env, err := db.GetEnvByName("dev")
+				if err != nil {
+					t.Fatalf("failed to fetch env: %v", err)
+				}
+				if got := env.Variables["API_KEY"]; got != "secret123" {
+					t.Errorf("expected API_KEY=secret123, got %q", got)
+				}
+			}
+			if !tt.wantErr && tt.name == "sets multiple variables from positional KEY=VALUE args" {
+				env, err := db.GetEnvByName("dev")
+				if err != nil {
+					t.Fatalf("failed to fetch env: %v", err)
+				}
+				if got := env.Variables["API_URL"]; got != "https://api" {
+					t.Errorf("expected API_URL=https://api, got %q", got)
+				}
+				if got := env.Variables["DEBUG"]; got != "true" {
+					t.Errorf("expected DEBUG=true, got %q", got)
+				}
 			}
 		})
 	}

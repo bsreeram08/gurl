@@ -8,7 +8,7 @@ import (
 
 	"github.com/sreeram/gurl/internal/assertions"
 	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/core/template"
+	"github.com/sreeram/gurl/internal/core/curl"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
@@ -219,23 +219,10 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 		RequestName: req.Name,
 	}
 
-	substitutedURL, err := template.Substitute(req.URL, vars)
+	clientReq, err := curl.BuildClientRequest(req, vars)
 	if err != nil {
-		result.Error = fmt.Sprintf("variable substitution failed for URL: %v", err)
+		result.Error = fmt.Sprintf("variable substitution failed: %v", err)
 		return result
-	}
-
-	substitutedBody, err := template.Substitute(req.Body, vars)
-	if err != nil {
-		result.Error = fmt.Sprintf("variable substitution failed for body: %v", err)
-		return result
-	}
-
-	clientReq := client.Request{
-		Method:  req.Method,
-		URL:     substitutedURL,
-		Headers: convertHeaders(req.Headers),
-		Body:    substitutedBody,
 	}
 
 	if req.Timeout != "" {

@@ -1,7 +1,7 @@
 # Gurl — Your API Workspace, in the Terminal
 
 [![Latest Release](https://img.shields.io/github/v/release/bsreeram08/gurl)](https://github.com/bsreeram08/gurl/releases/latest)
-[![Go Version](https://img.shields.io/badge/go-1.21%2B-blue)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/go-1.25.0%2B-blue)](https://go.dev)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ![gurl logo](assets/logo.jpg)

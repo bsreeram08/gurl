@@ -12,7 +12,7 @@ import (
 
 	"github.com/sreeram/gurl/internal/assertions"
 	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/core/template"
+	"github.com/sreeram/gurl/internal/core/curl"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/formatter"
 	"github.com/sreeram/gurl/internal/plugins"
@@ -164,12 +164,10 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 			return fmt.Errorf("circular chain detected: request '%s' visited 3 times", currentName)
 		}
 
-		substitutedURL, err := template.Substitute(req.URL, vars)
+		clientReq, err := curl.BuildClientRequest(req, vars)
 		if err != nil {
 			return fmt.Errorf("variable substitution failed: %w", err)
 		}
-
-		substitutedBody, _ := template.Substitute(req.Body, vars)
 
 		var timeout time.Duration
 		if timeoutStr := c.String("timeout"); timeoutStr != "" {
@@ -186,12 +184,6 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 			}
 		}
 
-		clientReq := client.Request{
-			Method:  req.Method,
-			URL:     substitutedURL,
-			Headers: convertHeaders(req.Headers),
-			Body:    substitutedBody,
-		}
 		if timeout > 0 {
 			clientReq.Timeout = timeout
 		}
@@ -221,7 +213,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 					}
 				}
 			}
-			resp.URL = substitutedURL
+			resp.URL = clientReq.URL
 			force := c.Bool("force")
 			if err := client.SaveToFile(&resp, outputPath, force); err != nil {
 				return fmt.Errorf("failed to save output: %w", err)
@@ -229,7 +221,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 		}
 
 		format := c.String("format")
-		if err := printResponse(os.Stdout, req.Method, substitutedURL, resp, format); err != nil {
+		if err := printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
 			return err
 		}
 
@@ -259,12 +251,10 @@ func executeSingleRequest(db storage.DB, name string, vars map[string]string, c 
 		return fmt.Errorf("request not found: %s", name)
 	}
 
-	substitutedURL, err := template.Substitute(req.URL, vars)
+	clientReq, err := curl.BuildClientRequest(req, vars)
 	if err != nil {
 		return fmt.Errorf("variable substitution failed: %w", err)
 	}
-
-	substitutedBody, _ := template.Substitute(req.Body, vars)
 
 	var timeout time.Duration
 	if timeoutStr := c.String("timeout"); timeoutStr != "" {
@@ -273,12 +263,6 @@ func executeSingleRequest(db storage.DB, name string, vars map[string]string, c 
 		timeout, _ = time.ParseDuration(req.Timeout)
 	}
 
-	clientReq := client.Request{
-		Method:  req.Method,
-		URL:     substitutedURL,
-		Headers: convertHeaders(req.Headers),
-		Body:    substitutedBody,
-	}
 	if timeout > 0 {
 		clientReq.Timeout = timeout
 	}
@@ -329,7 +313,7 @@ func executeSingleRequest(db storage.DB, name string, vars map[string]string, c 
 				}
 			}
 		}
-		resp.URL = substitutedURL
+		resp.URL = clientReq.URL
 		force := c.Bool("force")
 		if err := client.SaveToFile(&resp, outputPath, force); err != nil {
 			return fmt.Errorf("failed to save output: %w", err)
@@ -339,7 +323,7 @@ func executeSingleRequest(db storage.DB, name string, vars map[string]string, c 
 	}
 
 	format := c.String("format")
-	return printResponse(os.Stdout, clientReq.Method, substitutedURL, resp, format)
+	return printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format)
 }
 
 func executeDataDriven(ctx context.Context, db storage.DB, name string, baseVars map[string]string, c *cli.Command) error {
@@ -372,13 +356,11 @@ func executeDataDriven(ctx context.Context, db storage.DB, name string, baseVars
 			mergedVars[k] = v
 		}
 
-		substitutedURL, err := template.Substitute(req.URL, mergedVars)
+		clientReq, err := curl.BuildClientRequest(req, mergedVars)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Row %d: variable substitution failed for URL: %v\n", rowNum, err)
+			fmt.Fprintf(os.Stderr, "Row %d: variable substitution failed: %v\n", rowNum, err)
 			return nil
 		}
-
-		substitutedBody, _ := template.Substitute(req.Body, mergedVars)
 
 		var timeout time.Duration
 		if timeoutStr := c.String("timeout"); timeoutStr != "" {
@@ -395,12 +377,6 @@ func executeDataDriven(ctx context.Context, db storage.DB, name string, baseVars
 			}
 		}
 
-		clientReq := client.Request{
-			Method:  req.Method,
-			URL:     substitutedURL,
-			Headers: convertHeaders(req.Headers),
-			Body:    substitutedBody,
-		}
 		if timeout > 0 {
 			clientReq.Timeout = timeout
 		}

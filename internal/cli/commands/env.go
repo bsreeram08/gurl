@@ -49,16 +49,16 @@ func EnvCommand(db EnvStorage) *cli.Command {
 
 					newEnv := env.NewEnvironment(name, "")
 
-				for _, v := range c.StringSlice("var") {
-					parts := strings.SplitN(v, "=", 2)
-					if len(parts) != 2 {
-						return fmt.Errorf("invalid variable format '%s': must be KEY=VALUE", v)
+					for _, v := range c.StringSlice("var") {
+						parts := strings.SplitN(v, "=", 2)
+						if len(parts) != 2 {
+							return fmt.Errorf("invalid variable format '%s': must be KEY=VALUE", v)
+						}
+						if parts[0] == "" {
+							return fmt.Errorf("invalid variable format '%s': KEY cannot be empty", v)
+						}
+						newEnv.SetVariable(parts[0], parts[1])
 					}
-					if parts[0] == "" {
-						return fmt.Errorf("invalid variable format '%s': KEY cannot be empty", v)
-					}
-					newEnv.SetVariable(parts[0], parts[1])
-				}
 
 					for _, key := range c.StringSlice("secret") {
 						newEnv.SecretKeys[key] = true
@@ -117,13 +117,13 @@ func EnvCommand(db EnvStorage) *cli.Command {
 					}
 					name := args.Get(0)
 
-				env, err := db.GetEnvByName(name)
-				if err != nil {
-					return fmt.Errorf("failed to get environment '%s': %w", name, err)
-				}
-				if env == nil {
-					return fmt.Errorf("environment '%s' not found", name)
-				}
+					env, err := db.GetEnvByName(name)
+					if err != nil {
+						return fmt.Errorf("failed to get environment '%s': %w", name, err)
+					}
+					if env == nil {
+						return fmt.Errorf("environment '%s' not found", name)
+					}
 
 					if err := db.SetActiveEnv(name); err != nil {
 						return fmt.Errorf("failed to switch environment: %w", err)
@@ -144,13 +144,13 @@ func EnvCommand(db EnvStorage) *cli.Command {
 					}
 					name := args.Get(0)
 
-				env, err := db.GetEnvByName(name)
-				if err != nil {
-					return fmt.Errorf("failed to get environment '%s': %w", name, err)
-				}
-				if env == nil {
-					return fmt.Errorf("environment '%s' not found", name)
-				}
+					env, err := db.GetEnvByName(name)
+					if err != nil {
+						return fmt.Errorf("failed to get environment '%s': %w", name, err)
+					}
+					if env == nil {
+						return fmt.Errorf("environment '%s' not found", name)
+					}
 
 					if err := db.DeleteEnv(env.ID); err != nil {
 						return fmt.Errorf("failed to delete environment: %w", err)
@@ -171,13 +171,13 @@ func EnvCommand(db EnvStorage) *cli.Command {
 					}
 					name := args.Get(0)
 
-				env, err := db.GetEnvByName(name)
-				if err != nil {
-					return fmt.Errorf("failed to get environment '%s': %w", name, err)
-				}
-				if env == nil {
-					return fmt.Errorf("environment '%s' not found", name)
-				}
+					env, err := db.GetEnvByName(name)
+					if err != nil {
+						return fmt.Errorf("failed to get environment '%s': %w", name, err)
+					}
+					if env == nil {
+						return fmt.Errorf("environment '%s' not found", name)
+					}
 
 					fmt.Printf("Environment: %s\n", env.Name)
 					fmt.Printf("ID: %s\n", env.ID)
@@ -200,10 +200,9 @@ func EnvCommand(db EnvStorage) *cli.Command {
 				Usage: "Set a variable in an environment",
 				Flags: []cli.Flag{
 					&cli.StringSliceFlag{
-						Name:     "var",
-						Aliases:  []string{"v"},
-						Usage:    "Variable in KEY=VALUE format (can repeat)",
-						Required: true,
+						Name:    "var",
+						Aliases: []string{"v"},
+						Usage:   "Variable in KEY=VALUE format (can repeat); positional KEY=VALUE or KEY VALUE also supported",
 					},
 					&cli.StringSliceFlag{
 						Name:    "secret",
@@ -218,24 +217,34 @@ func EnvCommand(db EnvStorage) *cli.Command {
 					}
 					name := args.Get(0)
 
-				env, err := db.GetEnvByName(name)
-				if err != nil {
-					return fmt.Errorf("failed to get environment '%s': %w", name, err)
-				}
-				if env == nil {
-					return fmt.Errorf("environment '%s' not found", name)
-				}
+					env, err := db.GetEnvByName(name)
+					if err != nil {
+						return fmt.Errorf("failed to get environment '%s': %w", name, err)
+					}
+					if env == nil {
+						return fmt.Errorf("environment '%s' not found", name)
+					}
 
-				for _, v := range c.StringSlice("var") {
-					parts := strings.SplitN(v, "=", 2)
-					if len(parts) != 2 {
-						return fmt.Errorf("invalid variable format '%s': must be KEY=VALUE", v)
+					varPairs := c.StringSlice("var")
+					positionalPairs, err := parseEnvSetArgs(args)
+					if err != nil {
+						return err
 					}
-					if parts[0] == "" {
-						return fmt.Errorf("invalid variable format '%s': KEY cannot be empty", v)
+					varPairs = append(varPairs, positionalPairs...)
+					if len(varPairs) == 0 && len(c.StringSlice("secret")) == 0 {
+						return fmt.Errorf("variable is required: use --var KEY=VALUE, KEY=VALUE, or KEY VALUE")
 					}
-					env.SetVariable(parts[0], parts[1])
-				}
+
+					for _, v := range varPairs {
+						parts := strings.SplitN(v, "=", 2)
+						if len(parts) != 2 {
+							return fmt.Errorf("invalid variable format '%s': must be KEY=VALUE", v)
+						}
+						if parts[0] == "" {
+							return fmt.Errorf("invalid variable format '%s': KEY cannot be empty", v)
+						}
+						env.SetVariable(parts[0], parts[1])
+					}
 
 					for _, key := range c.StringSlice("secret") {
 						env.SecretKeys[key] = true
@@ -313,16 +322,16 @@ func EnvCommand(db EnvStorage) *cli.Command {
 						return fmt.Errorf("failed to parse .env file: %w", err)
 					}
 
-				envObj, err := db.GetEnvByName(name)
-				if err != nil && envObj == nil {
-					// Only create new if error indicates not found, not other errors
-					envObj = env.NewEnvironment(name, "")
-				} else if err != nil {
-					return fmt.Errorf("failed to get environment: %w", err)
-				}
-				if envObj == nil {
-					envObj = env.NewEnvironment(name, "")
-				}
+					envObj, err := db.GetEnvByName(name)
+					if err != nil && envObj == nil {
+						// Only create new if error indicates not found, not other errors
+						envObj = env.NewEnvironment(name, "")
+					} else if err != nil {
+						return fmt.Errorf("failed to get environment: %w", err)
+					}
+					if envObj == nil {
+						envObj = env.NewEnvironment(name, "")
+					}
 
 					for k, v := range vars {
 						envObj.SetVariable(k, v)
@@ -338,4 +347,36 @@ func EnvCommand(db EnvStorage) *cli.Command {
 			},
 		},
 	}
+}
+
+func parseEnvSetArgs(args cli.Args) ([]string, error) {
+	if args.Len() <= 1 {
+		return nil, nil
+	}
+
+	positional := make([]string, 0, args.Len()-1)
+	for i := 1; i < args.Len(); i++ {
+		positional = append(positional, args.Get(i))
+	}
+
+	allAssignments := true
+	for _, arg := range positional {
+		if !strings.Contains(arg, "=") {
+			allAssignments = false
+			break
+		}
+	}
+	if allAssignments {
+		return positional, nil
+	}
+
+	if len(positional) == 2 && !strings.Contains(positional[0], "=") {
+		key := positional[0]
+		if key == "" {
+			return nil, fmt.Errorf("invalid variable format: KEY cannot be empty")
+		}
+		return []string{key + "=" + positional[1]}, nil
+	}
+
+	return nil, fmt.Errorf("invalid env set syntax: expected 'env set <env> KEY=VALUE [KEY=VALUE...]' or 'env set <env> KEY VALUE'")
 }

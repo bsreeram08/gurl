@@ -20,8 +20,8 @@ func newMockDB() *mockDB {
 	}
 }
 
-func (m *mockDB) Open() error         { return nil }
-func (m *mockDB) Close() error       { return nil }
+func (m *mockDB) Open() error  { return nil }
+func (m *mockDB) Close() error { return nil }
 func (m *mockDB) SaveRequest(req *types.SavedRequest) error {
 	if req.ID == "" {
 		req.ID = "test-id-1"
@@ -50,6 +50,9 @@ func (m *mockDB) GetRequestByName(name string) (*types.SavedRequest, error) {
 func (m *mockDB) ListRequests(opts *storage.ListOptions) ([]*types.SavedRequest, error) {
 	var result []*types.SavedRequest
 	for _, req := range m.requests {
+		if opts != nil && opts.Collection != "" && req.Collection != opts.Collection {
+			continue
+		}
 		result = append(result, req)
 	}
 	return result, nil

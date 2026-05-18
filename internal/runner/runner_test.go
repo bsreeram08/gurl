@@ -600,6 +600,54 @@ func TestRunner_EmptyCollection(t *testing.T) {
 	}
 }
 
+func TestRunner_SubstitutesHeadersAndBody(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	var gotHeader string
+	var gotBody map[string]string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("x-surfboard-merchant-id")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("failed to decode request body: %v", err)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-template",
+		Name:       "templated",
+		URL:        ts.URL,
+		Method:     "POST",
+		Collection: "api",
+		Headers: []types.Header{
+			{Key: "x-surfboard-merchant-id", Value: "{{MERCHANT_ID}}"},
+			{Key: "Content-Type", Value: "application/json"},
+		},
+		Body: `{"merchantId":"{{MERCHANT_ID}}"}`,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{
+		CollectionName: "api",
+		Vars:           map[string]string{"MERCHANT_ID": "merchant-123"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results[0].Failed != 0 {
+		t.Fatalf("expected collection run to pass, got result: %+v", results[0])
+	}
+	if gotHeader != "merchant-123" {
+		t.Errorf("expected substituted header, got %q", gotHeader)
+	}
+	if gotBody["merchantId"] != "merchant-123" {
+		t.Errorf("expected substituted body, got %#v", gotBody)
+	}
+}
+
 func TestRunner_ConvertHeaders(t *testing.T) {
 	headers := []types.Header{
 		{Key: "Content-Type", Value: "application/json"},

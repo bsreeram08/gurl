@@ -13,7 +13,7 @@ import (
 )
 
 func ExecuteCurl(request *types.SavedRequest, vars map[string]string) (*types.ExecutionHistory, error) {
-	clientReq, err := buildClientRequest(request, vars)
+	clientReq, err := BuildClientRequest(request, vars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build request: %w", err)
 	}
@@ -45,7 +45,7 @@ func ExecuteCurl(request *types.SavedRequest, vars map[string]string) (*types.Ex
 	}, nil
 }
 
-func buildClientRequest(request *types.SavedRequest, vars map[string]string) (client.Request, error) {
+func BuildClientRequest(request *types.SavedRequest, vars map[string]string) (client.Request, error) {
 	url, err := template.Substitute(request.URL, vars)
 	if err != nil {
 		return client.Request{}, fmt.Errorf("failed to substitute URL variables: %w", err)
@@ -146,7 +146,7 @@ func generateID() string {
 }
 
 func ExecuteCurlWithOutput(request *types.SavedRequest, vars map[string]string) (string, int, int64, error) {
-	clientReq, err := buildClientRequest(request, vars)
+	clientReq, err := BuildClientRequest(request, vars)
 	if err != nil {
 		return "", 0, 0, fmt.Errorf("failed to build request: %w", err)
 	}

@@ -77,12 +77,12 @@ Aliases: `display`, `view`
 Set a variable in an environment.
 
 ```bash
-gurl env set [name] [flags]
+gurl env set [name] [KEY=VALUE|KEY VALUE] [flags]
 ```
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--var` | `-v` | none | Variable as `KEY=VALUE` |
+| `--var` | `-v` | none | Variable as `KEY=VALUE` (can repeat) |
 | `--secret` | `-s` | none | Secret variable |
 
 ### unset
@@ -127,13 +127,16 @@ gurl env create staging --var "API_URL=https://staging.example.com" --var "DEBUG
 
 Creates staging environment with variables.
 
-### Set a secret
+### Set variables
 
 ```bash
-gurl env set production --secret "API_KEY"
+gurl env set production API_KEY "sk-prod-123"
+gurl env set production API_URL=https://api.example.com
+gurl env set production API_URL=https://api.example.com DEBUG=false
+gurl env set production --var "TIMEOUT=30"
 ```
 
-Sets a secret variable (prompts for value).
+Sets variables in an existing environment. Positional `KEY VALUE`, positional `KEY=VALUE`, repeated positional `KEY=VALUE`, and repeated `--var KEY=VALUE` forms are supported.
 
 ### Switch environment
 

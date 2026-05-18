@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/sreeram/gurl/pkg/types"
@@ -179,6 +180,42 @@ func TestSaveCommand(t *testing.T) {
 			},
 		},
 		{
+			name:    "saves direct URL using --name flag",
+			args:    []string{"--name", "named_request", "https://api.example.com"},
+			wantErr: false,
+			checkFn: func(t *testing.T, db *mockDB) {
+				req, err := db.GetRequestByName("named_request")
+				if err != nil {
+					t.Fatalf("expected request saved under --name value: %v", err)
+				}
+				if req.URL != "https://api.example.com" {
+					t.Errorf("expected URL from positional argument, got %q", req.URL)
+				}
+			},
+		},
+		{
+			name:    "saves flag-based request using --name flag",
+			args:    []string{"--name", "create_order", "-X", "POST", "-H", "Content-Type: application/json", "-d", `{"ok":true}`, "https://api.example.com/orders"},
+			wantErr: false,
+			checkFn: func(t *testing.T, db *mockDB) {
+				req, err := db.GetRequestByName("create_order")
+				if err != nil {
+					t.Fatalf("expected request saved under --name value: %v", err)
+				}
+				if req.URL != "https://api.example.com/orders" {
+					t.Errorf("expected URL from positional argument, got %q", req.URL)
+				}
+				if req.Method != "POST" {
+					t.Errorf("expected POST method, got %q", req.Method)
+				}
+			},
+		},
+		{
+			name:    "rejects extra positional args when --name is set",
+			args:    []string{"--name", "named_request", "https://api.example.com", "extra"},
+			wantErr: true,
+		},
+		{
 			name:    "saves with multiple -H flags",
 			args:    []string{"multi_header", "-X", "POST", "-H", "Content-Type: application/json", "-H", "Accept: text/plain", "https://multi-header.example.com"},
 			wantErr: false,
@@ -217,5 +254,22 @@ func TestSaveCommand(t *testing.T) {
 				tt.checkFn(t, db)
 			}
 		})
+	}
+}
+
+func TestSaveCommandConfirmationUsesSavedNameAndURL(t *testing.T) {
+	db := newMockDB()
+	cmd := SaveCommand(db)
+
+	output := captureStdout(t, func() {
+		err := cmd.Run(context.Background(), []string{"save", "--name", "foo", "https://example.com"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	want := "✓ Saved request 'foo' (https://example.com)"
+	if !strings.Contains(output, want) {
+		t.Errorf("expected confirmation %q, got %q", want, output)
 	}
 }

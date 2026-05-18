@@ -39,6 +39,16 @@ gurl collection add [name]
 
 Aliases: `create`, `new`
 
+### show
+
+Show requests in a collection.
+
+```bash
+gurl collection show [name]
+```
+
+Aliases: `view`, `info`
+
 ### remove
 
 Delete a collection.
@@ -84,6 +94,14 @@ gurl collection rename "api" "api-v3"
 ```
 
 Renames "api" to "api-v3".
+
+### Show a collection
+
+```bash
+gurl collection show "api-v2"
+```
+
+Shows each request in the collection with method and URL.
 
 ### Delete a collection
 
