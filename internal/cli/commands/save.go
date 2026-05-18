@@ -72,10 +72,11 @@ func SaveCommand(db storage.DB) *cli.Command {
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
+			nameFlag := c.String("name")
 
 			// Mode 1: --curl flag provided
 			if curlFlag := c.String("curl"); curlFlag != "" {
-				name := c.String("name")
+				name := nameFlag
 				if name == "" {
 					name = c.String("description")
 				}
@@ -108,19 +109,15 @@ func SaveCommand(db storage.DB) *cli.Command {
 					return fmt.Errorf("failed to save request: %w", err)
 				}
 
-				fmt.Printf("✓ Saved request '%s'\n", name)
+				printSaveConfirmation(name, req.URL)
 				return nil
 			}
 
 			// Mode 2: Individual flags (-X, -H, -d) provided
 			if c.String("X") != "" || len(c.StringSlice("H")) > 0 || c.String("d") != "" {
-				if args.Len() < 1 {
-					return fmt.Errorf("name and URL arguments are required")
-				}
-				name := args.Get(0)
-				url := ""
-				if args.Len() >= 2 {
-					url = args.Get(1)
+				name, url, err := resolveSaveNameAndURL(args, nameFlag)
+				if err != nil {
+					return err
 				}
 
 				method := c.String("X")
@@ -140,16 +137,16 @@ func SaveCommand(db storage.DB) *cli.Command {
 				}
 
 				req := &types.SavedRequest{
-					Name:         name,
-					URL:          url,
-					Method:       method,
-					Headers:      headerList,
-					Body:         c.String("d"),
-					Tags:         c.StringSlice("tag"),
-					Collection:   c.String("collection"),
-					Folder:       c.String("folder"),
-					CreatedAt:    time.Now().Unix(),
-					UpdatedAt:    time.Now().Unix(),
+					Name:       name,
+					URL:        url,
+					Method:     method,
+					Headers:    headerList,
+					Body:       c.String("d"),
+					Tags:       c.StringSlice("tag"),
+					Collection: c.String("collection"),
+					Folder:     c.String("folder"),
+					CreatedAt:  time.Now().Unix(),
+					UpdatedAt:  time.Now().Unix(),
 				}
 				format := c.String("format")
 				if format != "auto" && format != "json" && format != "table" {
@@ -161,7 +158,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 					return fmt.Errorf("failed to save request: %w", err)
 				}
 
-				fmt.Printf("✓ Saved request '%s'\n", name)
+				printSaveConfirmation(name, req.URL)
 				return nil
 			}
 
@@ -181,7 +178,10 @@ func SaveCommand(db storage.DB) *cli.Command {
 					return fmt.Errorf("failed to parse curl from stdin: %w", err)
 				}
 
-				name := generateNameFromURL(parsed.URL)
+				name := nameFlag
+				if name == "" {
+					name = generateNameFromURL(parsed.URL)
+				}
 				req := types.ParsedCurlToSavedRequest(*parsed)
 				req.Name = name
 				req.ID = fmt.Sprintf("saved-%d", time.Now().UnixNano())
@@ -200,16 +200,15 @@ func SaveCommand(db storage.DB) *cli.Command {
 					return fmt.Errorf("failed to save request: %w", err)
 				}
 
-				fmt.Printf("✓ Saved request '%s'\n", name)
+				printSaveConfirmation(name, req.URL)
 				return nil
 			}
 
 			// Mode 4: Original behavior - name + URL as positional args (GET request)
-			if args.Len() < 2 {
-				return fmt.Errorf("name and URL arguments are required")
+			name, url, err := resolveSaveNameAndURL(args, nameFlag)
+			if err != nil {
+				return err
 			}
-			name := args.Get(0)
-			url := args.Get(1)
 
 			req := &types.SavedRequest{
 				Name:         name,
@@ -227,8 +226,33 @@ func SaveCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("failed to save request: %w", err)
 			}
 
-			fmt.Printf("✓ Saved request '%s'\n", name)
+			printSaveConfirmation(name, req.URL)
 			return nil
 		},
 	}
+}
+
+func printSaveConfirmation(name string, url string) {
+	if url != "" {
+		fmt.Printf("✓ Saved request '%s' (%s)\n", name, url)
+		return
+	}
+	fmt.Printf("✓ Saved request '%s'\n", name)
+}
+
+func resolveSaveNameAndURL(args cli.Args, nameFlag string) (string, string, error) {
+	if nameFlag != "" {
+		if args.Len() != 1 {
+			return "", "", fmt.Errorf("URL argument is required when using --name (usage: gurl save --name <name> <url>)")
+		}
+		return nameFlag, args.Get(0), nil
+	}
+
+	if args.Len() < 2 {
+		return "", "", fmt.Errorf("name and URL arguments are required")
+	}
+	if args.Len() > 2 {
+		return "", "", fmt.Errorf("too many arguments: expected name and URL")
+	}
+	return args.Get(0), args.Get(1), nil
 }
