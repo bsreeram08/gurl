@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/sreeram/gurl/internal/env"
@@ -20,6 +21,49 @@ func CollectionCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 		Usage:   "Manage collections",
 		Commands: []*cli.Command{
 			runner.CollectionRunCommand(db, envStorage),
+			{
+				Name:    "show",
+				Aliases: []string{"view", "info"},
+				Usage:   "Show requests in a collection",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					args := c.Args()
+					if args.Len() < 1 {
+						return fmt.Errorf("collection name argument is required")
+					}
+					name := args.Get(0)
+
+					requests, err := db.ListRequests(&storage.ListOptions{Collection: name})
+					if err != nil {
+						return fmt.Errorf("failed to list collection: %w", err)
+					}
+					if len(requests) == 0 {
+						return fmt.Errorf("collection '%s' not found or empty", name)
+					}
+
+					sort.SliceStable(requests, func(i, j int) bool {
+						if requests[i].SortOrder != requests[j].SortOrder {
+							return requests[i].SortOrder < requests[j].SortOrder
+						}
+						return requests[i].Name < requests[j].Name
+					})
+
+					fmt.Printf("Collection: %s\n", name)
+					fmt.Printf("Requests:   %d\n\n", len(requests))
+					for _, req := range requests {
+						method := req.Method
+						if method == "" {
+							method = "GET"
+						}
+						fmt.Printf("- %s\n", req.Name)
+						fmt.Printf("  Method: %s\n", method)
+						fmt.Printf("  URL:    %s\n", req.URL)
+						if req.Folder != "" {
+							fmt.Printf("  Folder: %s\n", req.Folder)
+						}
+					}
+					return nil
+				},
+			},
 			{
 				Name:    "list",
 				Aliases: []string{"ls", "l"},

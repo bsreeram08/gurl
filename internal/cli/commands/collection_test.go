@@ -1,7 +1,11 @@
 package commands
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/sreeram/gurl/internal/env"
@@ -66,6 +70,57 @@ func TestCollectionListCommand(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCollectionShowCommand(t *testing.T) {
+	db := newMockDB()
+	db.requests["req-1"] = &types.SavedRequest{
+		ID:         "req-1",
+		Name:       "get-user",
+		URL:        "https://example.com/users/1",
+		Method:     "GET",
+		Collection: "api",
+		UpdatedAt:  1700000000,
+	}
+	db.names["get-user"] = "req-1"
+
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	output := captureStdout(t, func() {
+		err := cmd.Run(context.Background(), []string{"collection", "show", "api"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "Collection: api") {
+		t.Errorf("expected collection name in output, got %q", output)
+	}
+	if !strings.Contains(output, "get-user") || !strings.Contains(output, "https://example.com/users/1") {
+		t.Errorf("expected request details in output, got %q", output)
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close writer: %v", err)
+	}
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("failed to read stdout: %v", err)
+	}
+	return buf.String()
 }
 
 func TestCollectionAddCommand(t *testing.T) {
