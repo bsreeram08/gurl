@@ -90,11 +90,13 @@ func NewExecutionHistory(requestID string, response string, statusCode int, dura
 
 // Collection represents a collection of requests
 type Collection struct {
-	ID         string      `json:"id"`
-	Name       string      `json:"name"`
-	AuthConfig *AuthConfig `json:"auth_config,omitempty"`
-	CreatedAt  int64       `json:"created_at"`
-	UpdatedAt  int64       `json:"updated_at"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	AuthConfig *AuthConfig       `json:"auth_config,omitempty"`
+	Variables  map[string]string `json:"variables,omitempty"`
+	SecretKeys map[string]bool   `json:"secret_keys,omitempty"`
+	CreatedAt  int64             `json:"created_at"`
+	UpdatedAt  int64             `json:"updated_at"`
 }
 
 // Config represents the application configuration

@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased] - P2 Assertions on Extracted Values
+
+### Added
+- **Assertions on extracted variables** (`--assert "extract:orderId != ''"`)
+  - New `extract:varName` field prefix in assertions engine
+  - Validates values previously extracted via `--extract` or collection chaining
+  - Works with all existing operators (`=`, `!=`, `exists`, `contains`, numeric, regex)
+- **Collection env/secret foundation**
+  - Extended `types.Collection` with `Variables` + `SecretKeys` (parallel to Environment)
+  - DB interface extended with `SaveCollection`/`GetCollection`/`ListCollections`
+
+### Changed
+- `assertions.Evaluator.Evaluate()` now accepts optional `extractedVars` map for cross-step validation
+
+Refs: API flow testing PRD (P0/P2)
+
 ## [v0.1.22] - 2026-04-18
 
 ### Bug Fixes

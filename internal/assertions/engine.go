@@ -37,18 +37,18 @@ func NewEvaluator() *Evaluator {
 }
 
 // Evaluate runs all assertions against a response and returns all results.
-func (e *Evaluator) Evaluate(resp *client.Response, assertions []Assertion) []Result {
+func (e *Evaluator) Evaluate(resp *client.Response, assertions []Assertion, extractedVars map[string]string) []Result {
 	results := make([]Result, 0, len(assertions))
 	for _, assertion := range assertions {
-		result := e.evaluateSingle(resp, assertion)
+		result := e.evaluateSingle(resp, assertion, extractedVars)
 		results = append(results, result)
 	}
 	return results
 }
 
 // evaluateSingle evaluates a single assertion.
-func (e *Evaluator) evaluateSingle(resp *client.Response, assertion Assertion) Result {
-	actual, err := e.extractField(resp, assertion.Field)
+func (e *Evaluator) evaluateSingle(resp *client.Response, assertion Assertion, extractedVars map[string]string) Result {
+	actual, err := e.extractField(resp, assertion.Field, extractedVars)
 	if err != nil {
 		return Result{
 			Assertion: assertion,
@@ -71,7 +71,18 @@ func (e *Evaluator) evaluateSingle(resp *client.Response, assertion Assertion) R
 }
 
 // extractField extracts the value of a field from the response.
-func (e *Evaluator) extractField(resp *client.Response, field string) (string, error) {
+func (e *Evaluator) extractField(resp *client.Response, field string, extractedVars map[string]string) (string, error) {
+	// Handle extract: prefix (P2: assertions on extracted values)
+	if strings.HasPrefix(field, "extract:") {
+		varName := strings.TrimPrefix(field, "extract:")
+		varName = strings.Trim(varName, `"'`)
+		if extractedVars != nil {
+			if val, ok := extractedVars[varName]; ok {
+				return val, nil
+			}
+		}
+		return "", nil // not found → empty (for exists/!= '' checks)
+	}
 	// Handle headers.{name} syntax
 	if strings.HasPrefix(field, "headers.") {
 		headerName := strings.TrimPrefix(field, "headers.")
