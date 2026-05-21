@@ -280,7 +280,7 @@ func executeSingleRequest(db storage.DB, name string, vars map[string]string, c 
 			return fmt.Errorf("failed to parse assertions: %w", err)
 		}
 		evaluator := assertions.NewEvaluator()
-		results := evaluator.Evaluate(&resp, asserts, nil)
+		results := evaluator.Evaluate(&resp, asserts, map[string]string{})
 		summary := assertions.Summarize(results)
 
 		fmt.Fprintf(os.Stderr, "\n=== Assertions: %d passed, %d failed ===\n", summary.Passed, summary.Failed)
