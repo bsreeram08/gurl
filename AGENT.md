@@ -177,3 +177,15 @@ go build -ldflags="-X main.version=v0.1.19" -o gurl ./cmd/gurl
 5. **Context propagation** - all I/O operations must respect context cancellation
 6. **Bubbletea v2 API** - uses `charm.land/bubbletea/v2`, `charm.land/bubbles/v2`, `charm.land/lipgloss/v2`. View() methods return `tea.View` (struct), not `string`. Alt screen via `v.AltScreen = true` on the View struct
 7. **Secrets** - environment secrets are AES-256-GCM encrypted at rest
+
+
+## Recent Additions (May 2026)
+
+### P0/P2: Response Variable Extraction & Assertions on Extracts
+
+- New `Extract` type + `SavedRequest.Extracts` field
+- `internal/extract` package supports `jsonpath:`, `header:`, `regex:`, `jq:`
+- Assertions now support `extract:varName` syntax
+- Foundation for collection run chaining
+
+Update README.md and AGENT.md when changing extraction/assertion behavior.

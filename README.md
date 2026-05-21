@@ -44,7 +44,7 @@ Import from Postman. Run with environments. Assert on responses. Generate client
 - **Auth handlers** — Basic, Bearer, API Key, Digest, OAuth 1/2, AWS SigV4, NTLM
 - **Protocols** — HTTP, GraphQL, gRPC, WebSocket, SSE
 - **Scripting** — JavaScript pre/post-request hooks via goja runtime
-- **Assertions** — assert on status, headers, and body (JSON path, XPath)
+- **Assertions** — assert on status, headers, body, and extracted variables (`extract:varName`)
 - **Collection runner** — data-driven testing with CSV/JSON input
 - **Code generation** — generate curl, Go, Python, JavaScript from any saved request
 - **Interactive TUI** — full bubbletea interface for browsing and running requests
