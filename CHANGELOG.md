@@ -1,5 +1,25 @@
 # Changelog
 
+## [v0.1.23] - 2026-05-21
+
+### Added
+- **P0: Response Variable Extraction** (`--extract`)
+  - New `Extract` type and `SavedRequest.Extracts` field
+  - `internal/extract` package with support for `jsonpath:`, `header:`, `regex:`, and `jq:`
+- **P2: Assertions on Extracted Values**
+  - New `extract:varName` syntax in `--assert` (e.g. `--assert "extract:orderId != ''"`)
+  - Works with all existing operators
+- **Collection environment/secret foundation**
+  - Extended `types.Collection` with `Variables` + `SecretKeys`
+
+### Changed
+- `assertions.Evaluator.Evaluate()` now accepts `extractedVars` map
+
+### Docs
+- Updated README.md and AGENT.md
+
+Refs: API flow testing PRD
+
 ## [v0.1.22] - 2026-04-18
 
 ### Bug Fixes

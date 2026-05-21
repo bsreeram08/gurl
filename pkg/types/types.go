@@ -18,6 +18,12 @@ type Header struct {
 	Value string `json:"value"`
 }
 
+// Extract defines a variable extraction rule from a response
+type Extract struct {
+	Name   string `json:"name"`
+	Source string `json:"source"` // jsonpath:$.id, header:X-Request-Id, regex:..., jq:
+}
+
 // Var represents a variable in a template
 type Var struct {
 	Name    string `json:"name"`
@@ -57,6 +63,7 @@ type SavedRequest struct {
 	AuthConfig   *AuthConfig `json:"auth_config,omitempty"`
 	Timeout      string      `json:"timeout,omitempty"`
 	Assertions   []Assertion `json:"assertions,omitempty"`
+	Extracts     []Extract   `json:"extracts,omitempty"`
 	Folder       string      `json:"folder,omitempty"`
 	Protocol     string      `json:"protocol,omitempty"`
 	SortOrder    int         `json:"sort_order"`
@@ -90,11 +97,13 @@ func NewExecutionHistory(requestID string, response string, statusCode int, dura
 
 // Collection represents a collection of requests
 type Collection struct {
-	ID         string      `json:"id"`
-	Name       string      `json:"name"`
-	AuthConfig *AuthConfig `json:"auth_config,omitempty"`
-	CreatedAt  int64       `json:"created_at"`
-	UpdatedAt  int64       `json:"updated_at"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	AuthConfig *AuthConfig       `json:"auth_config,omitempty"`
+	Variables  map[string]string `json:"variables,omitempty"`
+	SecretKeys map[string]bool   `json:"secret_keys,omitempty"`
+	CreatedAt  int64             `json:"created_at"`
+	UpdatedAt  int64             `json:"updated_at"`
 }
 
 // Config represents the application configuration

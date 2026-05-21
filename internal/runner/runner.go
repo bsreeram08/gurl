@@ -246,7 +246,7 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 	}
 
 	if len(req.Assertions) > 0 {
-		assertResults := r.eval.Evaluate(&resp, convertAssertions(req.Assertions))
+		assertResults := r.eval.Evaluate(&resp, convertAssertions(req.Assertions), map[string]string{})
 		result.AssertionResults = assertResults
 
 		allPassed := true
