@@ -18,6 +18,12 @@ type Header struct {
 	Value string `json:"value"`
 }
 
+// Extract defines a variable extraction rule from a response
+type Extract struct {
+	Name   string `json:"name"`
+	Source string `json:"source"` // jsonpath:$.id, header:X-Request-Id, regex:..., jq:
+}
+
 // Var represents a variable in a template
 type Var struct {
 	Name    string `json:"name"`
@@ -27,37 +33,9 @@ type Var struct {
 
 // Assertion represents a declarative assertion to evaluate against a response.
 type Assertion struct {
-
-// Extract defines a variable extraction rule from response
-type Extract struct {
-	Name   string `json:"name"`
-	Source string `json:"source"`  // jsonpath:$.id, header:X-Request-Id, regex:..., jq:
-}
-
 	Field string `json:"field"`
-
-// Extract defines a variable extraction rule from response
-type Extract struct {
-	Name   string `json:"name"`
-	Source string `json:"source"`  // jsonpath:$.id, header:X-Request-Id, regex:..., jq:
-}
-
 	Op    string `json:"op"`
-
-// Extract defines a variable extraction rule from response
-type Extract struct {
-	Name   string `json:"name"`
-	Source string `json:"source"`  // jsonpath:$.id, header:X-Request-Id, regex:..., jq:
-}
-
 	Value string `json:"value"`
-
-// Extract defines a variable extraction rule from response
-type Extract struct {
-	Name   string `json:"name"`
-	Source string `json:"source"`  // jsonpath:$.id, header:X-Request-Id, regex:..., jq:
-}
-
 }
 
 // ParsedCurl represents a parsed curl command
