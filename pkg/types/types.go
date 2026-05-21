@@ -27,9 +27,37 @@ type Var struct {
 
 // Assertion represents a declarative assertion to evaluate against a response.
 type Assertion struct {
+
+// Extract defines a variable extraction rule from response
+type Extract struct {
+	Name   string `json:"name"`
+	Source string `json:"source"`  // jsonpath:$.id, header:X-Request-Id, regex:..., jq:
+}
+
 	Field string `json:"field"`
+
+// Extract defines a variable extraction rule from response
+type Extract struct {
+	Name   string `json:"name"`
+	Source string `json:"source"`  // jsonpath:$.id, header:X-Request-Id, regex:..., jq:
+}
+
 	Op    string `json:"op"`
+
+// Extract defines a variable extraction rule from response
+type Extract struct {
+	Name   string `json:"name"`
+	Source string `json:"source"`  // jsonpath:$.id, header:X-Request-Id, regex:..., jq:
+}
+
 	Value string `json:"value"`
+
+// Extract defines a variable extraction rule from response
+type Extract struct {
+	Name   string `json:"name"`
+	Source string `json:"source"`  // jsonpath:$.id, header:X-Request-Id, regex:..., jq:
+}
+
 }
 
 // ParsedCurl represents a parsed curl command
@@ -57,6 +85,7 @@ type SavedRequest struct {
 	AuthConfig   *AuthConfig `json:"auth_config,omitempty"`
 	Timeout      string      `json:"timeout,omitempty"`
 	Assertions   []Assertion `json:"assertions,omitempty"`
+	Extracts     []Extract   `json:"extracts,omitempty"`
 	Folder       string      `json:"folder,omitempty"`
 	Protocol     string      `json:"protocol,omitempty"`
 	SortOrder    int         `json:"sort_order"`
