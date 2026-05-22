@@ -913,15 +913,8 @@ func (m *App) missingTemplateVars(req *types.SavedRequest, provided map[string]s
 	}
 
 	if req.AuthConfig != nil {
-		switch req.AuthConfig.Type {
-		case "basic":
-			appendNames(template.ExtractVarNames(req.AuthConfig.Params["username"]))
-			appendNames(template.ExtractVarNames(req.AuthConfig.Params["password"]))
-		case "bearer":
-			appendNames(template.ExtractVarNames(req.AuthConfig.Params["token"]))
-		case "apikey":
-			appendNames(template.ExtractVarNames(req.AuthConfig.Params["header"]))
-			appendNames(template.ExtractVarNames(req.AuthConfig.Params["value"]))
+		for _, value := range req.AuthConfig.Params {
+			appendNames(template.ExtractVarNames(value))
 		}
 	}
 
