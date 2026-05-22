@@ -23,12 +23,30 @@ func (h *DigestHandler) Name() string {
 	return "digest"
 }
 
-func (h *DigestHandler) Apply(req *client.Request, params map[string]string) {
-	username, hasUsername := params["username"]
-	password, hasPassword := params["password"]
+func (h *DigestHandler) Params() []ParamDef {
+	return []ParamDef{
+		{Name: "username", Required: true, Description: "Digest auth username"},
+		{Name: "password", Required: true, Secret: true, Description: "Digest auth password"},
+		{Name: "realm", Default: "default-realm", Description: "Digest challenge realm"},
+		{Name: "nonce", Default: "default-nonce", Description: "Digest challenge nonce"},
+		{Name: "qop", Description: "Digest server qop challenge value"},
+		{Name: "opaque", Description: "Digest opaque challenge value"},
+		{Name: "algorithm", Default: "MD5", Description: "Digest algorithm such as MD5 or SHA-256"},
+		{Name: "client_qop", Default: "auth", Description: "Client qop choice"},
+	}
+}
 
-	if !hasUsername || !hasPassword {
-		return
+func (h *DigestHandler) Apply(req *client.Request, params map[string]string) error {
+	if err := requireRequest(h.Name(), req); err != nil {
+		return err
+	}
+	username, err := requireParam(h.Name(), params, "username")
+	if err != nil {
+		return err
+	}
+	password, err := requireParam(h.Name(), params, "password")
+	if err != nil {
+		return err
 	}
 
 	// Get challenge params from the request if available
@@ -117,6 +135,7 @@ func (h *DigestHandler) Apply(req *client.Request, params map[string]string) {
 		Key:   "Authorization",
 		Value: authHeader,
 	})
+	return nil
 }
 
 // incrementNonceCount atomically increments and returns the nonce count for a given nonce
