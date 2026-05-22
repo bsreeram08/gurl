@@ -53,9 +53,10 @@ func run() error {
 	envStorage := env.NewEnvStorageWithPath(db.Path())
 
 	app := &cli.Command{
-		Name:    "gurl",
-		Usage:   "Smart curl saver - Your named request library",
-		Version: version,
+		Name:                  "gurl",
+		Usage:                 "Smart curl saver - Your named request library",
+		Version:               version,
+		EnableShellCompletion: true,
 		Description: `gurl replaces your chaotic curl history with an intelligent, 
 named request library. Save requests with memorable names 
 and run them whenever you need.
@@ -79,6 +80,7 @@ Quick Start:
 			commands.ShowCommand(db),
 			commands.ExportCommand(db),
 			commands.ImportCommand(db),
+			commands.AuthCommand(),
 			commands.EnvCommand(envStorage),
 			commands.PasteCommand(db),
 			commands.CollectionCommand(db, envStorage),
