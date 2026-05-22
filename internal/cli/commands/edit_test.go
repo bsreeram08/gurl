@@ -409,6 +409,106 @@ func TestEditCommandRemoveMissingExtractExitsZeroWithMessage(t *testing.T) {
 	}
 }
 
+func TestEditCommandUpdatesAuthConfig(t *testing.T) {
+	db := newMockDB()
+	db.requests["id1"] = &types.SavedRequest{
+		ID:     "id1",
+		Name:   "api",
+		URL:    "https://example.com",
+		Method: "GET",
+	}
+	db.names["api"] = "id1"
+
+	cmd := EditCommand(db)
+	err := cmd.Run(context.Background(), []string{"edit", "api", "--auth", "bearer", "--auth-param", "token=abc"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req, err := db.GetRequestByName("api")
+	if err != nil {
+		t.Fatalf("load edited request: %v", err)
+	}
+	assertAuthConfig(t, req.AuthConfig, "bearer", map[string]string{"token": "abc"})
+}
+
+func TestEditCommandClearsAuthConfigWithNone(t *testing.T) {
+	db := newMockDB()
+	db.requests["id1"] = &types.SavedRequest{
+		ID:     "id1",
+		Name:   "api",
+		URL:    "https://example.com",
+		Method: "GET",
+		AuthConfig: &types.AuthConfig{
+			Type:   "bearer",
+			Params: map[string]string{"token": "abc"},
+		},
+	}
+	db.names["api"] = "id1"
+
+	cmd := EditCommand(db)
+	err := cmd.Run(context.Background(), []string{"edit", "api", "--auth", "none"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req, err := db.GetRequestByName("api")
+	if err != nil {
+		t.Fatalf("load edited request: %v", err)
+	}
+	if req.AuthConfig != nil {
+		t.Fatalf("expected auth config to be cleared, got %#v", req.AuthConfig)
+	}
+}
+
+func TestEditCommandRejectsUnknownAuthType(t *testing.T) {
+	db := newMockDB()
+	db.requests["id1"] = &types.SavedRequest{
+		ID:     "id1",
+		Name:   "api",
+		URL:    "https://example.com",
+		Method: "GET",
+	}
+	db.names["api"] = "id1"
+
+	cmd := EditCommand(db)
+	err := cmd.Run(context.Background(), []string{"edit", "api", "--auth", "madeup"})
+	if err == nil {
+		t.Fatal("expected unknown auth type error")
+	}
+	if !strings.Contains(err.Error(), "unknown auth type") {
+		t.Fatalf("expected unknown auth type error, got %v", err)
+	}
+}
+
+func TestEditCommandRejectsMalformedAuthParamWithExitCode2(t *testing.T) {
+	db := newMockDB()
+	db.requests["id1"] = &types.SavedRequest{
+		ID:     "id1",
+		Name:   "api",
+		URL:    "https://example.com",
+		Method: "GET",
+	}
+	db.names["api"] = "id1"
+
+	cmd := EditCommand(db)
+	cmd.ExitErrHandler = func(context.Context, *cli.Command, error) {}
+	err := cmd.Run(context.Background(), []string{"edit", "api", "--auth", "bearer", "--auth-param", "token"})
+	if err == nil {
+		t.Fatal("expected malformed auth param error")
+	}
+	if !strings.Contains(err.Error(), "auth-param must be KEY=VALUE") {
+		t.Fatalf("expected clear auth-param format error, got %v", err)
+	}
+	exitCoder, ok := err.(cli.ExitCoder)
+	if !ok {
+		t.Fatalf("expected cli.ExitCoder error, got %T: %v", err, err)
+	}
+	if exitCoder.ExitCode() != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitCoder.ExitCode())
+	}
+}
+
 func TestEditCommandRejectsMalformedExtractWithExitCode2(t *testing.T) {
 	db := newMockDB()
 	db.requests["id1"] = &types.SavedRequest{

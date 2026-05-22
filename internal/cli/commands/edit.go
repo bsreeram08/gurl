@@ -31,7 +31,7 @@ func EditCommand(db storage.DB) *cli.Command {
 		Name:    "edit",
 		Aliases: []string{"e"},
 		Usage:   "Edit a saved request",
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.StringFlag{
 				Name:    "method",
 				Aliases: []string{"X"},
@@ -94,7 +94,7 @@ func EditCommand(db storage.DB) *cli.Command {
 				Aliases: []string{"a"},
 				Usage:   "Add assertion (format: 'field=op=value')",
 			},
-		},
+		}, authConfigFlags()...),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
 			if args.Len() < 1 {
@@ -109,6 +109,21 @@ func EditCommand(db storage.DB) *cli.Command {
 
 			// Track if any changes were made
 			var changes []string
+			authConfig, authSpecified, err := parseAuthConfigFlags(c)
+			if err != nil {
+				if strings.Contains(err.Error(), "auth-param must be") {
+					return cli.Exit(err.Error(), 2)
+				}
+				return err
+			}
+			if authSpecified {
+				req.AuthConfig = authConfig
+				if authConfig == nil {
+					changes = append(changes, "auth cleared")
+				} else {
+					changes = append(changes, fmt.Sprintf("auth → %s", authConfig.Type))
+				}
+			}
 
 			// Handle method change
 			if method := c.String("method"); method != "" {
