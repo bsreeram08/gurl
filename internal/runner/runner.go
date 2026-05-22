@@ -11,6 +11,7 @@ import (
 	"github.com/sreeram/gurl/internal/core/curl"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/extract"
+	"github.com/sreeram/gurl/internal/scripting"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 )
@@ -241,14 +242,52 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 		RequestName: req.Name,
 	}
 
-	clientReq, err := curl.BuildClientRequest(req, vars)
+	dirtyVars := make(map[string]string)
+	effectiveReq := req
+
+	if req.PreScript != "" {
+		engine := scripting.NewEngine(nil)
+		engine.SetVariables(vars)
+		rawReq := &client.Request{
+			Method:  req.Method,
+			URL:     req.URL,
+			Headers: convertHeaders(req.Headers),
+			Body:    req.Body,
+		}
+		modifiedReq, err := scripting.RunPreRequest(engine, req.PreScript, rawReq)
+		if err != nil {
+			result.Error = fmt.Sprintf("pre-request script failed: %v", err)
+			result.FailurePhase = FailurePhasePreRequestScript
+			result.Duration = time.Since(start)
+			return result
+		}
+		mergeVars(vars, extractedVars, dirtyVars, engine.DirtyVariables())
+
+		if engine.SkipRequested() {
+			result.Skipped = true
+			result.SkipReason = engine.SkipReason()
+			result.DirtyVars = nonEmptyMap(dirtyVars)
+			result.Duration = time.Since(start)
+			return result
+		}
+
+		copy := *req
+		copy.Method = modifiedReq.Method
+		copy.URL = modifiedReq.URL
+		copy.Body = modifiedReq.Body
+		copy.Headers = convertClientHeadersToTypes(modifiedReq.Headers)
+		effectiveReq = &copy
+	}
+
+	clientReq, err := curl.BuildClientRequest(effectiveReq, vars)
 	if err != nil {
 		result.Error = fmt.Sprintf("variable substitution failed: %v", err)
+		result.FailurePhase = FailurePhaseRequestBuild
 		return result
 	}
 
-	if req.Timeout != "" {
-		if d, err := time.ParseDuration(req.Timeout); err == nil && d > 0 {
+	if effectiveReq.Timeout != "" {
+		if d, err := time.ParseDuration(effectiveReq.Timeout); err == nil && d > 0 {
 			clientReq.Timeout = d
 		}
 	}
@@ -256,33 +295,45 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 	resp, err := r.client.ExecuteWithContext(ctx, clientReq)
 	if err != nil {
 		result.Error = fmt.Sprintf("request failed: %v", err)
+		result.FailurePhase = FailurePhaseHTTP
 		return result
 	}
 
 	result.StatusCode = resp.StatusCode
 	result.Duration = time.Since(start)
 
-	if len(req.Extracts) > 0 {
-		extracted, err := r.extractor.Extract(resp.Body, resp.Headers, req.Extracts)
+	if len(effectiveReq.Extracts) > 0 {
+		extracted, err := r.extractor.Extract(resp.Body, resp.Headers, effectiveReq.Extracts)
 		if err != nil {
 			result.Error = fmt.Sprintf("extraction failed: %v", err)
 			return result
 		}
 		result.ExtractedVars = extracted
-		result.DirtyVars = copyStringMap(extracted)
-		for key, value := range extracted {
-			vars[key] = value
-			extractedVars[key] = value
-		}
+		mergeVars(vars, extractedVars, dirtyVars, extracted)
 	}
+
+	if effectiveReq.PostScript != "" {
+		engine := scripting.NewEngine(nil)
+		engine.SetVariables(vars)
+		postResult, err := scripting.RunPostResponse(engine, effectiveReq.PostScript, &resp)
+		if err != nil {
+			result.Error = fmt.Sprintf("post-response script failed: %v", err)
+			result.FailurePhase = FailurePhasePostResponseScript
+			result.DirtyVars = nonEmptyMap(dirtyVars)
+			return result
+		}
+		mergeVars(vars, extractedVars, dirtyVars, postResult.Variables)
+		result.NextRequestOverride = engine.NextRequest()
+	}
+	result.DirtyVars = nonEmptyMap(dirtyVars)
 
 	if result.StatusCode < 200 || result.StatusCode >= 300 {
 		result.Passed = false
 		return result
 	}
 
-	if len(req.Assertions) > 0 {
-		assertResults := r.eval.Evaluate(&resp, convertAssertions(req.Assertions), extractedVars)
+	if len(effectiveReq.Assertions) > 0 {
+		assertResults := r.eval.Evaluate(&resp, convertAssertions(effectiveReq.Assertions), extractedVars)
 		result.AssertionResults = assertResults
 
 		allPassed := true
@@ -292,12 +343,30 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 				break
 			}
 		}
+		if !allPassed {
+			result.FailurePhase = FailurePhaseAssertion
+		}
 		result.Passed = allPassed && result.Error == ""
 	} else {
 		result.Passed = result.Error == ""
 	}
 
 	return result
+}
+
+func mergeVars(vars map[string]string, extractedVars map[string]string, dirtyVars map[string]string, updates map[string]string) {
+	for key, value := range updates {
+		vars[key] = value
+		extractedVars[key] = value
+		dirtyVars[key] = value
+	}
+}
+
+func nonEmptyMap(source map[string]string) map[string]string {
+	if len(source) == 0 {
+		return nil
+	}
+	return copyStringMap(source)
 }
 
 func copyStringMap(source map[string]string) map[string]string {
@@ -315,6 +384,17 @@ func convertHeaders(headers []types.Header) []client.Header {
 	result := make([]client.Header, len(headers))
 	for i, h := range headers {
 		result[i] = client.Header{Key: h.Key, Value: h.Value}
+	}
+	return result
+}
+
+func convertClientHeadersToTypes(headers []client.Header) []types.Header {
+	if headers == nil {
+		return nil
+	}
+	result := make([]types.Header, len(headers))
+	for i, h := range headers {
+		result[i] = types.Header{Key: h.Key, Value: h.Value}
 	}
 	return result
 }

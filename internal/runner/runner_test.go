@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 type mockDB struct {
 	requests map[string]*types.SavedRequest
 	names    map[string]string
+	history  []*types.ExecutionHistory
 }
 
 func newMockDB() *mockDB {
@@ -93,6 +95,7 @@ func (m *mockDB) UpdateRequest(req *types.SavedRequest) error {
 	return nil
 }
 func (m *mockDB) SaveHistory(history *types.ExecutionHistory) error {
+	m.history = append(m.history, history)
 	return nil
 }
 func (m *mockDB) GetHistory(requestID string, limit int) ([]*types.ExecutionHistory, error) {
@@ -311,6 +314,253 @@ func TestRequestResultLifecycleMetadataNames(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRunner_PreScriptVariablesAvailableForTemplates(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	var gotPath string
+	var gotTenantHeader string
+	var gotBody string
+	requestCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		gotPath = r.URL.Path
+		gotTenantHeader = r.Header.Get("X-Tenant")
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("failed to read request body: %v", err)
+		}
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "pre-script-template",
+		Name:       "pre-script-template",
+		URL:        ts.URL + "/tenants/{{tenant}}",
+		Method:     "POST",
+		Collection: "script-flow",
+		Headers: []types.Header{
+			{Key: "Content-Type", Value: "application/json"},
+			{Key: "X-Tenant", Value: "{{tenant}}"},
+		},
+		Body:      `{"tenant":"{{tenant}}"}`,
+		PreScript: `gurl.setVar("tenant", "acme")`,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "script-flow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if requestCount != 1 {
+		t.Fatalf("expected exactly one HTTP request, got %d", requestCount)
+	}
+	if gotPath != "/tenants/acme" {
+		t.Fatalf("expected pre-script variable in URL path, got %q", gotPath)
+	}
+	if gotTenantHeader != "acme" {
+		t.Fatalf("expected pre-script variable in header, got %q", gotTenantHeader)
+	}
+	if gotBody != `{"tenant":"acme"}` {
+		t.Fatalf("expected pre-script variable in body, got %q", gotBody)
+	}
+	if results[0].Passed != 1 || results[0].Failed != 0 {
+		t.Fatalf("expected request to pass, got result: %+v", results[0])
+	}
+}
+
+func TestRunner_PostScriptVariablesAvailableForNextRequestAndExtractAssertion(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	var gotAuthorization string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/login":
+			json.NewEncoder(w).Encode(map[string]string{"token": "Bearer abc123"})
+		case "/profile":
+			gotAuthorization = r.Header.Get("Authorization")
+			json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "login",
+		Name:       "login",
+		URL:        ts.URL + "/login",
+		Method:     "GET",
+		Collection: "post-script-flow",
+		PostScript: `
+			var data = gurl.response.json();
+			gurl.setVar("authToken", data.token);
+			gurl.setVar("scriptToken", "scripted");
+		`,
+		Assertions: []types.Assertion{
+			{Field: "extract:scriptToken", Op: "=", Value: "scripted"},
+		},
+		SortOrder: 1,
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "profile",
+		Name:       "profile",
+		URL:        ts.URL + "/profile",
+		Method:     "GET",
+		Collection: "post-script-flow",
+		Headers: []types.Header{
+			{Key: "Authorization", Value: "{{authToken}}"},
+		},
+		SortOrder: 2,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "post-script-flow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotAuthorization != "Bearer abc123" {
+		t.Fatalf("expected post-script variable in following request header, got %q", gotAuthorization)
+	}
+	firstResult := results[0].RequestResults[0]
+	assertStringMap(t, "DirtyVars", firstResult.DirtyVars, map[string]string{"authToken": "Bearer abc123", "scriptToken": "scripted"})
+	if len(firstResult.AssertionResults) != 1 || !firstResult.AssertionResults[0].Passed {
+		t.Fatalf("expected extract assertion to see post-script variable, got %+v", firstResult.AssertionResults)
+	}
+	if results[0].Passed != 2 || results[0].Failed != 0 {
+		t.Fatalf("expected both requests to pass, got result: %+v", results[0])
+	}
+}
+
+func TestRunner_SkipRequestIsNeutralAndAvoidsHTTP(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	requestCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "skip-me",
+		Name:       "skip-me",
+		URL:        ts.URL + "/skip",
+		Method:     "GET",
+		Collection: "skip-flow",
+		PreScript:  `gurl.skipRequest("not needed for this data row")`,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "skip-flow", Bail: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if requestCount != 0 {
+		t.Fatalf("expected skipped request to avoid HTTP, got %d calls", requestCount)
+	}
+	if len(db.history) != 0 {
+		t.Fatalf("expected skipped request to avoid history writes, got %d", len(db.history))
+	}
+	result := results[0]
+	if result.Passed != 0 || result.Failed != 0 || result.Skipped != 1 {
+		t.Fatalf("expected neutral skip summary, got %+v", result)
+	}
+	requestResult := result.RequestResults[0]
+	if !requestResult.Skipped || requestResult.Passed || requestResult.Error != "" {
+		t.Fatalf("expected neutral skipped request result, got %+v", requestResult)
+	}
+	if requestResult.SkipReason != "not needed for this data row" {
+		t.Fatalf("expected script skip reason to be preserved, got %q", requestResult.SkipReason)
+	}
+}
+
+func TestRunner_ScriptErrorFailurePhases(t *testing.T) {
+	t.Run("pre script error fails before HTTP", func(t *testing.T) {
+		db := newMockDB()
+		envStorage := newMockEnvStorage()
+
+		requestCount := 0
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestCount++
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer ts.Close()
+
+		db.SaveRequest(&types.SavedRequest{
+			ID:         "pre-error",
+			Name:       "pre-error",
+			URL:        ts.URL + "/pre",
+			Method:     "GET",
+			Collection: "pre-error-flow",
+			PreScript:  `throw new Error("boom-pre")`,
+		})
+
+		runner := NewRunner(db, envStorage)
+		results, err := runner.Run(context.Background(), RunConfig{CollectionName: "pre-error-flow"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if requestCount != 0 {
+			t.Fatalf("expected pre-script error to avoid HTTP, got %d calls", requestCount)
+		}
+		requestResult := results[0].RequestResults[0]
+		if requestResult.FailurePhase != FailurePhasePreRequestScript {
+			t.Fatalf("expected failure phase %q, got %q", FailurePhasePreRequestScript, requestResult.FailurePhase)
+		}
+		if !strings.Contains(requestResult.Error, "boom-pre") {
+			t.Fatalf("expected error to include script error, got %q", requestResult.Error)
+		}
+	})
+
+	t.Run("post script error fails after HTTP", func(t *testing.T) {
+		db := newMockDB()
+		envStorage := newMockEnvStorage()
+
+		requestCount := 0
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestCount++
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+		}))
+		defer ts.Close()
+
+		db.SaveRequest(&types.SavedRequest{
+			ID:         "post-error",
+			Name:       "post-error",
+			URL:        ts.URL + "/post",
+			Method:     "GET",
+			Collection: "post-error-flow",
+			PostScript: `throw new Error("boom-post")`,
+		})
+
+		runner := NewRunner(db, envStorage)
+		results, err := runner.Run(context.Background(), RunConfig{CollectionName: "post-error-flow"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if requestCount != 1 {
+			t.Fatalf("expected post-script error after HTTP, got %d calls", requestCount)
+		}
+		requestResult := results[0].RequestResults[0]
+		if requestResult.FailurePhase != FailurePhasePostResponseScript {
+			t.Fatalf("expected failure phase %q, got %q", FailurePhasePostResponseScript, requestResult.FailurePhase)
+		}
+		if !strings.Contains(requestResult.Error, "boom-post") {
+			t.Fatalf("expected error to include script error, got %q", requestResult.Error)
+		}
+	})
 }
 
 func assertStringMap(t *testing.T, name string, got, want map[string]string) {
