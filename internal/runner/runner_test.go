@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1018,6 +1019,195 @@ func TestRunner_RunWithAssertions(t *testing.T) {
 	if results[0].Passed != 1 {
 		t.Errorf("expected passed=1, got %d", results[0].Passed)
 	}
+}
+
+func TestRunner_ExtractedVarsChainIntoNextRequest(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	var paymentBody string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/orders":
+			_, _ = w.Write([]byte(`{"data":{"orderId":"ord_123"}}`))
+		case "/payments":
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("failed to read payment body: %v", err)
+			}
+			paymentBody = string(body)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-create-order",
+		Name:       "create-order",
+		URL:        ts.URL + "/orders",
+		Method:     "POST",
+		Collection: "checkout-flow",
+		SortOrder:  1,
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+		},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-initiate-payment",
+		Name:       "initiate-payment",
+		URL:        ts.URL + "/payments",
+		Method:     "POST",
+		Collection: "checkout-flow",
+		SortOrder:  2,
+		Headers: []types.Header{
+			{Key: "Content-Type", Value: "application/json"},
+		},
+		Body: `{"orderId":"{{orderId}}"}`,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "checkout-flow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Failed != 0 {
+		t.Fatalf("expected collection to pass, got result: %+v", results[0])
+	}
+	if paymentBody != `{"orderId":"ord_123"}` {
+		t.Fatalf("expected second request body to receive extracted orderId, got %q", paymentBody)
+	}
+	assertStringMap(t, "ExtractedVars", results[0].RequestResults[0].ExtractedVars, map[string]string{"orderId": "ord_123"})
+}
+
+func TestRunner_ExtractedVarsOverrideExistingVars(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	var gotPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/first":
+			_, _ = w.Write([]byte(`{"orderId":"from-response"}`))
+		default:
+			gotPath = r.URL.Path
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-first",
+		Name:       "first",
+		URL:        ts.URL + "/first",
+		Method:     "GET",
+		Collection: "override-flow",
+		SortOrder:  1,
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.orderId"},
+		},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-second",
+		Name:       "second",
+		URL:        ts.URL + "/orders/{{orderId}}",
+		Method:     "GET",
+		Collection: "override-flow",
+		SortOrder:  2,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{
+		CollectionName: "override-flow",
+		Vars:           map[string]string{"orderId": "from-config"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Failed != 0 {
+		t.Fatalf("expected collection to pass, got result: %+v", results[0])
+	}
+	if gotPath != "/orders/from-response" {
+		t.Fatalf("expected extracted orderId to override config var, got path %q", gotPath)
+	}
+}
+
+func TestRunner_AssertionReceivesExtractedVars(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"orderId":"ord_123"}}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-assert-extract",
+		Name:       "assert-extract",
+		URL:        ts.URL,
+		Method:     "GET",
+		Collection: "assert-extract-flow",
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+		},
+		Assertions: []types.Assertion{
+			{Field: "extract:orderId", Op: "equals", Value: "ord_123"},
+		},
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "assert-extract-flow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	requestResult := results[0].RequestResults[0]
+	if !requestResult.Passed {
+		t.Fatalf("expected assertion on extracted var to pass, got request result: %+v", requestResult)
+	}
+	if len(requestResult.AssertionResults) != 1 || requestResult.AssertionResults[0].Actual != "ord_123" {
+		t.Fatalf("expected assertion actual to be extracted orderId, got %#v", requestResult.AssertionResults)
+	}
+}
+
+func TestRunner_MissingExtractionDoesNotFailRequest(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"orderId":"ord_123"}}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-missing-extract",
+		Name:       "missing-extract",
+		URL:        ts.URL,
+		Method:     "GET",
+		Collection: "missing-extract-flow",
+		Extracts: []types.Extract{
+			{Name: "missing", Source: "jsonpath:$.missing"},
+		},
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "missing-extract-flow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	requestResult := results[0].RequestResults[0]
+	if !requestResult.Passed || requestResult.Error != "" {
+		t.Fatalf("expected missing extraction to remain neutral, got request result: %+v", requestResult)
+	}
+	assertStringMap(t, "ExtractedVars", requestResult.ExtractedVars, map[string]string{"missing": ""})
 }
 
 func TestRunner_MultipleIterations(t *testing.T) {

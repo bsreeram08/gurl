@@ -10,6 +10,7 @@ import (
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/core/curl"
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/extract"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 )
@@ -71,6 +72,7 @@ type Runner struct {
 	envStorage EnvProvider
 	client     *client.Client
 	eval       *assertions.Evaluator
+	extractor  *extract.Extractor
 }
 
 func NewRunner(db storage.DB, envStorage EnvProvider) *Runner {
@@ -79,6 +81,7 @@ func NewRunner(db storage.DB, envStorage EnvProvider) *Runner {
 		envStorage: envStorage,
 		client:     client.NewClient(),
 		eval:       assertions.NewEvaluator(),
+		extractor:  extract.NewExtractor(),
 	}
 }
 
@@ -185,6 +188,8 @@ func (r *Runner) runWithData(ctx context.Context, requests []*types.SavedRequest
 
 func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedRequest, vars map[string]string, config RunConfig, iteration int) RunResult {
 	start := time.Now()
+	runningVars := copyStringMap(vars)
+	extractedVars := make(map[string]string)
 	result := RunResult{
 		CollectionName: config.CollectionName,
 		Iteration:      iteration,
@@ -193,7 +198,7 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 	}
 
 	for i, req := range requests {
-		reqResult := r.runRequest(ctx, req, vars, config)
+		reqResult := r.runRequest(ctx, req, runningVars, extractedVars)
 		result.RequestResults = append(result.RequestResults, reqResult)
 
 		if reqResult.Passed {
@@ -230,7 +235,7 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 	return result
 }
 
-func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string, config RunConfig) *RequestResult {
+func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string, extractedVars map[string]string) *RequestResult {
 	start := time.Now()
 	result := &RequestResult{
 		RequestName: req.Name,
@@ -257,13 +262,27 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 	result.StatusCode = resp.StatusCode
 	result.Duration = time.Since(start)
 
+	if len(req.Extracts) > 0 {
+		extracted, err := r.extractor.Extract(resp.Body, resp.Headers, req.Extracts)
+		if err != nil {
+			result.Error = fmt.Sprintf("extraction failed: %v", err)
+			return result
+		}
+		result.ExtractedVars = extracted
+		result.DirtyVars = copyStringMap(extracted)
+		for key, value := range extracted {
+			vars[key] = value
+			extractedVars[key] = value
+		}
+	}
+
 	if result.StatusCode < 200 || result.StatusCode >= 300 {
 		result.Passed = false
 		return result
 	}
 
 	if len(req.Assertions) > 0 {
-		assertResults := r.eval.Evaluate(&resp, convertAssertions(req.Assertions), map[string]string{})
+		assertResults := r.eval.Evaluate(&resp, convertAssertions(req.Assertions), extractedVars)
 		result.AssertionResults = assertResults
 
 		allPassed := true
@@ -279,6 +298,14 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 	}
 
 	return result
+}
+
+func copyStringMap(source map[string]string) map[string]string {
+	copy := make(map[string]string, len(source))
+	for key, value := range source {
+		copy[key] = value
+	}
+	return copy
 }
 
 func convertHeaders(headers []types.Header) []client.Header {
