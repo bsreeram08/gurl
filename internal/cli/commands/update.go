@@ -35,7 +35,7 @@ const (
 	owner       = "bsreeram08"
 	repo        = "gurl"
 	latestURL   = "https://api.github.com/repos/%s/%s/releases/latest"
-	downloadURL = "https://github.com/%s/%s/releases/download/v%s/gurl-%s-%s"
+	downloadURL = "https://github.com/%s/%s/releases/download/%s/gurl-%s-%s"
 )
 
 func updateGurl() error {
@@ -48,6 +48,9 @@ func updateGurl() error {
 		return fmt.Errorf("failed to check for updates: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to check latest release: HTTP %d", resp.StatusCode)
+	}
 
 	// Parse response to get latest version tag
 	body, err := io.ReadAll(resp.Body)
@@ -63,7 +66,11 @@ func updateGurl() error {
 		return fmt.Errorf("failed to parse latest release: %w", err)
 	}
 
-	latestVersion := release.TagName
+	releaseTag := strings.TrimSpace(release.TagName)
+	if releaseTag == "" {
+		return fmt.Errorf("latest release response missing tag_name")
+	}
+	latestVersion := releaseTag
 
 	fmt.Printf("Latest version: %s\n", latestVersion)
 
@@ -100,10 +107,10 @@ func updateGurl() error {
 	}
 
 	// Build download URL
-	downloadLink := fmt.Sprintf(downloadURL, owner, repo, latestVersion, osName, arch)
+	downloadLink := fmt.Sprintf(downloadURL, owner, repo, releaseTag, osName, arch)
 
 	// Get checksum file URL
-	checksumURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/v%s/SHA256SUMS", owner, repo, latestVersion)
+	checksumURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/SHA256SUMS", owner, repo, releaseTag)
 
 	fmt.Printf("Downloading from: %s\n", downloadLink)
 
@@ -218,7 +225,7 @@ func updateGurl() error {
 	// Try to remove backup (may fail on Windows if file is in use)
 	os.Remove(backupPath)
 
-	fmt.Printf("Successfully updated to v%s!\n", latestVersion)
+	fmt.Printf("Successfully updated to %s!\n", releaseTag)
 	fmt.Println("Run 'gurl --version' to verify.")
 
 	return nil

@@ -25,6 +25,8 @@ jobs:
           - os: ubuntu-latest
             arch: arm64
           - os: macos-latest
+            arch: amd64
+          - os: macos-latest
             arch: arm64
 
     runs-on: ${{ matrix.os }}
