@@ -153,6 +153,8 @@ Gurl can self-update to the latest release:
 gurl update
 ```
 
+The updater checks the latest release metadata and picks the matching macOS or Linux asset for your CPU architecture. Release downloads include raw binaries, tarballs, and `SHA256SUMS`.
+
 ## Next Steps
 
 Continue to the [Quick Start guide](/docs/quickstart/) to save and run your first request.

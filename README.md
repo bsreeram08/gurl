@@ -45,7 +45,8 @@ Import from Postman. Run with environments. Assert on responses. Generate client
 - **Protocols** — HTTP, GraphQL, gRPC, WebSocket, SSE
 - **Scripting** — JavaScript pre/post-request hooks via goja runtime
 - **Assertions** — assert on status, headers, body, and extracted variables (`extract:varName`)
-- **Collection runner** — data-driven testing with CSV/JSON input
+- **Request chaining** - route follow-up requests with `setNextRequest`, `run-if`, and extracted variables
+- **Collection runner** - data-driven testing with CSV/JSON input, dry runs, and assertion bail mode
 - **Code generation** — generate curl, Go, Python, JavaScript from any saved request
 - **Interactive TUI** — full bubbletea interface for browsing and running requests
 - **Execution history** — per-request history + global timeline + diff between runs
@@ -137,10 +138,14 @@ gurl run "Get Users" --env staging
 ### Test APIs with scripting and assertions
 
 ```bash
-# Pre-request script sets a timestamp header
-# Post-request script extracts the auth token
-# Assertion checks status is 200 and body has the expected shape
-gurl run "login" --env dev
+# Save extraction and scripts on a request
+gurl save "login" https://api.example.com/auth/login \
+  -X POST \
+  --extract token=jsonpath:$.token \
+  --post-script "gurl.setNextRequest('profile')"
+
+# Run the chain, then persist extracted/script variables to the environment
+gurl run "login" --env dev --chain --persist --assert "extract:token != ''"
 ```
 
 ### Run collections with data-driven inputs
@@ -148,6 +153,12 @@ gurl run "login" --env dev
 ```bash
 # Run every request in a collection with CSV test data
 gurl collection run "checkout-flow" --data ./test-data.csv --env staging
+
+# Preview the flow without sending requests
+gurl collection run "checkout-flow" --env staging --dry-run
+
+# Stop only when an assertion fails
+gurl collection run "checkout-flow" --env staging --assert-bail
 ```
 
 ### Compare responses over time

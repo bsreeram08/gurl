@@ -39,6 +39,7 @@ gurl run "api" --assert "status=200" --assert "body.path(\"$.name\") contains Jo
 | `header.NAME` | Response header | `header.Content-Type contains json` |
 | `body` | Response body as text | `body contains "success"` |
 | `body.path(X)` | JSONPath expression | `body.path($.data.id) exists` |
+| `extract:NAME` | Extracted or script-set variable | `extract:orderId != ''` |
 
 ## JSONPath Examples
 
@@ -62,9 +63,12 @@ gurl run "get-user" --assert "status=200"
 gurl run "get-users" --assert "status=200" --assert "body.path($.users.length()) > 0"
 gurl run "search" --assert "body contains results"
 gurl run "create" --assert "status=201" --assert "header.Content-Type contains json"
+gurl run "create" --assert "extract:orderId != ''"
 ```
 
 Multiple assertions are ANDed together. All must pass for the overall assertion to pass.
+
+Assertions can read variables captured by `--extract` rules or set by scripts during the same request lifecycle. In chains and collection runs, those variables also flow to later requests.
 
 ## TOML Configuration
 

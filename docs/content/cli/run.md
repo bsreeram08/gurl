@@ -29,6 +29,7 @@ The `run` command executes a request that was previously saved with `gurl save`.
 | `--force` | | `false` | Overwrite output file if it exists |
 | `--timeout` | | `30s` | Request timeout (e.g., `5s`, `1m`, `30s`) |
 | `--chain` | `-ch` | `false` | Enable request chaining |
+| `--persist` | | `false` | Persist extracted/script variables back to the selected environment |
 | `--assert` | `-a` | none | Assertion to validate response |
 | `--data` | `-d` | none | Data file for iteration |
 
@@ -78,6 +79,22 @@ gurl run "create-user" --timeout 10s --assert "status=201"
 ```
 
 Sets a 10-second timeout and asserts the response status is 201.
+
+### Run a chained request
+
+```bash
+gurl run "login" --chain --env staging
+```
+
+Enables request chaining for saved post-response scripts that call `gurl.setNextRequest(...)`. Extracted variables and variables set by scripts become available to later requests in the chain.
+
+### Persist flow variables
+
+```bash
+gurl run "login" --chain --persist --env staging
+```
+
+Writes only extracted variables and script-set variables back to the selected environment. CLI variables, data-row values, and existing environment inputs are not persisted unless extraction or a script changes them.
 
 ## See also
 

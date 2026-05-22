@@ -76,14 +76,14 @@ var elapsed = response.time;
 // Set a variable for subsequent requests
 gurl.setVariable("AUTH_TOKEN", "abc123");
 
+// Alias for setVariable
+gurl.setVar("AUTH_TOKEN", "abc123");
+
 // Skip the current request
 gurl.skipRequest();
 
 // Make the next request use specific data
-gurl.setNextRequest({
-    method: "POST",
-    url: "https://api.example.com/logout"
-});
+gurl.setNextRequest("logout");
 
 // Log to the console (printed after script execution)
 console.log("Debug: " + value);
@@ -124,6 +124,29 @@ url = "{{BASE_URL}}/users/me"
 [headers]
 Authorization = "Bearer {{AUTH_TOKEN}}"
 ```
+
+When a script sets a variable or a saved extraction captures one, that value is available to later requests in the same chained run or collection run. Add `--persist` to write those dirty variables back to the selected environment after the run.
+
+## Example: Chain Requests
+
+Use a post-response script to choose the next saved request:
+
+```javascript
+var data = response.json();
+
+if (data.requiresProfileFetch) {
+    gurl.setVariable("USER_ID", data.userId);
+    gurl.setNextRequest("get-profile");
+}
+```
+
+Run the first request with chaining enabled:
+
+```bash
+gurl run "login" --chain --env staging
+```
+
+The next request can use `{{USER_ID}}` in its URL, headers, body, assertions, and scripts.
 
 ## Example: Dynamic Timestamp Header
 

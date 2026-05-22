@@ -37,6 +37,9 @@ After saving, use `gurl run [name]` to execute the request.
 | `--header` | `-H` | none | HTTP header (can be specified multiple times) |
 | `--data` | `-d` | none | Request body |
 | `--body` | | none | Request body (alias for `--data`) |
+| `--extract` | | none | Add extraction rule as `VAR_NAME=METHOD:EXPRESSION` |
+| `--pre-script` | `--pre` | none | Set pre-request script |
+| `--post-script` | `--post` | none | Set post-response script |
 
 ## Aliases
 
@@ -83,6 +86,18 @@ gurl save "api-users" https://api.example.com/users -c "api" -t "production" -t 
 ```
 
 Saves the request to the "api" collection with "production" and "v2" tags.
+
+### Save extraction and scripts
+
+```bash
+gurl save "login" https://api.example.com/auth/login \
+  -X POST \
+  --extract token=jsonpath:$.token \
+  --pre-script "request.headers.set('X-Client', 'gurl')" \
+  --post-script "gurl.setNextRequest('profile')"
+```
+
+Stores extraction and script metadata with the request. Later runs can use extracted or script-set variables in assertions, request templates, and chained requests.
 
 ## See also
 

@@ -1,5 +1,37 @@
 # Changelog
 
+## [v0.2.1] - 2026-05-22
+
+### Fixed
+
+- `gurl update` now validates the latest release metadata before it downloads anything, so malformed release tags fail safely instead of producing broken asset URLs.
+- The latest release includes the full macOS and Linux asset set for amd64 and arm64, with raw binaries, tarballs, and `SHA256SUMS`.
+
+## [v0.2.0] - 2026-05-22
+
+### Added
+
+- **Request chaining and flow control**
+  - `gurl run <name> --chain` now follows post-response `gurl.setNextRequest(...)` decisions through the same lifecycle used by collection runs.
+  - Saved requests can use `run-if` expressions to skip work when a variable does not match the current flow state.
+  - Extracted variables and script-set variables flow into later requests in the same chain or collection run.
+- **Saved extraction and scripts**
+  - `gurl save` and `gurl edit` can persist `--extract`, `--pre-script`, and `--post-script` metadata on a request.
+  - `gurl edit` can add `--run-if` conditions and remove extraction rules.
+- **Flow variable persistence**
+  - `gurl run --persist` and `gurl collection run --persist` can write extracted and script-set variables back to the selected environment.
+  - Input variables from CLI flags, data rows, and environments are not persisted unless extraction or a script changes them.
+- **Collection dry runs**
+  - `gurl collection run --dry-run` previews request order, variable sources, planned extractions, and unresolved placeholders without sending requests.
+- **Assertion bail mode**
+  - `gurl collection run --assert-bail` stops only on assertion failures, while normal `--bail` still stops on any request failure.
+
+### Fixed
+
+- Chained runs now execute pre-scripts, extraction, post-scripts, assertions, history writes, and persistence in the same order as collection runs.
+- Chained `setNextRequest` routing is honored before assertion bail handling, so intentional cleanup or follow-up requests can still run.
+- Dirty variables are preserved across terminal errors where persistence still needs to happen.
+
 ## [v0.1.23] - 2026-05-21
 
 ### Added

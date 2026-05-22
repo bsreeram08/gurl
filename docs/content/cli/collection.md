@@ -49,6 +49,28 @@ gurl collection show [name]
 
 Aliases: `view`, `info`
 
+### run
+
+Run every request in a collection.
+
+```bash
+gurl collection run [name] [flags]
+```
+
+Common flags:
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--env` | `-e` | none | Environment to use |
+| `--var` | `-v` | none | Variable as `key=value` |
+| `--data` | `-D` | none | CSV or JSON data file |
+| `--bail` | `-b` | `false` | Stop on first failure |
+| `--assert-bail` | | `false` | Stop on first assertion failure only |
+| `--persist` | | `false` | Persist extracted/script variables back to the selected environment |
+| `--dry-run` | | `false` | Preview collection execution without sending requests |
+| `--reporter` | `-R` | none | Reporter to use: `junit`, `json`, `html`, or `console` |
+| `--reporter-output` | `-O` | none | Output directory for reporter files |
+
 ### remove
 
 Delete a collection.
@@ -102,6 +124,30 @@ gurl collection show "api-v2"
 ```
 
 Shows each request in the collection with method and URL.
+
+### Run a collection dry run
+
+```bash
+gurl collection run "checkout-flow" --env staging --dry-run
+```
+
+Prints request order, planned variable sources, extraction rules, and unresolved placeholders without sending HTTP requests.
+
+### Persist extracted flow variables
+
+```bash
+gurl collection run "checkout-flow" --env staging --persist
+```
+
+Writes only extracted variables and script-set variables back to the selected environment. `--persist` and `--dry-run` cannot be used together.
+
+### Stop on assertion failures only
+
+```bash
+gurl collection run "checkout-flow" --assert-bail
+```
+
+Stops after the first assertion failure. Other request failures are reported, but they do not trigger assertion bail mode.
 
 ### Delete a collection
 

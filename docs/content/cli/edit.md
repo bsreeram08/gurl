@@ -30,6 +30,9 @@ The `edit` command modifies a saved request. Without flags, it opens the request
 | `--tag` | `-t` | none | Add a tag |
 | `--pre-script` | | none | Script to run before request |
 | `--post-script` | | none | Script to run after request |
+| `--run-if` | | none | Conditional expression for running this request |
+| `--extract` | | none | Add or replace extraction rule as `VAR_NAME=METHOD:EXPRESSION` |
+| `--remove-extract` | | none | Remove extraction rule by variable name |
 | `--assert` | `-a` | none | Add an assertion |
 
 ## Aliases
@@ -69,6 +72,17 @@ gurl edit "auth-request" --pre-script "./auth-script.sh"
 ```
 
 Adds a pre-request script to the "auth-request".
+
+### Add flow metadata
+
+```bash
+gurl edit "get-profile" \
+  --run-if "token != ''" \
+  --extract userId=jsonpath:$.id \
+  --post-script "gurl.setVariable('seenProfile', 'true')"
+```
+
+Adds a run condition, an extraction rule, and a post-response script. `run-if` supports simple `VAR == VALUE` and `VAR != VALUE` checks.
 
 ## See also
 

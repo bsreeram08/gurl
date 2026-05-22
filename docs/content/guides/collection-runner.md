@@ -47,6 +47,52 @@ Skip requests based on conditions:
 gurl collection run "my-api" --skip "update-user" --skip-if "SKIP_WRITES=true"
 ```
 
+Saved requests can also carry a `run-if` expression:
+
+```bash
+gurl edit "update-user" --run-if "SKIP_WRITES != true"
+```
+
+`run-if` supports simple `VAR == VALUE` and `VAR != VALUE` checks. Missing variables are treated as empty strings.
+
+## Request Chaining and Flow Variables
+
+Post-response scripts can route the next request in a collection:
+
+```javascript
+var data = response.json();
+gurl.setVariable("orderId", data.id);
+gurl.setNextRequest("capture-payment");
+```
+
+Extraction rules and scripts share the same flow variable map. A value extracted by one request can be used by later request templates, assertions, scripts, and `run-if` checks.
+
+```bash
+gurl save "create-order" https://api.example.com/orders \
+  --extract orderId=jsonpath:$.id \
+  --post-script "gurl.setNextRequest('capture-payment')"
+
+gurl edit "capture-payment" --run-if "orderId != ''"
+```
+
+Persist only the extracted or script-set values back to the selected environment:
+
+```bash
+gurl collection run "checkout-flow" --env staging --persist
+```
+
+CLI variables, environment inputs, and data-row values are not written back unless extraction or a script changes the same key.
+
+## Dry Run
+
+Preview a collection flow without sending requests:
+
+```bash
+gurl collection run "checkout-flow" --env staging --dry-run
+```
+
+Dry runs print request order, planned extraction sources, variable sources from earlier steps, and unresolved placeholders. They do not send HTTP requests, run post-response scripts, save history, write reports, or persist variables.
+
 ## Data-Driven Testing
 
 Run a request with data from a CSV or JSON file. Each row iteration substitutes variables and runs the request.
@@ -165,6 +211,16 @@ gurl collection run "my-api" --bail
 ```
 
 This is useful in CI to fail fast and avoid unnecessary API calls.
+
+### Assertion Bail Mode
+
+Stop only when an assertion fails:
+
+```bash
+gurl collection run "my-api" --assert-bail
+```
+
+This lets the run continue through transport or HTTP failures while still stopping on the first failed assertion.
 
 ### Exit Codes
 
