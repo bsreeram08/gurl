@@ -135,6 +135,39 @@ func TestShellSessionPromptForMissingVars(t *testing.T) {
 	}
 }
 
+func TestMissingTemplateVarsIncludesRegistryBackedAuthParams(t *testing.T) {
+	req := &types.SavedRequest{
+		URL: "https://api.example.com/orders",
+		AuthConfig: &types.AuthConfig{
+			Type: "oauth1",
+			Params: map[string]string{
+				"consumer_key":    "{{consumer_key}}",
+				"consumer_secret": "{{consumer_secret}}",
+				"token":           "{{oauth_token}}",
+				"token_secret":    "static-secret",
+			},
+		},
+	}
+
+	missing := missingTemplateVars(req, map[string]string{
+		"consumer_key": "ck_123",
+	})
+
+	missingSet := map[string]bool{}
+	for _, name := range missing {
+		missingSet[name] = true
+	}
+
+	for _, name := range []string{"consumer_secret", "oauth_token"} {
+		if !missingSet[name] {
+			t.Fatalf("expected missing auth variable %q in %#v", name, missing)
+		}
+	}
+	if missingSet["consumer_key"] {
+		t.Fatalf("did not expect provided auth variable consumer_key in %#v", missing)
+	}
+}
+
 func TestShellSessionUnknownCommandSuggestsHelp(t *testing.T) {
 	session := newShellSession(newMockDB(), nil, strings.NewReader(""), &bytes.Buffer{}, "auto")
 
@@ -201,5 +234,55 @@ func TestBuildClientRequestFromSavedRequestResolvesTemplatesAndAuth(t *testing.T
 	}
 	if len(clientReq.Headers) != 2 {
 		t.Fatalf("expected 2 headers, got %#v", clientReq.Headers)
+	}
+}
+
+func TestBuildClientRequestFromSavedRequestAppliesAPIKeyQueryAuth(t *testing.T) {
+	req := &types.SavedRequest{
+		Name:   "query-auth",
+		Method: "GET",
+		URL:    "https://api.example.com/widgets?fixed=1",
+		AuthConfig: &types.AuthConfig{
+			Type: "apikey",
+			Params: map[string]string{
+				"in":         "query",
+				"key":        "{{api_key}}",
+				"param_name": "access_token",
+			},
+		},
+	}
+
+	clientReq, err := buildClientRequestFromSavedRequest(req, map[string]string{"api_key": "secret value"})
+	if err != nil {
+		t.Fatalf("buildClientRequestFromSavedRequest returned error: %v", err)
+	}
+
+	if clientReq.URL != "https://api.example.com/widgets?fixed=1&access_token=secret+value" {
+		t.Fatalf("unexpected URL %q", clientReq.URL)
+	}
+	for _, h := range clientReq.Headers {
+		if h.Key == "X-API-Key" {
+			t.Fatalf("did not expect legacy header auth for query API key, got %#v", clientReq.Headers)
+		}
+	}
+}
+
+func TestBuildClientRequestFromSavedRequestUnknownAuthReturnsError(t *testing.T) {
+	req := &types.SavedRequest{
+		Name:   "unknown-auth",
+		Method: "GET",
+		URL:    "https://api.example.com/widgets",
+		AuthConfig: &types.AuthConfig{
+			Type:   "made-up",
+			Params: map[string]string{"token": "abc123"},
+		},
+	}
+
+	_, err := buildClientRequestFromSavedRequest(req, nil)
+	if err == nil {
+		t.Fatal("expected unknown auth type error")
+	}
+	if !strings.Contains(err.Error(), `unknown auth type "made-up"`) {
+		t.Fatalf("expected unknown auth type error, got %v", err)
 	}
 }
