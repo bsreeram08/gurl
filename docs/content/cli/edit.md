@@ -34,6 +34,8 @@ The `edit` command modifies a saved request. Without flags, it opens the request
 | `--extract` | | none | Add or replace extraction rule as `VAR_NAME=METHOD:EXPRESSION` |
 | `--remove-extract` | | none | Remove extraction rule by variable name |
 | `--assert` | `-a` | none | Add an assertion |
+| `--auth` | | none | Authentication type: `basic`, `bearer`, `apikey`, `oauth1`, `oauth2`, `awsv4`, `digest`, `ntlm`, or `none` |
+| `--auth-param` | | none | Authentication parameter as `key=value` (can be specified multiple times) |
 
 ## Aliases
 
@@ -84,8 +86,27 @@ gurl edit "get-profile" \
 
 Adds a run condition, an extraction rule, and a post-response script. `run-if` supports simple `VAR == VALUE` and `VAR != VALUE` checks.
 
+### Update saved auth
+
+```bash
+gurl edit "profile" \
+  --auth bearer \
+  --auth-param token='{{token}}'
+```
+
+Replaces the request's saved auth config with bearer auth. Each `--auth-param` must be a `key=value` pair and may be repeated.
+
+### Clear saved auth
+
+```bash
+gurl edit "profile" --auth none
+```
+
+Clears the request's saved auth config. `--auth none` cannot be combined with `--auth-param`.
+
 ## See also
 
 - [`gurl save`](save) - Save a new request
 - [`gurl run`](run) - Execute a request
+- [`gurl auth`](auth) - Discover auth handlers and parameters
 - [`gurl list`](list) - List saved requests

@@ -40,6 +40,8 @@ After saving, use `gurl run [name]` to execute the request.
 | `--extract` | | none | Add extraction rule as `VAR_NAME=METHOD:EXPRESSION` |
 | `--pre-script` | `--pre` | none | Set pre-request script |
 | `--post-script` | `--post` | none | Set post-response script |
+| `--auth` | | none | Authentication type: `basic`, `bearer`, `apikey`, `oauth1`, `oauth2`, `awsv4`, `digest`, `ntlm`, or `none` |
+| `--auth-param` | | none | Authentication parameter as `key=value` (can be specified multiple times) |
 
 ## Aliases
 
@@ -99,8 +101,57 @@ gurl save "login" https://api.example.com/auth/login \
 
 Stores extraction and script metadata with the request. Later runs can use extracted or script-set variables in assertions, request templates, and chained requests.
 
+### Save with bearer auth
+
+```bash
+gurl save "profile" https://api.example.com/me \
+  --auth bearer \
+  --auth-param token='{{token}}'
+```
+
+Stores bearer auth with the request. Later, `gurl run "profile" --var token=abc123` substitutes the token and applies the `Authorization` header.
+
+### Save with API key auth
+
+```bash
+gurl save "search" https://api.example.com/search \
+  --auth apikey \
+  --auth-param header=X-API-Key \
+  --auth-param value='{{api_key}}'
+```
+
+This stores a header-based API key. For the legacy query parameter form, use `--auth-param in=query`, `--auth-param key='{{api_key}}'`, and optionally `--auth-param param_name=api_key`.
+
+### Save with OAuth 2 client credentials
+
+```bash
+gurl save "service-token" https://api.example.com/service \
+  --auth oauth2 \
+  --auth-param flow=client_credentials \
+  --auth-param client_id='{{client_id}}' \
+  --auth-param client_secret='{{client_secret}}' \
+  --auth-param token_url='https://auth.example.com/oauth/token' \
+  --auth-param scope='read:orders'
+```
+
+The `oauth2` handler fetches an access token and applies it as a bearer token. Use `gurl auth info oauth2` to see every supported parameter.
+
+### Save with AWS SigV4
+
+```bash
+gurl save "aws-api" https://example.execute-api.us-east-1.amazonaws.com/prod/items \
+  --auth awsv4 \
+  --auth-param access_key='{{AWS_ACCESS_KEY_ID}}' \
+  --auth-param secret_key='{{AWS_SECRET_ACCESS_KEY}}' \
+  --auth-param region=us-east-1 \
+  --auth-param service=execute-api
+```
+
+The `awsv4` handler signs the outgoing request and adds the AWS authorization headers during execution.
+
 ## See also
 
 - [`gurl run`](run) - Execute a saved request
+- [`gurl auth`](auth) - Discover auth handlers and parameters
 - [`gurl list`](list) - List saved requests
 - [`gurl edit`](edit) - Edit a saved request

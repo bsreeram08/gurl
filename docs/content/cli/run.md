@@ -17,6 +17,8 @@ gurl run [name] [flags]
 
 The `run` command executes a request that was previously saved with `gurl save`. You can override variables, switch environments, set timeouts, and validate responses with assertions.
 
+If the saved request has auth settings, `gurl run` applies them automatically. Request URLs, headers, bodies, and auth parameters are template-substituted before the auth handler updates the outgoing request.
+
 ## Flags
 
 | Flag | Short | Default | Description |
@@ -64,6 +66,18 @@ gurl run "users" --var "page=2" --var "limit=50"
 
 Overrides the `page` and `limit` variables for this execution.
 
+### Run a request with saved auth
+
+```bash
+gurl save "profile" https://api.example.com/me \
+  --auth bearer \
+  --auth-param token='{{token}}'
+
+gurl run "profile" --var token=abc123
+```
+
+The saved `bearer` auth handler adds the `Authorization: Bearer abc123` header during execution. The token is supplied through normal variable substitution, so you don't need to resupply `--auth` when running the request.
+
 ### Run with JSON output
 
 ```bash
@@ -99,5 +113,6 @@ Writes only extracted variables and script-set variables back to the selected en
 ## See also
 
 - [`gurl save`](save) - Save a new request
+- [`gurl auth`](auth) - Discover supported auth handlers
 - [`gurl history`](history) - View execution history
 - [`gurl env`](env) - Manage environments

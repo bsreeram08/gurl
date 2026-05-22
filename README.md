@@ -50,7 +50,7 @@ Import from Postman. Run with environments. Assert on responses. Generate client
 - **Code generation** — generate curl, Go, Python, JavaScript from any saved request
 - **Interactive TUI** — full bubbletea interface for browsing and running requests
 - **Execution history** — per-request history + global timeline + diff between runs
-- **Plugin system** — middleware and custom output formatters
+- **Plugin system** — middleware, custom output formatters, commands, and auth handlers
 
 ## Key capabilities
 
@@ -148,6 +148,34 @@ gurl save "login" https://api.example.com/auth/login \
 gurl run "login" --env dev --chain --persist --assert "extract:token != ''"
 ```
 
+### Save authentication with the request
+
+```bash
+# Discover the handlers and their parameters
+gurl auth list
+gurl auth info bearer
+
+# Save a bearer token once, then run the request later
+gurl save "profile" https://api.example.com/me \
+  --auth bearer \
+  --auth-param token='{{token}}'
+
+gurl run "profile" --var token=abc123
+
+# Basic auth and API keys work the same way
+gurl save "admin" https://api.example.com/admin \
+  --auth basic \
+  --auth-param username='{{user}}' \
+  --auth-param password='{{password}}'
+
+gurl save "search" https://api.example.com/search \
+  --auth apikey \
+  --auth-param header=X-API-Key \
+  --auth-param value='{{api_key}}'
+```
+
+Auth parameters use repeated `--auth-param key=value` flags. Saved auth settings are applied when you run the request, after variable templates are substituted.
+
 ### Run collections with data-driven inputs
 
 ```bash
@@ -187,6 +215,7 @@ gurl codegen "create-order" --lang curl
 | `save` | Save a request (flags or raw curl string) |
 | `run` | Execute a saved request with variable substitution |
 | `list` | List saved requests (filter by collection, tag, pattern) |
+| `auth` | Discover supported authentication types and parameters |
 | `detect` | Parse curl from stdin interactively (TUI) |
 | `edit` | Edit a saved request in TUI form |
 | `delete` | Delete a saved request |

@@ -16,6 +16,7 @@ Gurl is a command-line HTTP client for saving, organizing, and executing curl re
 | [`save`](save) | Save a curl request with a name |
 | [`run`](run) | Execute a saved request |
 | [`list`](list) | List saved requests |
+| [`auth`](auth) | Discover supported authentication types |
 | [`edit`](edit) | Edit a saved request |
 | [`delete`](delete) | Remove a saved request |
 | [`rename`](rename) | Rename a saved request |
@@ -69,4 +70,7 @@ gurl list
 
 # Edit in your default editor
 gurl edit "my-request"
+
+# See available auth handlers
+gurl auth list
 ```
