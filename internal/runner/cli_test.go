@@ -99,6 +99,71 @@ func TestCollectionRunCommandPersistDryRunFailsFast(t *testing.T) {
 	}
 }
 
+func TestCollectionRunCommandDryRunPrintsDiagnostics(t *testing.T) {
+	db := newMockDB()
+	serverCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverCalls++
+		_, _ = w.Write([]byte(`{"should":"not happen"}`))
+	}))
+	defer server.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "create-order",
+		Name:       "create order",
+		Method:     "POST",
+		URL:        "{{baseUrl}}/orders/{{tenant}}",
+		Collection: "orders",
+		SortOrder:  1,
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+		},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "pay-order",
+		Name:       "pay order",
+		Method:     "GET",
+		URL:        "{{baseUrl}}/payments/{{orderId}}/{{missingVar}}",
+		Collection: "orders",
+		SortOrder:  2,
+	})
+
+	envStorage := newTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("baseUrl", server.URL)
+	beta.SetVariable("tenant", "acme")
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatalf("failed to save env: %v", err)
+	}
+
+	cmd := CollectionRunCommand(db, envStorage)
+	output := captureStdoutFile(t, func() {
+		if err := cmd.Run(context.Background(), []string{"run", "orders", "--env", "beta", "--dry-run"}); err != nil {
+			t.Fatalf("collection dry-run failed: %v", err)
+		}
+	})
+
+	if serverCalls != 0 {
+		t.Fatalf("expected dry-run to make zero HTTP requests, got %d", serverCalls)
+	}
+	for _, want := range []string{
+		`Dry run: collection "orders"`,
+		`Requests: 2`,
+		`Environment: beta`,
+		`1. create order`,
+		`POST ` + server.URL + `/orders/acme`,
+		`orderId ← jsonpath:$.data.orderId`,
+		`2. pay order`,
+		`GET ` + server.URL + `/payments/{{orderId}}/{{missingVar}}`,
+		`orderId from step 1 extraction`,
+		`warning: unresolved {{missingVar}}`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected dry-run output to contain %q, got:\n%s", want, output)
+		}
+	}
+}
+
 func newTestEnvStorage(t *testing.T) *env.EnvStorage {
 	t.Helper()
 	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "env.db"))

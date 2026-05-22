@@ -1862,6 +1862,117 @@ func TestRunner_MissingExtractionDoesNotFailRequest(t *testing.T) {
 	assertStringMap(t, "ExtractedVars", requestResult.ExtractedVars, map[string]string{"missing": ""})
 }
 
+func TestRunner_DryRunPlansCollectionWithoutHTTP(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	requestCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		_, _ = w.Write([]byte(`{"should":"not happen"}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-dry-create",
+		Name:       "create order",
+		URL:        ts.URL + "/orders/{{tenant}}",
+		Method:     "POST",
+		Collection: "dry-run-flow",
+		SortOrder:  1,
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+		},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-dry-pay",
+		Name:       "pay order",
+		URL:        ts.URL + "/payments/{{orderId}}/{{missingVar}}",
+		Method:     "GET",
+		Collection: "dry-run-flow",
+		SortOrder:  2,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{
+		CollectionName: "dry-run-flow",
+		DryRun:         true,
+		Vars:           map[string]string{"tenant": "acme"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if requestCount != 0 {
+		t.Fatalf("expected dry-run to make zero HTTP requests, got %d", requestCount)
+	}
+	if results[0].Passed != 2 || results[0].Failed != 0 {
+		t.Fatalf("expected dry-run requests to pass as planned diagnostics, got %+v", results[0])
+	}
+
+	first := results[0].RequestResults[0]
+	if !first.DryRun {
+		t.Fatalf("expected first request result to be marked dry-run: %+v", first)
+	}
+	if first.PlannedMethod != "POST" || first.PlannedURL != ts.URL+"/orders/acme" {
+		t.Fatalf("expected planned first request to resolve tenant, got method=%q url=%q", first.PlannedMethod, first.PlannedURL)
+	}
+	if len(first.PlannedExtracts) != 1 || first.PlannedExtracts[0].Name != "orderId" || first.PlannedExtracts[0].Source != "jsonpath:$.data.orderId" {
+		t.Fatalf("expected planned orderId extraction, got %#v", first.PlannedExtracts)
+	}
+
+	second := results[0].RequestResults[1]
+	if second.PlannedURL != ts.URL+"/payments/{{orderId}}/{{missingVar}}" {
+		t.Fatalf("expected unresolved planned extraction and missing var placeholders to remain, got %q", second.PlannedURL)
+	}
+	if second.PlannedVarSources["orderId"] != "from step 1 extraction" {
+		t.Fatalf("expected orderId planned source from step 1 extraction, got %#v", second.PlannedVarSources)
+	}
+	if got := strings.Join(second.DryRunWarnings, "\n"); !strings.Contains(got, "unresolved {{missingVar}}") {
+		t.Fatalf("expected unresolved missingVar warning, got %#v", second.DryRunWarnings)
+	}
+	if strings.Contains(strings.Join(second.DryRunWarnings, "\n"), "orderId") {
+		t.Fatalf("expected planned extraction variable not to be reported as unresolved, got %#v", second.DryRunWarnings)
+	}
+}
+
+func TestRunner_DryRunSkipsPostScriptsAssertionsAndHistory(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-dry-side-effects",
+		Name:       "side effects",
+		URL:        "https://example.test/orders",
+		Method:     "GET",
+		Collection: "dry-side-effects",
+		PostScript: `gurl.setVar("postRan", "yes")`,
+		Assertions: []types.Assertion{
+			{Field: "status", Op: "equals", Value: "201"},
+		},
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "dry-side-effects", DryRun: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	requestResult := results[0].RequestResults[0]
+	if !requestResult.Passed || !requestResult.DryRun {
+		t.Fatalf("expected dry-run diagnostic result to pass without execution, got %+v", requestResult)
+	}
+	if len(requestResult.AssertionResults) != 0 {
+		t.Fatalf("expected dry-run not to evaluate assertions, got %#v", requestResult.AssertionResults)
+	}
+	if _, ok := requestResult.DirtyVars["postRan"]; ok {
+		t.Fatalf("expected dry-run not to run post-script, got dirty vars %#v", requestResult.DirtyVars)
+	}
+	if len(db.history) != 0 {
+		t.Fatalf("expected dry-run not to save history, got %d entries", len(db.history))
+	}
+}
+
 func TestCollectDirtyVarsForPersistOnlyIncludesDirtyRequestVars(t *testing.T) {
 	results := []RunResult{
 		{

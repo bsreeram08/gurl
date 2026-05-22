@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/sreeram/gurl/internal/assertions"
@@ -22,6 +24,7 @@ type RunConfig struct {
 	Iterations     int
 	Bail           bool
 	AssertBail     bool
+	DryRun         bool
 	Delay          time.Duration
 	Vars           map[string]string
 	DataFile       string
@@ -48,6 +51,12 @@ type RequestResult struct {
 	AssertionResults    []assertions.Result
 	ExtractedVars       map[string]string
 	DirtyVars           map[string]string
+	DryRun              bool
+	PlannedMethod       string
+	PlannedURL          string
+	PlannedExtracts     []types.Extract
+	PlannedVarSources   map[string]string
+	DryRunWarnings      []string
 	SkipReason          string
 	FailurePhase        string
 	NextRequestOverride string
@@ -204,6 +213,7 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 	start := time.Now()
 	runningVars := copyStringMap(vars)
 	extractedVars := make(map[string]string)
+	plannedVarSources := make(map[string]string)
 	requestIndex := requestIndexByName(requests)
 	visited := make(map[string]bool, len(requests))
 	result := RunResult{
@@ -227,7 +237,7 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		}
 		visited[req.Name] = true
 
-		reqResult := r.runRequest(ctx, req, runningVars, extractedVars)
+		reqResult := r.runRequest(ctx, req, runningVars, extractedVars, config.DryRun, plannedVarSources)
 		nextIndex := i + 1
 		stop := false
 		if reqResult.NextRequestOverride != "" {
@@ -245,6 +255,12 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		}
 
 		result.RequestResults = append(result.RequestResults, reqResult)
+		if config.DryRun {
+			step := len(result.RequestResults)
+			for _, plannedExtract := range reqResult.PlannedExtracts {
+				plannedVarSources[plannedExtract.Name] = fmt.Sprintf("from step %d extraction", step)
+			}
+		}
 
 		if reqResult.Passed {
 			result.Passed++
@@ -300,17 +316,17 @@ func appendBailSkippedResults(result *RunResult, requests []*types.SavedRequest,
 	}
 }
 
-func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string, extractedVars map[string]string) *RequestResult {
-	return r.runRequestLifecycle(ctx, req, vars, extractedVars).Result
+func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string, extractedVars map[string]string, dryRun bool, plannedVarSources map[string]string) *RequestResult {
+	return r.runRequestLifecycle(ctx, req, vars, extractedVars, dryRun, plannedVarSources).Result
 }
 
 func (r *Runner) RunSavedRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string) *SingleRequestExecution {
 	runningVars := copyStringMap(vars)
 	extractedVars := make(map[string]string)
-	return r.runRequestLifecycle(ctx, req, runningVars, extractedVars)
+	return r.runRequestLifecycle(ctx, req, runningVars, extractedVars, false, nil)
 }
 
-func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedRequest, vars map[string]string, extractedVars map[string]string) *SingleRequestExecution {
+func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedRequest, vars map[string]string, extractedVars map[string]string, dryRun bool, plannedVarSources map[string]string) *SingleRequestExecution {
 	start := time.Now()
 	result := &RequestResult{
 		RequestName: req.Name,
@@ -368,6 +384,20 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 		copy.Body = modifiedReq.Body
 		copy.Headers = convertClientHeadersToTypes(modifiedReq.Headers)
 		effectiveReq = &copy
+	}
+
+	if dryRun {
+		planned := planDryRunRequest(effectiveReq, vars, plannedVarSources)
+		result.DryRun = true
+		result.Passed = true
+		result.PlannedMethod = planned.method
+		result.PlannedURL = planned.url
+		result.PlannedExtracts = planned.extracts
+		result.PlannedVarSources = planned.varSources
+		result.DryRunWarnings = planned.warnings
+		result.DirtyVars = nonEmptyMap(dirtyVars)
+		result.Duration = time.Since(start)
+		return execution
 	}
 
 	clientReq, err := curl.BuildClientRequest(effectiveReq, vars)
@@ -445,6 +475,70 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	}
 
 	return execution
+}
+
+type dryRunPlan struct {
+	method     string
+	url        string
+	extracts   []types.Extract
+	varSources map[string]string
+	warnings   []string
+}
+
+func planDryRunRequest(req *types.SavedRequest, vars map[string]string, plannedVarSources map[string]string) dryRunPlan {
+	plan := dryRunPlan{
+		method:     req.Method,
+		url:        resolveDryRunTemplate(req.URL, vars),
+		extracts:   append([]types.Extract(nil), req.Extracts...),
+		varSources: make(map[string]string),
+	}
+	if plan.method == "" {
+		plan.method = "GET"
+	}
+
+	usedVars := extractTemplateVars(req.URL)
+	for _, header := range req.Headers {
+		usedVars = append(usedVars, extractTemplateVars(header.Value)...)
+	}
+	usedVars = append(usedVars, extractTemplateVars(req.Body)...)
+
+	warningsByVar := make(map[string]bool)
+	for _, name := range usedVars {
+		if _, ok := vars[name]; ok {
+			continue
+		}
+		if source := plannedVarSources[name]; source != "" {
+			plan.varSources[name] = source
+			continue
+		}
+		warningsByVar[name] = true
+	}
+
+	if len(warningsByVar) > 0 {
+		names := make([]string, 0, len(warningsByVar))
+		for name := range warningsByVar {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			plan.warnings = append(plan.warnings, fmt.Sprintf("unresolved {{%s}}", name))
+		}
+	}
+
+	return plan
+}
+
+func resolveDryRunTemplate(value string, vars map[string]string) string {
+	resolved := value
+	keys := make([]string, 0, len(vars))
+	for key := range vars {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		resolved = strings.ReplaceAll(resolved, "{{"+key+"}}", vars[key])
+	}
+	return resolved
 }
 
 func requestIndexByName(requests []*types.SavedRequest) map[string]int {

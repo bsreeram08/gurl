@@ -89,9 +89,6 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 			if c.Bool("persist") && c.Bool("dry-run") {
 				return cli.Exit("--persist and --dry-run cannot be used together", 2)
 			}
-			if c.Bool("dry-run") {
-				return cli.Exit("--dry-run is not implemented yet", 2)
-			}
 
 			persistEnvName := ""
 			if c.Bool("persist") {
@@ -120,6 +117,7 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 				Iterations:     c.Int("iterations"),
 				Bail:           c.Bool("bail"),
 				AssertBail:     c.Bool("assert-bail"),
+				DryRun:         c.Bool("dry-run"),
 				Delay:          c.Duration("delay"),
 				Vars:           vars,
 				DataFile:       c.String("data"),
@@ -136,6 +134,11 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 
 			reporterNames := c.StringSlice("reporter")
 			reporterOutput := c.String("reporter-output")
+
+			if c.Bool("dry-run") {
+				printDryRunDiagnostics(os.Stdout, results, envName)
+				return nil
+			}
 
 			for _, name := range reporterNames {
 				reporter := reporters.GetReporter(name)
@@ -184,6 +187,52 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 			}
 			return nil
 		},
+	}
+}
+
+func printDryRunDiagnostics(out io.Writer, results []RunResult, envName string) {
+	if len(results) == 0 {
+		return
+	}
+	requestCount := 0
+	for _, result := range results {
+		requestCount += len(result.RequestResults)
+	}
+	collectionName := results[0].CollectionName
+	fmt.Fprintf(out, "Dry run: collection %q\n", collectionName)
+	fmt.Fprintf(out, "Requests: %d\n", requestCount)
+	if envName == "" {
+		fmt.Fprintln(out, "Environment: <none>")
+	} else {
+		fmt.Fprintf(out, "Environment: %s\n", envName)
+	}
+
+	step := 1
+	for _, result := range results {
+		if len(results) > 1 {
+			fmt.Fprintf(out, "\nIteration %d\n", result.Iteration)
+		}
+		for _, reqResult := range result.RequestResults {
+			fmt.Fprintf(out, "\n%d. %s\n", step, reqResult.RequestName)
+			fmt.Fprintf(out, "  %s %s\n", reqResult.PlannedMethod, reqResult.PlannedURL)
+			if len(reqResult.PlannedVarSources) > 0 {
+				keys := make([]string, 0, len(reqResult.PlannedVarSources))
+				for key := range reqResult.PlannedVarSources {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				for _, key := range keys {
+					fmt.Fprintf(out, "  %s %s\n", key, reqResult.PlannedVarSources[key])
+				}
+			}
+			for _, warning := range reqResult.DryRunWarnings {
+				fmt.Fprintf(out, "  warning: %s\n", warning)
+			}
+			for _, extract := range reqResult.PlannedExtracts {
+				fmt.Fprintf(out, "  %s ← %s\n", extract.Name, extract.Source)
+			}
+			step++
+		}
 	}
 }
 
