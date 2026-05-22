@@ -314,6 +314,105 @@ func TestSaveCommandPersistsExtractsScriptsAndJQAlias(t *testing.T) {
 	}
 }
 
+func TestSaveCommandPersistsAuthConfigInAllSaveModes(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantName   string
+		wantType   string
+		wantParams map[string]string
+	}{
+		{
+			name:     "normal URL mode",
+			args:     []string{"oauth", "https://api.example.com", "--auth", "oauth2", "--auth-param", "client_id=abc", "--auth-param", "token_url=https://auth.example.com/token", "--auth-param", "flow=client_credentials"},
+			wantName: "oauth",
+			wantType: "oauth2",
+			wantParams: map[string]string{
+				"client_id": "abc",
+				"token_url": "https://auth.example.com/token",
+				"flow":      "client_credentials",
+			},
+		},
+		{
+			name:     "individual flags mode",
+			args:     []string{"api_key", "-X", "POST", "--auth", "apikey", "--auth-param", "header=X-Api-Key", "--auth-param", "value=secret", "https://api.example.com"},
+			wantName: "api_key",
+			wantType: "apikey",
+			wantParams: map[string]string{
+				"header": "X-Api-Key",
+				"value":  "secret",
+			},
+		},
+		{
+			name:     "curl flag mode",
+			args:     []string{"curl_auth", "--curl", "curl https://api.example.com", "--auth", "bearer", "--auth-param", "token={{token}}"},
+			wantName: "curl_auth",
+			wantType: "bearer",
+			wantParams: map[string]string{
+				"token": "{{token}}",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := newMockDB()
+			cmd := SaveCommand(db)
+
+			err := cmd.Run(context.Background(), append([]string{"save"}, tt.args...))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			req, err := db.GetRequestByName(tt.wantName)
+			if err != nil {
+				t.Fatalf("load saved request: %v", err)
+			}
+			assertAuthConfig(t, req.AuthConfig, tt.wantType, tt.wantParams)
+		})
+	}
+}
+
+func TestSaveCommandRejectsUnknownAuthType(t *testing.T) {
+	db := newMockDB()
+	cmd := SaveCommand(db)
+
+	err := cmd.Run(context.Background(), []string{"save", "bad_auth", "https://api.example.com", "--auth", "madeup"})
+	if err == nil {
+		t.Fatal("expected unknown auth type error")
+	}
+	if !strings.Contains(err.Error(), "unknown auth type") {
+		t.Fatalf("expected unknown auth type error, got %v", err)
+	}
+}
+
+func TestSaveCommandRejectsMalformedAuthParamWithExitCode2(t *testing.T) {
+	db := newMockDB()
+	cmd := SaveCommand(db)
+	cmd.ExitErrHandler = func(context.Context, *cli.Command, error) {}
+
+	err := cmd.Run(context.Background(), []string{
+		"save",
+		"bad",
+		"https://api.example.com",
+		"--auth", "bearer",
+		"--auth-param", "token",
+	})
+	if err == nil {
+		t.Fatal("expected malformed auth param error")
+	}
+	if !strings.Contains(err.Error(), "auth-param must be KEY=VALUE") {
+		t.Fatalf("expected clear auth-param format error, got %v", err)
+	}
+	exitCoder, ok := err.(cli.ExitCoder)
+	if !ok {
+		t.Fatalf("expected cli.ExitCoder error, got %T: %v", err, err)
+	}
+	if exitCoder.ExitCode() != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitCoder.ExitCode())
+	}
+}
+
 func TestSaveCommandRejectsMalformedExtractWithExitCode2(t *testing.T) {
 	db := newMockDB()
 	cmd := SaveCommand(db)
@@ -337,5 +436,23 @@ func TestSaveCommandRejectsMalformedExtractWithExitCode2(t *testing.T) {
 	}
 	if exitCoder.ExitCode() != 2 {
 		t.Fatalf("expected exit code 2, got %d", exitCoder.ExitCode())
+	}
+}
+
+func assertAuthConfig(t *testing.T, got *types.AuthConfig, wantType string, wantParams map[string]string) {
+	t.Helper()
+	if got == nil {
+		t.Fatal("expected auth config to be persisted")
+	}
+	if got.Type != wantType {
+		t.Fatalf("expected auth type %q, got %q", wantType, got.Type)
+	}
+	if len(got.Params) != len(wantParams) {
+		t.Fatalf("expected params %#v, got %#v", wantParams, got.Params)
+	}
+	for key, want := range wantParams {
+		if got.Params[key] != want {
+			t.Fatalf("expected param %s=%q, got %q", key, want, got.Params[key])
+		}
 	}
 }
