@@ -270,7 +270,7 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 			result.Failed++
 		}
 
-		if shouldStopForBail(config, reqResult) {
+		if shouldStopForBail(config, reqResult) && (config.Bail || reqResult.NextRequestOverride == "" || stop) {
 			appendBailSkippedResults(&result, requests, i+1)
 			break
 		}

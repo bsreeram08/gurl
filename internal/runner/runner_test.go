@@ -840,6 +840,74 @@ func TestRunner_BailMarksRemainingRequestsWithBailSkipReason(t *testing.T) {
 	}
 }
 
+func TestRunner_BailStopsBeforeValidNextRequestOverride(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	order := []string{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		order = append(order, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-start-bail-next",
+		Name:       "start",
+		URL:        ts.URL + "/start",
+		Method:     "GET",
+		Collection: "bail-next-flow",
+		SortOrder:  1,
+		PostScript: `gurl.setNextRequest("final")`,
+		Assertions: []types.Assertion{{Field: "status", Op: "equals", Value: "201"}},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-middle-bail-next",
+		Name:       "middle",
+		URL:        ts.URL + "/middle",
+		Method:     "GET",
+		Collection: "bail-next-flow",
+		SortOrder:  2,
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-final-bail-next",
+		Name:       "final",
+		URL:        ts.URL + "/final",
+		Method:     "GET",
+		Collection: "bail-next-flow",
+		SortOrder:  3,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "bail-next-flow", Bail: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got, want := order, []string{"/start"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("expected general bail to stop before valid next-request override target, got order %v", got)
+	}
+
+	result := results[0]
+	if result.Passed != 0 || result.Failed != 1 || result.Skipped != 2 {
+		t.Fatalf("expected start failure and two bail skips, got passed=%d failed=%d skipped=%d", result.Passed, result.Failed, result.Skipped)
+	}
+	if len(result.RequestResults) != 3 {
+		t.Fatalf("expected start result plus two bail skips, got %d results: %+v", len(result.RequestResults), result.RequestResults)
+	}
+	startResult := result.RequestResults[0]
+	if startResult.RequestName != "start" || startResult.FailurePhase != FailurePhaseAssertion || startResult.NextRequestOverride != "final" {
+		t.Fatalf("expected start assertion failure with recorded next override, got %+v", startResult)
+	}
+	for _, skipped := range result.RequestResults[1:] {
+		if !skipped.Skipped || skipped.SkipReason != SkipReasonBail {
+			t.Fatalf("expected remaining request to be bail-skipped, got %+v", skipped)
+		}
+	}
+}
+
 func TestRunner_AssertBailStopsOnlyAfterAssertionFailure(t *testing.T) {
 	db := newMockDB()
 	envStorage := newMockEnvStorage()
@@ -915,6 +983,75 @@ func TestRunner_AssertBailDoesNotStopOnSkippedRequest(t *testing.T) {
 	result := results[0]
 	if result.Skipped != 1 || result.Passed != 1 || result.Failed != 0 {
 		t.Fatalf("expected one skipped and one passed request, got passed=%d failed=%d skipped=%d", result.Passed, result.Failed, result.Skipped)
+	}
+}
+
+func TestRunner_AssertBailHonorsNextRequestOverrideBeforeStopping(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	order := []string{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		order = append(order, r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-start-assert-next",
+		Name:       "start",
+		URL:        ts.URL + "/start",
+		Method:     "GET",
+		Collection: "assert-bail-next-flow",
+		SortOrder:  1,
+		PostScript: `gurl.setNextRequest("final")`,
+		Assertions: []types.Assertion{{Field: "status", Op: "equals", Value: "201"}},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-middle-assert-next",
+		Name:       "middle",
+		URL:        ts.URL + "/middle",
+		Method:     "GET",
+		Collection: "assert-bail-next-flow",
+		SortOrder:  2,
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-final-assert-next",
+		Name:       "final",
+		URL:        ts.URL + "/final",
+		Method:     "GET",
+		Collection: "assert-bail-next-flow",
+		SortOrder:  3,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "assert-bail-next-flow", AssertBail: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got, want := order, []string{"/start", "/final"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("expected assert-bail to honor next-request override before stopping, got order %v", got)
+	}
+
+	result := results[0]
+	if result.Passed != 1 || result.Failed != 1 || result.Skipped != 0 {
+		t.Fatalf("expected start assertion failure and final pass without bail skips, got passed=%d failed=%d skipped=%d", result.Passed, result.Failed, result.Skipped)
+	}
+	if len(result.RequestResults) != 2 {
+		t.Fatalf("expected only start and override target results, got %d results: %+v", len(result.RequestResults), result.RequestResults)
+	}
+	startResult := result.RequestResults[0]
+	if startResult.RequestName != "start" || startResult.FailurePhase != FailurePhaseAssertion || startResult.NextRequestOverride != "final" {
+		t.Fatalf("expected start assertion failure with next override, got %+v", startResult)
+	}
+	if len(startResult.AssertionResults) != 1 || startResult.AssertionResults[0].Passed {
+		t.Fatalf("expected start to record one failed assertion, got %+v", startResult.AssertionResults)
+	}
+	finalResult := result.RequestResults[1]
+	if finalResult.RequestName != "final" || !finalResult.Passed || finalResult.Skipped {
+		t.Fatalf("expected final override target to pass, got %+v", finalResult)
 	}
 }
 
