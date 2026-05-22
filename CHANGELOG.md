@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.3.0] - 2026-05-23
+
+### Added
+
+- `gurl auth list` and `gurl auth info <type>` now help you discover the built-in auth handlers and their parameters without leaving the terminal.
+- `gurl save` and `gurl edit` can persist auth settings with `--auth` and repeated `--auth-param key=value` flags, so saved requests can run later without resupplying credentials.
+- Built-in auth handlers now cover Basic, Bearer, API key, OAuth 1, OAuth 2 client credentials, AWS SigV4, Digest, and NTLM request signing flows.
+
+### Changed
+
+- Saved auth parameters are template-aware. Values like `{{token}}`, `{{AWS_SECRET_ACCESS_KEY}}`, or `{{client_secret}}` are substituted at execution time before auth is applied.
+- The plugin system now has an `AuthPlugin` interface and auth registry support for handlers that apply credentials to outgoing requests.
+
 ## [v0.2.2] - 2026-05-22
 
 ### Fixed
