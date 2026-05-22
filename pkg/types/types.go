@@ -64,6 +64,9 @@ type SavedRequest struct {
 	Timeout      string      `json:"timeout,omitempty"`
 	Assertions   []Assertion `json:"assertions,omitempty"`
 	Extracts     []Extract   `json:"extracts,omitempty"`
+	PreScript    string      `json:"pre_script,omitempty"`
+	PostScript   string      `json:"post_script,omitempty"`
+	RunIf        string      `json:"run_if,omitempty"`
 	Folder       string      `json:"folder,omitempty"`
 	Protocol     string      `json:"protocol,omitempty"`
 	SortOrder    int         `json:"sort_order"`

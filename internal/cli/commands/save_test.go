@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sreeram/gurl/pkg/types"
+	"github.com/urfave/cli/v3"
 )
 
 func TestSaveCommand(t *testing.T) {
@@ -271,5 +272,70 @@ func TestSaveCommandConfirmationUsesSavedNameAndURL(t *testing.T) {
 	want := "✓ Saved request 'foo' (https://example.com)"
 	if !strings.Contains(output, want) {
 		t.Errorf("expected confirmation %q, got %q", want, output)
+	}
+}
+
+func TestSaveCommandPersistsExtractsScriptsAndJQAlias(t *testing.T) {
+	db := newMockDB()
+	cmd := SaveCommand(db)
+	cmd.ExitErrHandler = func(context.Context, *cli.Command, error) {}
+
+	err := cmd.Run(context.Background(), []string{
+		"save",
+		"login",
+		"https://api.example.com/login",
+		"--extract", "token=jsonpath:$.token",
+		"--extract", "requestId=jq:$.request.id",
+		"--pre-script", "gurl.setVar('tenant', 'acme')",
+		"--post-script", "gurl.setVar('seen', 'yes')",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req, err := db.GetRequestByName("login")
+	if err != nil {
+		t.Fatalf("load saved request: %v", err)
+	}
+	if req.PreScript != "gurl.setVar('tenant', 'acme')" {
+		t.Fatalf("pre script not persisted: %q", req.PreScript)
+	}
+	if req.PostScript != "gurl.setVar('seen', 'yes')" {
+		t.Fatalf("post script not persisted: %q", req.PostScript)
+	}
+	if len(req.Extracts) != 2 {
+		t.Fatalf("expected two extracts, got %#v", req.Extracts)
+	}
+	if req.Extracts[0].Name != "token" || req.Extracts[0].Source != "jsonpath:$.token" {
+		t.Fatalf("first extract mismatch: %#v", req.Extracts[0])
+	}
+	if req.Extracts[1].Name != "requestId" || req.Extracts[1].Source != "jsonpath:$.request.id" {
+		t.Fatalf("jq alias should store as jsonpath, got %#v", req.Extracts[1])
+	}
+}
+
+func TestSaveCommandRejectsMalformedExtractWithExitCode2(t *testing.T) {
+	db := newMockDB()
+	cmd := SaveCommand(db)
+	cmd.ExitErrHandler = func(context.Context, *cli.Command, error) {}
+
+	err := cmd.Run(context.Background(), []string{
+		"save",
+		"bad",
+		"https://api.example.com",
+		"--extract", "missingSeparator",
+	})
+	if err == nil {
+		t.Fatal("expected malformed extract error")
+	}
+	if !strings.Contains(err.Error(), "extract must be VAR_NAME=METHOD:EXPRESSION") {
+		t.Fatalf("expected clear extract format error, got %v", err)
+	}
+	exitCoder, ok := err.(cli.ExitCoder)
+	if !ok {
+		t.Fatalf("expected cli.ExitCoder error, got %T: %v", err, err)
+	}
+	if exitCoder.ExitCode() != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitCoder.ExitCode())
 	}
 }

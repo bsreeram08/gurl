@@ -69,10 +69,28 @@ func SaveCommand(db storage.DB) *cli.Command {
 				Aliases: []string{"data", "body"},
 				Usage:   "Request body",
 			},
+			&cli.StringSliceFlag{
+				Name:  "extract",
+				Usage: "Add extraction rule (format: VAR_NAME=METHOD:EXPRESSION)",
+			},
+			&cli.StringFlag{
+				Name:    "pre-script",
+				Aliases: []string{"pre"},
+				Usage:   "Set pre-request script",
+			},
+			&cli.StringFlag{
+				Name:    "post-script",
+				Aliases: []string{"post"},
+				Usage:   "Set post-response script",
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
 			nameFlag := c.String("name")
+			extracts, err := parseExtractFlags(c.StringSlice("extract"))
+			if err != nil {
+				return cli.Exit(err.Error(), 2)
+			}
 
 			// Mode 1: --curl flag provided
 			if curlFlag := c.String("curl"); curlFlag != "" {
@@ -102,6 +120,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.Tags = c.StringSlice("tag")
 				req.Collection = c.String("collection")
 				req.Folder = c.String("folder")
+				applyFlowMetadata(&req, extracts, c.String("pre-script"), c.String("post-script"))
 				req.CreatedAt = time.Now().Unix()
 				req.UpdatedAt = time.Now().Unix()
 
@@ -153,6 +172,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 					return fmt.Errorf("invalid format '%s': must be one of auto, json, table", format)
 				}
 				req.OutputFormat = format
+				applyFlowMetadata(req, extracts, c.String("pre-script"), c.String("post-script"))
 
 				if err := db.SaveRequest(req); err != nil {
 					return fmt.Errorf("failed to save request: %w", err)
@@ -193,6 +213,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.Tags = c.StringSlice("tag")
 				req.Collection = c.String("collection")
 				req.Folder = c.String("folder")
+				applyFlowMetadata(&req, extracts, c.String("pre-script"), c.String("post-script"))
 				req.CreatedAt = time.Now().Unix()
 				req.UpdatedAt = time.Now().Unix()
 
@@ -221,6 +242,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				CreatedAt:    time.Now().Unix(),
 				UpdatedAt:    time.Now().Unix(),
 			}
+			applyFlowMetadata(req, extracts, c.String("pre-script"), c.String("post-script"))
 
 			if err := db.SaveRequest(req); err != nil {
 				return fmt.Errorf("failed to save request: %w", err)
@@ -229,6 +251,52 @@ func SaveCommand(db storage.DB) *cli.Command {
 			printSaveConfirmation(name, req.URL)
 			return nil
 		},
+	}
+}
+
+func applyFlowMetadata(req *types.SavedRequest, extracts []types.Extract, preScript, postScript string) {
+	req.Extracts = append(req.Extracts, extracts...)
+	req.PreScript = preScript
+	req.PostScript = postScript
+}
+
+func parseExtractFlags(values []string) ([]types.Extract, error) {
+	extracts := make([]types.Extract, 0, len(values))
+	for _, value := range values {
+		extract, err := parseExtractFlag(value)
+		if err != nil {
+			return nil, err
+		}
+		extracts = append(extracts, extract)
+	}
+	return extracts, nil
+}
+
+func parseExtractFlag(value string) (types.Extract, error) {
+	name, source, ok := strings.Cut(value, "=")
+	if !ok {
+		return types.Extract{}, fmt.Errorf("extract must be VAR_NAME=METHOD:EXPRESSION")
+	}
+
+	name = strings.TrimSpace(name)
+	method, expression, ok := strings.Cut(source, ":")
+	if name == "" || !ok {
+		return types.Extract{}, fmt.Errorf("extract must be VAR_NAME=METHOD:EXPRESSION")
+	}
+
+	method = strings.TrimSpace(method)
+	expression = strings.TrimSpace(expression)
+	if method == "" || expression == "" {
+		return types.Extract{}, fmt.Errorf("extract must be VAR_NAME=METHOD:EXPRESSION")
+	}
+
+	switch method {
+	case "jsonpath", "header", "regex":
+		return types.Extract{Name: name, Source: method + ":" + expression}, nil
+	case "jq":
+		return types.Extract{Name: name, Source: "jsonpath:" + expression}, nil
+	default:
+		return types.Extract{}, fmt.Errorf("extract method must be one of jsonpath, header, regex, jq")
 	}
 }
 
