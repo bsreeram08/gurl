@@ -4,12 +4,16 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
+	"github.com/urfave/cli/v3"
 )
 
 func varsFromEnvAndArgs(envVars map[string]string, args []string) map[string]string {
@@ -186,6 +190,217 @@ func TestRunCommandCLIAssertionPassReturnsNilAndSavesHistory(t *testing.T) {
 	if len(db.history) != 1 {
 		t.Fatalf("expected history to be saved after passing CLI assertion, got %d entries", len(db.history))
 	}
+}
+
+func TestRunCommandPersistWritesSingleRequestDirtyVars(t *testing.T) {
+	db := newMockDB()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"orderId":"ord_123"}}`))
+	}))
+	defer server.Close()
+
+	db.requests["req-persist"] = &types.SavedRequest{
+		ID:         "req-persist",
+		Name:       "create order",
+		URL:        "{{baseUrl}}/orders/{{cliOnly}}",
+		Method:     "POST",
+		PostScript: `gurl.setVar("flowNote", "scripted")`,
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+		},
+	}
+	db.names["create order"] = "req-persist"
+
+	envStorage := newRunTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("baseUrl", server.URL)
+	beta.SetVariable("unchanged", "keep")
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatalf("failed to save env: %v", err)
+	}
+
+	cmd := RunCommand(db, envStorage)
+	output := captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"run", "create order", "--env", "beta", "--var", "cliOnly=123", "--persist"}); err != nil {
+			t.Fatalf("run command failed: %v", err)
+		}
+	})
+
+	reloaded, err := envStorage.GetEnvByName("beta")
+	if err != nil {
+		t.Fatalf("failed to reload env: %v", err)
+	}
+	if reloaded.Variables["orderId"] != "ord_123" || reloaded.Variables["flowNote"] != "scripted" {
+		t.Fatalf("expected dirty vars to persist, got %+v", reloaded.Variables)
+	}
+	if _, ok := reloaded.Variables["cliOnly"]; ok {
+		t.Fatalf("expected CLI var not to persist, got %+v", reloaded.Variables)
+	}
+	if reloaded.Variables["unchanged"] != "keep" {
+		t.Fatalf("expected existing env var to remain, got %+v", reloaded.Variables)
+	}
+	if !strings.Contains(output, "Persisted 2 variables to environment \"beta\"") || !strings.Contains(output, "flowNote = scripted") || !strings.Contains(output, "orderId = ord_123") {
+		t.Fatalf("expected persist summary with exact keys and values, got output:\n%s", output)
+	}
+}
+
+func TestRunCommandWithoutPersistLeavesEnvUnchanged(t *testing.T) {
+	db := newMockDB()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"orderId":"ord_123"}}`))
+	}))
+	defer server.Close()
+
+	db.requests["req-no-persist"] = &types.SavedRequest{
+		ID:     "req-no-persist",
+		Name:   "create order no persist",
+		URL:    "{{baseUrl}}/orders",
+		Method: "POST",
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+		},
+	}
+	db.names["create order no persist"] = "req-no-persist"
+
+	envStorage := newRunTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("baseUrl", server.URL)
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatalf("failed to save env: %v", err)
+	}
+
+	cmd := RunCommand(db, envStorage)
+	output := captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"run", "create order no persist", "--env", "beta"}); err != nil {
+			t.Fatalf("run command failed: %v", err)
+		}
+	})
+
+	reloaded, err := envStorage.GetEnvByName("beta")
+	if err != nil {
+		t.Fatalf("failed to reload env: %v", err)
+	}
+	if _, ok := reloaded.Variables["orderId"]; ok {
+		t.Fatalf("expected no dirty var persistence without --persist, got %+v", reloaded.Variables)
+	}
+	if strings.Contains(output, "Persisted") {
+		t.Fatalf("expected no persist summary without --persist, got output:\n%s", output)
+	}
+}
+
+func TestRunCommandDataDrivenPersistOnlyWritesDirtyVars(t *testing.T) {
+	db := newMockDB()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"orderId":"ord_from_response"}}`))
+	}))
+	defer server.Close()
+
+	db.requests["req-data-persist"] = &types.SavedRequest{
+		ID:         "req-data-persist",
+		Name:       "data persist",
+		URL:        "{{baseUrl}}/orders/{{rowOrder}}",
+		Method:     "POST",
+		PostScript: `gurl.setVar("scriptOutput", gurl.getVar("rowOrder") + "-script")`,
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+		},
+	}
+	db.names["data persist"] = "req-data-persist"
+
+	dataPath := filepath.Join(t.TempDir(), "rows.csv")
+	if err := os.WriteFile(dataPath, []byte("rowOrder\nrow_123\n"), 0644); err != nil {
+		t.Fatalf("failed to write data file: %v", err)
+	}
+
+	envStorage := newRunTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("baseUrl", server.URL)
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatalf("failed to save env: %v", err)
+	}
+
+	cmd := RunCommand(db, envStorage)
+	output := captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"run", "data persist", "--env", "beta", "--data", dataPath, "--persist"}); err != nil {
+			t.Fatalf("run command failed: %v", err)
+		}
+	})
+
+	reloaded, err := envStorage.GetEnvByName("beta")
+	if err != nil {
+		t.Fatalf("failed to reload env: %v", err)
+	}
+	if reloaded.Variables["orderId"] != "ord_from_response" || reloaded.Variables["scriptOutput"] != "row_123-script" {
+		t.Fatalf("expected dirty extraction/script vars to persist, got %+v", reloaded.Variables)
+	}
+	if _, ok := reloaded.Variables["rowOrder"]; ok {
+		t.Fatalf("expected data row var not to persist, got %+v", reloaded.Variables)
+	}
+	if !strings.Contains(output, "Persisted 2 variables to environment \"beta\"") {
+		t.Fatalf("expected persist summary, got output:\n%s", output)
+	}
+}
+
+func TestRunCommandPersistDryRunFailsFastWithoutMutation(t *testing.T) {
+	db := newMockDB()
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"orderId":"ord_123"}}`))
+	}))
+	defer server.Close()
+
+	db.requests["req-dry-run-persist"] = &types.SavedRequest{
+		ID:     "req-dry-run-persist",
+		Name:   "dry run persist",
+		URL:    "{{baseUrl}}/orders",
+		Method: "POST",
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+		},
+	}
+	db.names["dry run persist"] = "req-dry-run-persist"
+
+	envStorage := newRunTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("baseUrl", server.URL)
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatalf("failed to save env: %v", err)
+	}
+
+	cmd := RunCommand(db, envStorage)
+	cmd.ExitErrHandler = func(context.Context, *cli.Command, error) {}
+	err := cmd.Run(context.Background(), []string{"run", "dry run persist", "--env", "beta", "--persist", "--dry-run"})
+	if err == nil {
+		t.Fatal("expected persist/dry-run incompatibility error")
+	}
+	if !strings.Contains(err.Error(), "--persist and --dry-run cannot be used together") {
+		t.Fatalf("expected clear incompatible flags error, got %v", err)
+	}
+	if requestCount != 0 {
+		t.Fatalf("expected fail-fast before HTTP, got %d requests", requestCount)
+	}
+	reloaded, err := envStorage.GetEnvByName("beta")
+	if err != nil {
+		t.Fatalf("failed to reload env: %v", err)
+	}
+	if _, ok := reloaded.Variables["orderId"]; ok {
+		t.Fatalf("expected no env mutation on incompatible flags, got %+v", reloaded.Variables)
+	}
+}
+
+func newRunTestEnvStorage(t *testing.T) *env.EnvStorage {
+	t.Helper()
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "env.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open env db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return env.NewEnvStorage(db)
 }
 
 func TestRunCommandMultipleVars(t *testing.T) {

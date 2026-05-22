@@ -1862,6 +1862,37 @@ func TestRunner_MissingExtractionDoesNotFailRequest(t *testing.T) {
 	assertStringMap(t, "ExtractedVars", requestResult.ExtractedVars, map[string]string{"missing": ""})
 }
 
+func TestCollectDirtyVarsForPersistOnlyIncludesDirtyRequestVars(t *testing.T) {
+	results := []RunResult{
+		{
+			RequestResults: []*RequestResult{
+				{RequestName: "create", DirtyVars: map[string]string{"orderId": "ord_123", "token": "first-token"}},
+				{RequestName: "pay", DirtyVars: map[string]string{"paymentId": "pay_456", "token": "second-token"}},
+				{RequestName: "check"},
+			},
+		},
+		{
+			RequestResults: []*RequestResult{
+				{RequestName: "data-row", DirtyVars: map[string]string{"rowOutput": "from-script"}},
+			},
+		},
+	}
+
+	got := CollectDirtyVarsForPersist(results)
+	want := map[string]string{
+		"orderId":   "ord_123",
+		"paymentId": "pay_456",
+		"token":     "second-token",
+		"rowOutput": "from-script",
+	}
+	assertStringMap(t, "persist dirty vars", got, want)
+
+	got["orderId"] = "mutated"
+	if results[0].RequestResults[0].DirtyVars["orderId"] != "ord_123" {
+		t.Fatal("expected collected dirty vars to be a defensive copy")
+	}
+}
+
 func TestRunner_MultipleIterations(t *testing.T) {
 	db := newMockDB()
 	envStorage := newMockEnvStorage()

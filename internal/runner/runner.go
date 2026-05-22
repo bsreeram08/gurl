@@ -477,6 +477,18 @@ func nonEmptyMap(source map[string]string) map[string]string {
 	return copyStringMap(source)
 }
 
+func CollectDirtyVarsForPersist(results []RunResult) map[string]string {
+	dirty := make(map[string]string)
+	for _, runResult := range results {
+		for _, requestResult := range runResult.RequestResults {
+			for key, value := range requestResult.DirtyVars {
+				dirty[key] = value
+			}
+		}
+	}
+	return dirty
+}
+
 func copyStringMap(source map[string]string) map[string]string {
 	copy := make(map[string]string, len(source))
 	for key, value := range source {

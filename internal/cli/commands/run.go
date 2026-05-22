@@ -77,6 +77,14 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 				Aliases: []string{"ch"},
 				Usage:   "Enable request chaining via setNextRequest",
 			},
+			&cli.BoolFlag{
+				Name:  "persist",
+				Usage: "Persist extracted/script variables back to the selected environment",
+			},
+			&cli.BoolFlag{
+				Name:  "dry-run",
+				Usage: "Preview request execution without sending it",
+			},
 			&cli.StringSliceFlag{
 				Name:    "assert",
 				Aliases: []string{"a"},
@@ -107,14 +115,32 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 			} else {
 				name = args.Get(0)
 			}
+			if c.Bool("persist") && c.Bool("dry-run") {
+				return cli.Exit("--persist and --dry-run cannot be used together", 2)
+			}
+			if c.Bool("dry-run") {
+				return cli.Exit("--dry-run is not implemented yet", 2)
+			}
 
 			enableChain := c.Bool("chain")
 			dataFile := c.String("data")
+			requestedEnv := c.String("env")
+			persistEnvName := ""
+			if c.Bool("persist") {
+				var err error
+				persistEnvName, err = env.ResolvePersistEnvironmentName(envStorage, requestedEnv)
+				if err != nil {
+					return cli.Exit(err.Error(), 2)
+				}
+				if requestedEnv == "" {
+					requestedEnv = persistEnvName
+				}
+			}
 
 			envVars := make(map[string]string)
 
-			if envName := c.String("env"); envName != "" {
-				if env, err := envStorage.GetEnvByName(envName); err == nil {
+			if requestedEnv != "" {
+				if env, err := envStorage.GetEnvByName(requestedEnv); err == nil {
 					for k, v := range env.Variables {
 						envVars[k] = v
 					}
@@ -136,14 +162,14 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 			baseVars := mergeRunVars(envVars, cliVars)
 
 			if dataFile != "" {
-				return executeDataDriven(ctx, db, envStorage, name, envVars, cliVars, c)
+				return executeDataDriven(ctx, db, envStorage, name, envVars, cliVars, c, persistEnvName)
 			}
 
 			if enableChain {
 				return executeChain(ctx, db, envStorage, name, baseVars, c)
 			}
 
-			return executeSingleRequest(ctx, db, envStorage, name, baseVars, c)
+			return executeSingleRequest(ctx, db, envStorage, name, baseVars, c, persistEnvName)
 		},
 	}
 }
@@ -257,7 +283,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 	return fmt.Errorf("max iterations (%d) reached", chainExec.MaxIterations())
 }
 
-func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, vars map[string]string, c *cli.Command) error {
+func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, vars map[string]string, c *cli.Command, persistEnvName string) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
@@ -270,6 +296,17 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.En
 	}
 
 	execution := runner.NewRunner(db, envStorage).RunSavedRequest(ctx, req, vars)
+	if persistEnvName != "" {
+		persisted, persistErr := env.PersistVariables(envStorage, persistEnvName, execution.Result.DirtyVars)
+		if persistErr != nil {
+			return persistErr
+		}
+		targetEnv, _ := envStorage.GetEnvByName(persistEnvName)
+		runner.PrintPersistSummary(os.Stdout, persistEnvName, persisted, targetEnv)
+		if execution.Result.Error != "" && len(persisted) > 0 {
+			fmt.Fprintf(os.Stdout, "Run aborted after persisting %d variables.\n", len(persisted))
+		}
+	}
 	if execution.Result.Error != "" {
 		return fmt.Errorf("%s", execution.Result.Error)
 	}
@@ -389,7 +426,7 @@ func assertionVarsFromResult(result *runner.RequestResult) map[string]string {
 	return vars
 }
 
-func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, envVars map[string]string, cliVars map[string]string, c *cli.Command) error {
+func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, envVars map[string]string, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
@@ -417,6 +454,7 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvSt
 	}
 
 	rowNum := 0
+	dirtyForPersist := make(map[string]string)
 	singleRunner := runner.NewRunner(db, envStorage)
 	err = loader.Iterate(func(rowVars map[string]string) error {
 		rowNum++
@@ -430,6 +468,9 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvSt
 		}
 
 		execution := singleRunner.RunSavedRequest(ctx, effectiveReq, mergedVars)
+		for key, value := range execution.Result.DirtyVars {
+			dirtyForPersist[key] = value
+		}
 		if execution.Result.Error != "" {
 			fmt.Fprintf(os.Stderr, "Row %d: request failed: %v\n", rowNum, execution.Result.Error)
 			return nil
@@ -458,6 +499,14 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvSt
 
 	if err != nil {
 		return fmt.Errorf("data iteration failed: %w", err)
+	}
+	if persistEnvName != "" {
+		persisted, persistErr := env.PersistVariables(envStorage, persistEnvName, dirtyForPersist)
+		if persistErr != nil {
+			return persistErr
+		}
+		targetEnv, _ := envStorage.GetEnvByName(persistEnvName)
+		runner.PrintPersistSummary(os.Stdout, persistEnvName, persisted, targetEnv)
 	}
 
 	return nil

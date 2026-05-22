@@ -3,8 +3,10 @@ package runner
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/sreeram/gurl/internal/env"
@@ -32,6 +34,14 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 			&cli.BoolFlag{
 				Name:  "assert-bail",
 				Usage: "Stop on first assertion failure only",
+			},
+			&cli.BoolFlag{
+				Name:  "persist",
+				Usage: "Persist extracted/script variables back to the selected environment",
+			},
+			&cli.BoolFlag{
+				Name:  "dry-run",
+				Usage: "Preview collection execution without sending requests",
 			},
 			&cli.IntFlag{
 				Name:    "iterations",
@@ -76,6 +86,21 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 				return fmt.Errorf("collection name argument is required")
 			}
 			name := args.Get(0)
+			if c.Bool("persist") && c.Bool("dry-run") {
+				return cli.Exit("--persist and --dry-run cannot be used together", 2)
+			}
+			if c.Bool("dry-run") {
+				return cli.Exit("--dry-run is not implemented yet", 2)
+			}
+
+			persistEnvName := ""
+			if c.Bool("persist") {
+				var err error
+				persistEnvName, err = env.ResolvePersistEnvironmentName(envStorage, c.String("env"))
+				if err != nil {
+					return cli.Exit(err.Error(), 2)
+				}
+			}
 
 			vars := make(map[string]string)
 			for _, pair := range c.StringSlice("var") {
@@ -85,9 +110,13 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 			}
 
 			runner := NewRunner(db, envStorage)
+			envName := c.String("env")
+			if envName == "" && persistEnvName != "" {
+				envName = persistEnvName
+			}
 			config := RunConfig{
 				CollectionName: name,
-				Environment:    c.String("env"),
+				Environment:    envName,
 				Iterations:     c.Int("iterations"),
 				Bail:           c.Bool("bail"),
 				AssertBail:     c.Bool("assert-bail"),
@@ -137,6 +166,18 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 			}
 
 			printSummary(os.Stdout, results)
+			if c.Bool("persist") {
+				dirtyVars := CollectDirtyVarsForPersist(results)
+				persisted, err := env.PersistVariables(envStorage, persistEnvName, dirtyVars)
+				if err != nil {
+					return err
+				}
+				targetEnv, _ := envStorage.GetEnvByName(persistEnvName)
+				PrintPersistSummary(os.Stdout, persistEnvName, persisted, targetEnv)
+				if collectionRunAborted(results) {
+					fmt.Fprintf(os.Stdout, "Run aborted after persisting %d variables.\n", len(persisted))
+				}
+			}
 
 			if code := DetermineExitCode(results, nil, ciMode); code != ExitSuccess {
 				os.Exit(int(code))
@@ -201,6 +242,35 @@ func convertToReporterResults(results []RunResult) []reporters.RunResult {
 		}
 	}
 	return reporterResults
+}
+
+func PrintPersistSummary(out io.Writer, envName string, persisted map[string]string, targetEnv *env.Environment) {
+	count := len(persisted)
+	label := "variables"
+	if count == 1 {
+		label = "variable"
+	}
+	fmt.Fprintf(out, "\nPersisted %d %s to environment %q\n", count, label, envName)
+
+	keys := make([]string, 0, len(persisted))
+	for key := range persisted {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fmt.Fprintf(out, "  %s = %s\n", key, env.MaskedValue(targetEnv, key, persisted[key]))
+	}
+}
+
+func collectionRunAborted(results []RunResult) bool {
+	for _, result := range results {
+		for _, requestResult := range result.RequestResults {
+			if requestResult.SkipReason == SkipReasonBail {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func printSummary(out *os.File, results []RunResult) {

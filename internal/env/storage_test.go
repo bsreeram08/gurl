@@ -7,6 +7,84 @@ import (
 	"github.com/sreeram/gurl/internal/storage"
 )
 
+type persistTestStore struct {
+	env       *Environment
+	saved     *Environment
+	activeEnv string
+}
+
+func (s *persistTestStore) GetEnvByName(name string) (*Environment, error) {
+	return s.env, nil
+}
+
+func (s *persistTestStore) SaveEnv(env *Environment) error {
+	s.saved = env
+	return nil
+}
+
+func (s *persistTestStore) GetActiveEnv() (string, error) {
+	return s.activeEnv, nil
+}
+
+func TestPersistVariablesClonesEnvBeforeSavingDirtyVars(t *testing.T) {
+	original := &Environment{
+		ID:         "env-beta",
+		Name:       "beta",
+		Variables:  map[string]string{"API_KEY": "plain-secret", "baseUrl": "https://api.example.com"},
+		SecretKeys: map[string]bool{"API_KEY": true},
+	}
+	store := &persistTestStore{env: original}
+
+	persisted, err := PersistVariables(store, "beta", map[string]string{
+		"orderId": "ord_123",
+		"token":   "tok_456",
+	})
+	if err != nil {
+		t.Fatalf("PersistVariables returned error: %v", err)
+	}
+
+	if store.saved == nil {
+		t.Fatal("expected environment to be saved")
+	}
+	if store.saved == original {
+		t.Fatal("expected PersistVariables to save a clone, not the retrieved environment pointer")
+	}
+	if original.Variables["orderId"] != "" || original.Variables["token"] != "" {
+		t.Fatalf("expected original environment to remain unmutated, got %+v", original.Variables)
+	}
+	if original.Variables["API_KEY"] != "plain-secret" {
+		t.Fatalf("expected original secret value to remain plaintext, got %q", original.Variables["API_KEY"])
+	}
+	if store.saved.Variables["orderId"] != "ord_123" || store.saved.Variables["token"] != "tok_456" {
+		t.Fatalf("expected saved env to contain dirty vars, got %+v", store.saved.Variables)
+	}
+	if !store.saved.IsSecret("API_KEY") {
+		t.Fatal("expected existing secret metadata to be preserved")
+	}
+	if store.saved.IsSecret("orderId") || store.saved.IsSecret("token") {
+		t.Fatalf("expected new dirty vars to be regular variables, got secret keys %+v", store.saved.SecretKeys)
+	}
+	if persisted["orderId"] != "ord_123" || persisted["token"] != "tok_456" {
+		t.Fatalf("expected returned persisted vars to match dirty vars, got %+v", persisted)
+	}
+}
+
+func TestResolvePersistEnvironmentNameUsesExplicitOrActiveEnv(t *testing.T) {
+	store := &persistTestStore{activeEnv: "active-beta"}
+
+	if got, err := ResolvePersistEnvironmentName(store, "explicit-beta"); err != nil || got != "explicit-beta" {
+		t.Fatalf("expected explicit env name, got %q err=%v", got, err)
+	}
+	if got, err := ResolvePersistEnvironmentName(store, ""); err != nil || got != "active-beta" {
+		t.Fatalf("expected active env name, got %q err=%v", got, err)
+	}
+
+	store.activeEnv = ""
+	if _, err := ResolvePersistEnvironmentName(store, ""); err == nil {
+		t.Fatal("expected clear error when persist has no explicit or active environment")
+	}
+}
+
 func TestEnvStorageSaveAndGet(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test_env_storage.db")
