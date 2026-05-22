@@ -3,8 +3,10 @@ package curl
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
@@ -35,6 +37,99 @@ func TestExecuteCurlUsesClient(t *testing.T) {
 	if history.Response == "" {
 		t.Error("Expected non-empty response")
 	}
+}
+
+func TestBuildClientRequestAppliesBearerAuthAfterTemplates(t *testing.T) {
+	req := &types.SavedRequest{
+		Name:   "templated bearer",
+		Method: "POST",
+		URL:    "https://{{host}}/users/{{id}}",
+		Headers: []types.Header{
+			{Key: "X-Tenant", Value: "{{tenant}}"},
+		},
+		Body: `{"name":"{{name}}"}`,
+		AuthConfig: &types.AuthConfig{
+			Type: "bearer",
+			Params: map[string]string{
+				"token": "{{token}}",
+			},
+		},
+	}
+
+	clientReq, err := BuildClientRequest(req, map[string]string{
+		"host":   "api.example.com",
+		"id":     "42",
+		"tenant": "acme",
+		"name":   "sreeram",
+		"token":  "abc123",
+	})
+	if err != nil {
+		t.Fatalf("BuildClientRequest returned error: %v", err)
+	}
+
+	if clientReq.URL != "https://api.example.com/users/42" {
+		t.Fatalf("unexpected URL %q", clientReq.URL)
+	}
+	if clientReq.Body != `{"name":"sreeram"}` {
+		t.Fatalf("unexpected body %q", clientReq.Body)
+	}
+	assertHeader(t, clientReq.Headers, "X-Tenant", "acme")
+	assertHeader(t, clientReq.Headers, "Authorization", "Bearer abc123")
+}
+
+func TestBuildClientRequestAppliesAPIKeyAuth(t *testing.T) {
+	req := &types.SavedRequest{
+		Name:   "templated apikey",
+		Method: "GET",
+		URL:    "https://api.example.com/widgets",
+		AuthConfig: &types.AuthConfig{
+			Type: "apikey",
+			Params: map[string]string{
+				"header": "X-{{tenant}}-Key",
+				"value":  "{{api_key}}",
+			},
+		},
+	}
+
+	clientReq, err := BuildClientRequest(req, map[string]string{
+		"tenant":  "Acme",
+		"api_key": "secret123",
+	})
+	if err != nil {
+		t.Fatalf("BuildClientRequest returned error: %v", err)
+	}
+
+	assertHeader(t, clientReq.Headers, "X-Acme-Key", "secret123")
+}
+
+func TestBuildClientRequestUnknownAuthTypeReturnsError(t *testing.T) {
+	req := &types.SavedRequest{
+		Name:   "unknown auth",
+		Method: "GET",
+		URL:    "https://api.example.com/widgets",
+		AuthConfig: &types.AuthConfig{
+			Type:   "made-up",
+			Params: map[string]string{"token": "abc123"},
+		},
+	}
+
+	_, err := BuildClientRequest(req, nil)
+	if err == nil {
+		t.Fatal("expected unknown auth type error")
+	}
+	if !strings.Contains(err.Error(), `unknown auth type "made-up"`) {
+		t.Fatalf("expected unknown auth type error, got %v", err)
+	}
+}
+
+func assertHeader(t *testing.T, headers []client.Header, key, value string) {
+	t.Helper()
+	for _, h := range headers {
+		if h.Key == key && h.Value == value {
+			return
+		}
+	}
+	t.Fatalf("expected header %s: %s in %#v", key, value, headers)
 }
 
 func TestExecuteCurlWithOutputUsesClient(t *testing.T) {

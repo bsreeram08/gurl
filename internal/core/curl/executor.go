@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sreeram/gurl/internal/auth"
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/pkg/types"
@@ -46,6 +47,10 @@ func ExecuteCurl(request *types.SavedRequest, vars map[string]string) (*types.Ex
 }
 
 func BuildClientRequest(request *types.SavedRequest, vars map[string]string) (client.Request, error) {
+	return BuildClientRequestWithAuth(request, vars, auth.BuiltinRegistry())
+}
+
+func BuildClientRequestWithAuth(request *types.SavedRequest, vars map[string]string, registry *auth.Registry) (client.Request, error) {
 	url, err := template.Substitute(request.URL, vars)
 	if err != nil {
 		return client.Request{}, fmt.Errorf("failed to substitute URL variables: %w", err)
@@ -77,12 +82,18 @@ func BuildClientRequest(request *types.SavedRequest, vars map[string]string) (cl
 		method = "GET"
 	}
 
-	return client.Request{
+	clientReq := client.Request{
 		Method:  method,
 		URL:     url,
 		Headers: headers,
 		Body:    body,
-	}, nil
+	}
+
+	if err := auth.ApplyAuth(registry, request.AuthConfig, &clientReq, vars); err != nil {
+		return client.Request{}, fmt.Errorf("failed to apply auth: %w", err)
+	}
+
+	return clientReq, nil
 }
 
 func BuildCurlCommand(request *types.SavedRequest, vars map[string]string) ([]string, error) {
