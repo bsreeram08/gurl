@@ -42,7 +42,7 @@ func RunPostResponse(engine *Engine, script string, resp *client.Response) (*Pos
 
 	postRespResult := &PostResponseResult{
 		Assertions: make([]AssertionResult, len(engine.testResults)),
-		Variables:  engine.variables,
+		Variables:  engine.DirtyVariables(),
 		Logs:       splitLines(engine.outputBuffer),
 	}
 

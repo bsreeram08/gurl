@@ -61,7 +61,11 @@ func (e *Engine) jsSetVar(call goja.FunctionCall) goja.Value {
 	if e.variables == nil {
 		e.variables = make(map[string]string)
 	}
+	if e.dirtyVariables == nil {
+		e.dirtyVariables = make(map[string]string)
+	}
 	e.variables[name] = value
+	e.dirtyVariables[name] = value
 	return goja.Undefined()
 }
 
@@ -255,6 +259,10 @@ func (e *Engine) jsTest(call goja.FunctionCall) goja.Value {
 
 func (e *Engine) jsSkipRequest(call goja.FunctionCall) goja.Value {
 	e.skipRequest = true
+	reasonVal := call.Argument(0).Export()
+	if reason, ok := reasonVal.(string); ok {
+		e.skipRequestReason = reason
+	}
 	return goja.Undefined()
 }
 

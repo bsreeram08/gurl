@@ -18,10 +18,12 @@ type Engine struct {
 	outputBuffer      string
 	testResults       []TestResult
 	skipRequest       bool
+	skipRequestReason string
 	nextRequest       string
 	request           *ScriptRequest
 	response          *ScriptResponse
 	variables         map[string]string
+	dirtyVariables    map[string]string
 	AllowSecretAccess bool
 	pool              *RuntimePool
 }
@@ -113,7 +115,9 @@ func (e *Engine) Execute(script string) (*Result, error) {
 	e.outputBuffer = ""
 	e.testResults = nil
 	e.skipRequest = false
+	e.skipRequestReason = ""
 	e.nextRequest = ""
+	e.dirtyVariables = nil
 
 	vm := e.getRuntime()
 	e.vm = vm
@@ -156,6 +160,50 @@ func (e *Engine) Execute(script string) (*Result, error) {
 		e.putRuntime(vm)
 		return &Result{Error: ctx.Err()}, ctx.Err()
 	}
+}
+
+func (e *Engine) SetVariables(vars map[string]string) {
+	e.variables = make(map[string]string, len(vars))
+	for key, value := range vars {
+		e.variables[key] = value
+	}
+}
+
+func (e *Engine) Variables() map[string]string {
+	return copyVariables(e.variables)
+}
+
+func (e *Engine) DirtyVariables() map[string]string {
+	return copyVariables(e.dirtyVariables)
+}
+
+func (e *Engine) SkipRequested() bool {
+	return e.skipRequest
+}
+
+func (e *Engine) SkipReason() string {
+	if e.skipRequestReason != "" {
+		return e.skipRequestReason
+	}
+	if e.skipRequest {
+		return "script"
+	}
+	return ""
+}
+
+func (e *Engine) NextRequest() string {
+	return e.nextRequest
+}
+
+func copyVariables(source map[string]string) map[string]string {
+	if len(source) == 0 {
+		return nil
+	}
+	copy := make(map[string]string, len(source))
+	for key, value := range source {
+		copy[key] = value
+	}
+	return copy
 }
 
 func (e *Engine) PrepareRequest(req *ScriptRequest) {
