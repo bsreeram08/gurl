@@ -17,12 +17,29 @@ func (h *BasicHandler) Name() string {
 	return "basic"
 }
 
-func (h *BasicHandler) Apply(req *client.Request, params map[string]string) {
-	username, hasUsername := params["username"]
-	password, hasPassword := params["password"]
+func (h *BasicHandler) Params() []ParamDef {
+	return []ParamDef{
+		{Name: "username", Required: true, Description: "Basic auth username"},
+		{Name: "password", Required: true, Secret: true, Description: "Basic auth password"},
+		{Name: "charset", Default: "utf-8", Description: "Credential charset; currently encoded as UTF-8"},
+	}
+}
 
-	if !hasUsername || !hasPassword {
-		return
+func (h *BasicHandler) Apply(req *client.Request, params map[string]string) error {
+	if err := requireRequest(h.Name(), req); err != nil {
+		return err
+	}
+	username, err := requireParam(h.Name(), params, "username")
+	if err != nil {
+		return err
+	}
+	password, err := requireParam(h.Name(), params, "password")
+	if err != nil {
+		return err
+	}
+
+	if charset := params["charset"]; charset != "" && charset != "utf-8" && charset != "UTF-8" {
+		return fmt.Errorf("basic: unsupported charset %q", charset)
 	}
 
 	// Per RFC 7617, user-pass format is "user:password" with colon escaped as "\:"
@@ -40,6 +57,7 @@ func (h *BasicHandler) Apply(req *client.Request, params map[string]string) {
 		Key:   "Authorization",
 		Value: "Basic " + encoded,
 	})
+	return nil
 }
 
 // escapeBasicUser escapes colon characters in user-pass per RFC 7617

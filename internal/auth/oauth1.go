@@ -21,18 +21,34 @@ func (h *OAuth1Handler) Name() string {
 	return "oauth1"
 }
 
-func (h *OAuth1Handler) Apply(req *client.Request, params map[string]string) {
-	consumerKey := params["consumer_key"]
-	consumerSecret := params["consumer_secret"]
-	token := params["token"]
-	tokenSecret := params["token_secret"]
-
-	if consumerKey == "" || consumerSecret == "" {
-		return
+func (h *OAuth1Handler) Params() []ParamDef {
+	return []ParamDef{
+		{Name: "consumer_key", Required: true, Description: "OAuth 1.0 consumer key"},
+		{Name: "consumer_secret", Required: true, Secret: true, Description: "OAuth 1.0 consumer secret"},
+		{Name: "token", Required: true, Secret: true, Description: "OAuth 1.0 access token"},
+		{Name: "token_secret", Required: true, Secret: true, Description: "OAuth 1.0 token secret"},
 	}
+}
 
-	if token == "" {
-		return
+func (h *OAuth1Handler) Apply(req *client.Request, params map[string]string) error {
+	if err := requireRequest(h.Name(), req); err != nil {
+		return err
+	}
+	consumerKey, err := requireParam(h.Name(), params, "consumer_key")
+	if err != nil {
+		return err
+	}
+	consumerSecret, err := requireParam(h.Name(), params, "consumer_secret")
+	if err != nil {
+		return err
+	}
+	token, err := requireParam(h.Name(), params, "token")
+	if err != nil {
+		return err
+	}
+	tokenSecret, err := requireParam(h.Name(), params, "token_secret")
+	if err != nil {
+		return err
 	}
 
 	nonce := generateNonce()
@@ -50,6 +66,7 @@ func (h *OAuth1Handler) Apply(req *client.Request, params map[string]string) {
 		Key:   "Authorization",
 		Value: authHeader,
 	})
+	return nil
 }
 
 func generateNonce() string {

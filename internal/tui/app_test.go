@@ -901,6 +901,43 @@ func TestApp_MissingTemplateVars_ConsidersAllRequestFields(t *testing.T) {
 	}
 }
 
+func TestApp_MissingTemplateVars_IncludesRegistryBackedAuthParams(t *testing.T) {
+	db := &MockDB{}
+	config := &types.Config{}
+	app := NewApp(db, config)
+
+	req := &types.SavedRequest{
+		URL: "https://api.example.com/orders",
+		AuthConfig: &types.AuthConfig{
+			Type: "oauth1",
+			Params: map[string]string{
+				"consumer_key":    "{{consumer_key}}",
+				"consumer_secret": "{{consumer_secret}}",
+				"token":           "{{oauth_token}}",
+				"token_secret":    "static-secret",
+			},
+		},
+	}
+
+	missing := app.missingTemplateVars(req, map[string]string{
+		"consumer_key": "ck_123",
+	})
+
+	missingSet := map[string]bool{}
+	for _, name := range missing {
+		missingSet[name] = true
+	}
+
+	for _, name := range []string{"consumer_secret", "oauth_token"} {
+		if !missingSet[name] {
+			t.Fatalf("expected missing auth variable %q in %#v", name, missing)
+		}
+	}
+	if missingSet["consumer_key"] {
+		t.Fatalf("did not expect provided auth variable consumer_key in %#v", missing)
+	}
+}
+
 func TestApp_RequestSendWithVarsFlow_QuickModeReportsMissing(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}

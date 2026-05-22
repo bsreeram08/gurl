@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"github.com/sreeram/gurl/internal/auth"
 	"github.com/sreeram/gurl/internal/client"
 )
 
@@ -38,4 +39,11 @@ type CommandPlugin interface {
 	Command() string
 	Description() string
 	Run(args []string) error
+}
+
+// AuthPlugin is implemented by plugins that apply authentication to requests.
+type AuthPlugin interface {
+	Name() string
+	Params() []auth.ParamDef
+	Apply(req *client.Request, params map[string]string) error
 }

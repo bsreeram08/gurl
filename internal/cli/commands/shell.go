@@ -3,7 +3,6 @@ package commands
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sreeram/gurl/internal/auth"
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/env"
@@ -1324,15 +1324,8 @@ func missingTemplateVars(req *types.SavedRequest, provided map[string]string) []
 	}
 
 	if req.AuthConfig != nil {
-		switch req.AuthConfig.Type {
-		case "basic":
-			appendNames(template.ExtractVarNames(req.AuthConfig.Params["username"]))
-			appendNames(template.ExtractVarNames(req.AuthConfig.Params["password"]))
-		case "bearer":
-			appendNames(template.ExtractVarNames(req.AuthConfig.Params["token"]))
-		case "apikey":
-			appendNames(template.ExtractVarNames(req.AuthConfig.Params["header"]))
-			appendNames(template.ExtractVarNames(req.AuthConfig.Params["value"]))
+		for _, value := range req.AuthConfig.Params {
+			appendNames(template.ExtractVarNames(value))
 		}
 	}
 
@@ -1397,41 +1390,6 @@ func buildClientRequestFromSavedRequest(req *types.SavedRequest, provided map[st
 		headers = append(headers, client.Header{Key: key, Value: value})
 	}
 
-	if execReq.AuthConfig != nil {
-		switch execReq.AuthConfig.Type {
-		case "basic":
-			username, err := template.Substitute(execReq.AuthConfig.Params["username"], provided)
-			if err != nil {
-				return client.Request{}, fmt.Errorf("failed to substitute basic auth username: %w", err)
-			}
-			password, err := template.Substitute(execReq.AuthConfig.Params["password"], provided)
-			if err != nil {
-				return client.Request{}, fmt.Errorf("failed to substitute basic auth password: %w", err)
-			}
-			headers = append(headers, client.Header{Key: "Authorization", Value: "Basic " + basicAuth(username, password)})
-		case "bearer":
-			token, err := template.Substitute(execReq.AuthConfig.Params["token"], provided)
-			if err != nil {
-				return client.Request{}, fmt.Errorf("failed to substitute bearer token: %w", err)
-			}
-			headers = append(headers, client.Header{Key: "Authorization", Value: "Bearer " + token})
-		case "apikey":
-			headerKey := execReq.AuthConfig.Params["header"]
-			if headerKey == "" {
-				headerKey = "X-API-Key"
-			}
-			headerKey, err = template.Substitute(headerKey, provided)
-			if err != nil {
-				return client.Request{}, fmt.Errorf("failed to substitute API key header: %w", err)
-			}
-			headerValue, err := template.Substitute(execReq.AuthConfig.Params["value"], provided)
-			if err != nil {
-				return client.Request{}, fmt.Errorf("failed to substitute API key value: %w", err)
-			}
-			headers = append(headers, client.Header{Key: headerKey, Value: headerValue})
-		}
-	}
-
 	method := strings.ToUpper(strings.TrimSpace(execReq.Method))
 	if method == "" {
 		method = "GET"
@@ -1442,6 +1400,9 @@ func buildClientRequestFromSavedRequest(req *types.SavedRequest, provided map[st
 		URL:     resolvedURL,
 		Headers: headers,
 		Body:    resolvedBody,
+	}
+	if err := auth.ApplyAuth(auth.BuiltinRegistry(), execReq.AuthConfig, &clientReq, provided); err != nil {
+		return client.Request{}, fmt.Errorf("failed to apply auth: %w", err)
 	}
 
 	if execReq.Timeout != "" {
@@ -1470,8 +1431,4 @@ func blankOr(value, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-func basicAuth(username, password string) string {
-	return base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
 }

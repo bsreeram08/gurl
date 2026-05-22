@@ -20,7 +20,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 		Name:    "save",
 		Aliases: []string{"s"},
 		Usage:   "Save a curl request with a name",
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.StringFlag{
 				Name:    "collection",
 				Aliases: []string{"c"},
@@ -83,13 +83,20 @@ func SaveCommand(db storage.DB) *cli.Command {
 				Aliases: []string{"post"},
 				Usage:   "Set post-response script",
 			},
-		},
+		}, authConfigFlags()...),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
 			nameFlag := c.String("name")
 			extracts, err := parseExtractFlags(c.StringSlice("extract"))
 			if err != nil {
 				return cli.Exit(err.Error(), 2)
+			}
+			authConfig, _, err := parseAuthConfigFlags(c)
+			if err != nil {
+				if strings.Contains(err.Error(), "auth-param must be") {
+					return cli.Exit(err.Error(), 2)
+				}
+				return err
 			}
 
 			// Mode 1: --curl flag provided
@@ -120,6 +127,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.Tags = c.StringSlice("tag")
 				req.Collection = c.String("collection")
 				req.Folder = c.String("folder")
+				req.AuthConfig = authConfig
 				applyFlowMetadata(&req, extracts, c.String("pre-script"), c.String("post-script"))
 				req.CreatedAt = time.Now().Unix()
 				req.UpdatedAt = time.Now().Unix()
@@ -164,6 +172,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 					Tags:       c.StringSlice("tag"),
 					Collection: c.String("collection"),
 					Folder:     c.String("folder"),
+					AuthConfig: authConfig,
 					CreatedAt:  time.Now().Unix(),
 					UpdatedAt:  time.Now().Unix(),
 				}
@@ -213,6 +222,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.Tags = c.StringSlice("tag")
 				req.Collection = c.String("collection")
 				req.Folder = c.String("folder")
+				req.AuthConfig = authConfig
 				applyFlowMetadata(&req, extracts, c.String("pre-script"), c.String("post-script"))
 				req.CreatedAt = time.Now().Unix()
 				req.UpdatedAt = time.Now().Unix()
@@ -239,6 +249,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				Tags:         c.StringSlice("tag"),
 				Collection:   c.String("collection"),
 				Folder:       c.String("folder"),
+				AuthConfig:   authConfig,
 				CreatedAt:    time.Now().Unix(),
 				UpdatedAt:    time.Now().Unix(),
 			}

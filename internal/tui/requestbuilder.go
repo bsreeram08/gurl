@@ -11,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/sreeram/gurl/internal/auth"
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/storage"
@@ -243,8 +244,20 @@ func (rb *RequestBuilder) LoadRequest(req *types.SavedRequest) {
 	if req.AuthConfig != nil {
 		rb.authType = req.AuthConfig.Type
 		for k, v := range req.AuthConfig.Params {
-			if input, ok := rb.authInputs[k]; ok {
+			inputKey := k
+			if req.AuthConfig.Type == "apikey" {
+				switch k {
+				case "key":
+					inputKey = "api_key"
+				case "value":
+					inputKey = "api_value"
+				case "header", "header_name":
+					inputKey = "api_header"
+				}
+			}
+			if input, ok := rb.authInputs[inputKey]; ok {
 				input.SetValue(v)
+				rb.authInputs[inputKey] = input
 			}
 		}
 	} else {
@@ -931,8 +944,8 @@ func (rb *RequestBuilder) collectVarAwareRequest(vars map[string]string) (client
 		return client.Request{}, fmt.Errorf("failed to substitute URL: %w", err)
 	}
 
-	headers := make([]client.Header, 0, len(rb.editing.Headers)+1)
-	for _, h := range rb.editing.Headers {
+	headers := make([]client.Header, 0, len(execReq.Headers)+1)
+	for _, h := range execReq.Headers {
 		resolvedKey, err := template.Substitute(h.Key, vars)
 		if err != nil {
 			return client.Request{}, fmt.Errorf("failed to substitute header key: %w", err)
@@ -944,68 +957,26 @@ func (rb *RequestBuilder) collectVarAwareRequest(vars map[string]string) (client
 		headers = append(headers, client.Header{Key: resolvedKey, Value: resolvedValue})
 	}
 
-	resolvedBody := rb.editing.Body
-	if rb.editing.Body != "" {
-		resolvedBody, err = template.Substitute(rb.editing.Body, vars)
+	resolvedBody := execReq.Body
+	if execReq.Body != "" {
+		resolvedBody, err = template.Substitute(execReq.Body, vars)
 		if err != nil {
 			return client.Request{}, fmt.Errorf("failed to substitute body: %w", err)
 		}
 	}
 
-	// Add auth headers
 	authRequest := client.Request{
-		Method:  rb.editing.Method,
+		Method:  execReq.Method,
 		URL:     resolvedURL,
 		Headers: headers,
 		Body:    resolvedBody,
 	}
 
-	if rb.editing.AuthConfig != nil {
-		switch rb.editing.AuthConfig.Type {
-		case "basic":
-			username, err := template.Substitute(rb.editing.AuthConfig.Params["username"], vars)
-			if err != nil {
-				return client.Request{}, fmt.Errorf("failed to substitute basic username: %w", err)
-			}
-			password, err := template.Substitute(rb.editing.AuthConfig.Params["password"], vars)
-			if err != nil {
-				return client.Request{}, fmt.Errorf("failed to substitute basic password: %w", err)
-			}
-			authRequest.Headers = append(authRequest.Headers, client.Header{
-				Key:   "Authorization",
-				Value: "Basic " + basicAuth(username, password),
-			})
-		case "bearer":
-			token, err := template.Substitute(rb.editing.AuthConfig.Params["token"], vars)
-			if err != nil {
-				return client.Request{}, fmt.Errorf("failed to substitute bearer token: %w", err)
-			}
-			authRequest.Headers = append(authRequest.Headers, client.Header{
-				Key:   "Authorization",
-				Value: "Bearer " + token,
-			})
-		case "apikey":
-			headerKey, err := template.Substitute(rb.editing.AuthConfig.Params["header"], vars)
-			if err != nil {
-				return client.Request{}, fmt.Errorf("failed to substitute api header: %w", err)
-			}
-			if headerKey == "" {
-				headerKey = "X-API-Key"
-			}
-			headerValue, err := template.Substitute(rb.editing.AuthConfig.Params["value"], vars)
-			if err != nil {
-				return client.Request{}, fmt.Errorf("failed to substitute api value: %w", err)
-			}
-			authRequest.Headers = append(authRequest.Headers, client.Header{
-				Key:   headerKey,
-				Value: headerValue,
-			})
-		}
-	}
-
-	authRequest.Method = rb.editing.Method
 	if authRequest.Method == "" {
 		authRequest.Method = "GET"
+	}
+	if err := auth.ApplyAuth(auth.BuiltinRegistry(), execReq.AuthConfig, &authRequest, vars); err != nil {
+		return client.Request{}, fmt.Errorf("failed to apply auth: %w", err)
 	}
 
 	return authRequest, nil
@@ -1102,6 +1073,11 @@ func (rb *RequestBuilder) syncEditingFromForm() {
 	// Sync auth
 	if rb.authType != "none" {
 		params := make(map[string]string)
+		if rb.editing.AuthConfig != nil && rb.editing.AuthConfig.Type == rb.authType {
+			for k, v := range rb.editing.AuthConfig.Params {
+				params[k] = v
+			}
+		}
 		switch rb.authType {
 		case "basic":
 			params["username"] = rb.authInputs["username"].Value()
@@ -1126,6 +1102,11 @@ func (rb *RequestBuilder) syncEditingFromForm() {
 
 // buildClientRequest builds a client.Request from the form data
 func (rb *RequestBuilder) buildClientRequest() client.Request {
+	req, _ := rb.buildClientRequestWithAuth()
+	return req
+}
+
+func (rb *RequestBuilder) buildClientRequestWithAuth() (client.Request, error) {
 	rb.syncEditingFromForm()
 
 	req := client.Request{
@@ -1143,33 +1124,11 @@ func (rb *RequestBuilder) buildClientRequest() client.Request {
 		})
 	}
 
-	// Add auth headers
-	if rb.editing.AuthConfig != nil {
-		switch rb.editing.AuthConfig.Type {
-		case "basic":
-			// Basic auth is handled by client
-			req.Headers = append(req.Headers, client.Header{
-				Key:   "Authorization",
-				Value: "Basic " + basicAuth(rb.editing.AuthConfig.Params["username"], rb.editing.AuthConfig.Params["password"]),
-			})
-		case "bearer":
-			req.Headers = append(req.Headers, client.Header{
-				Key:   "Authorization",
-				Value: "Bearer " + rb.editing.AuthConfig.Params["token"],
-			})
-		case "apikey":
-			headerName := rb.editing.AuthConfig.Params["header"]
-			if headerName == "" {
-				headerName = "X-API-Key"
-			}
-			req.Headers = append(req.Headers, client.Header{
-				Key:   headerName,
-				Value: rb.editing.AuthConfig.Params["value"],
-			})
-		}
+	if err := auth.ApplyAuth(auth.BuiltinRegistry(), rb.editing.AuthConfig, &req, nil); err != nil {
+		return client.Request{}, fmt.Errorf("failed to apply auth: %w", err)
 	}
 
-	return req
+	return req, nil
 }
 
 // basicAuth generates a Basic auth header value

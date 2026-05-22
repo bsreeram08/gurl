@@ -191,6 +191,137 @@ func TestRunner_RunCollection(t *testing.T) {
 	}
 }
 
+func TestRunnerRunCollectionAppliesSavedBearerAuth(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	serverSawAuth := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer collection-token" {
+			http.Error(w, "missing bearer auth", http.StatusUnauthorized)
+			return
+		}
+		serverSawAuth = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-auth-collection",
+		Name:       "auth collection request",
+		URL:        ts.URL + "/bearer",
+		Method:     "GET",
+		Collection: "auth-col",
+		AuthConfig: &types.AuthConfig{
+			Type: "bearer",
+			Params: map[string]string{
+				"token": "{{token}}",
+			},
+		},
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{
+		CollectionName: "auth-col",
+		Iterations:     1,
+		Vars:           map[string]string{"token": "collection-token"},
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if len(results) != 1 || len(results[0].RequestResults) != 1 {
+		t.Fatalf("expected one request result, got %#v", results)
+	}
+	if !serverSawAuth {
+		t.Fatal("server did not receive bearer auth")
+	}
+	if !results[0].RequestResults[0].Passed {
+		t.Fatalf("expected request to pass, got %#v", results[0].RequestResults[0])
+	}
+}
+
+func TestRunnerRunSavedRequestAppliesSavedAPIKeyAuth(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	serverSawAuth := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != "single-secret" {
+			http.Error(w, "missing api key", http.StatusUnauthorized)
+			return
+		}
+		serverSawAuth = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	req := &types.SavedRequest{
+		ID:     "req-auth-single",
+		Name:   "auth single request",
+		URL:    ts.URL + "/apikey",
+		Method: "GET",
+		AuthConfig: &types.AuthConfig{
+			Type: "apikey",
+			Params: map[string]string{
+				"value": "{{api_key}}",
+			},
+		},
+	}
+
+	execution := NewRunner(db, envStorage).RunSavedRequest(context.Background(), req, map[string]string{
+		"api_key": "single-secret",
+	})
+
+	if !serverSawAuth {
+		t.Fatal("server did not receive API key auth")
+	}
+	if execution.Request == nil {
+		t.Fatal("expected built client request")
+	}
+	if !execution.Result.Passed {
+		t.Fatalf("expected request to pass, got %#v", execution.Result)
+	}
+}
+
+func TestRunnerUnknownAuthTypeFailsDuringRequestBuild(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	serverCalled := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	req := &types.SavedRequest{
+		ID:     "req-auth-unknown",
+		Name:   "unknown auth request",
+		URL:    ts.URL + "/unknown",
+		Method: "GET",
+		AuthConfig: &types.AuthConfig{
+			Type:   "made-up",
+			Params: map[string]string{"token": "abc123"},
+		},
+	}
+
+	execution := NewRunner(db, envStorage).RunSavedRequest(context.Background(), req, nil)
+
+	if serverCalled {
+		t.Fatal("request reached server despite unknown auth type")
+	}
+	if execution.Request != nil {
+		t.Fatalf("expected request build to fail before client request is stored, got %#v", execution.Request)
+	}
+	if execution.Result.FailurePhase != FailurePhaseRequestBuild {
+		t.Fatalf("expected request build failure, got %#v", execution.Result)
+	}
+	if !strings.Contains(execution.Result.Error, `unknown auth type "made-up"`) {
+		t.Fatalf("expected unknown auth type error, got %q", execution.Result.Error)
+	}
+}
+
 func TestRequestResultLifecycleMetadata(t *testing.T) {
 	tests := []struct {
 		name                string

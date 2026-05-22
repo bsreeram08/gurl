@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sreeram/gurl/internal/assertions"
+	"github.com/sreeram/gurl/internal/auth"
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/core/curl"
 	"github.com/sreeram/gurl/internal/env"
@@ -92,6 +93,7 @@ type Runner struct {
 	client     *client.Client
 	eval       *assertions.Evaluator
 	extractor  *extract.Extractor
+	auth       *auth.Registry
 }
 
 func NewRunner(db storage.DB, envStorage EnvProvider) *Runner {
@@ -101,6 +103,7 @@ func NewRunner(db storage.DB, envStorage EnvProvider) *Runner {
 		client:     client.NewClient(),
 		eval:       assertions.NewEvaluator(),
 		extractor:  extract.NewExtractor(),
+		auth:       auth.BuiltinRegistry(),
 	}
 }
 
@@ -400,7 +403,11 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 		return execution
 	}
 
-	clientReq, err := curl.BuildClientRequest(effectiveReq, vars)
+	authRegistry := r.auth
+	if authRegistry == nil {
+		authRegistry = auth.BuiltinRegistry()
+	}
+	clientReq, err := curl.BuildClientRequestWithAuth(effectiveReq, vars, authRegistry)
 	if err != nil {
 		result.Error = fmt.Sprintf("variable substitution failed: %v", err)
 		result.FailurePhase = FailurePhaseRequestBuild

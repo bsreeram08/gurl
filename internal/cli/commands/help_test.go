@@ -19,12 +19,12 @@ func TestFlowControlFlagsAppearInCommandHelp(t *testing.T) {
 		{
 			name:  "save",
 			cmd:   SaveCommand(db),
-			flags: []string{"extract", "pre-script", "post-script"},
+			flags: []string{"extract", "pre-script", "post-script", "auth", "auth-param"},
 		},
 		{
 			name:  "edit",
 			cmd:   EditCommand(db),
-			flags: []string{"extract", "remove-extract", "pre-script", "post-script", "run-if"},
+			flags: []string{"extract", "remove-extract", "pre-script", "post-script", "run-if", "auth", "auth-param"},
 		},
 		{
 			name:  "run",

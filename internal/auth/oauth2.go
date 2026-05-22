@@ -30,7 +30,23 @@ func (h *OAuth2Handler) Name() string {
 	return "oauth2"
 }
 
-func (h *OAuth2Handler) Apply(req *client.Request, params map[string]string) {
+func (h *OAuth2Handler) Params() []ParamDef {
+	return []ParamDef{
+		{Name: "client_id", Required: true, Description: "OAuth 2.0 client identifier"},
+		{Name: "client_secret", Secret: true, Description: "OAuth 2.0 client secret"},
+		{Name: "token_url", Required: true, Description: "OAuth 2.0 token endpoint URL"},
+		{Name: "flow", Required: true, Description: "OAuth 2.0 flow: auth_code or client_credentials"},
+		{Name: "auth_code", Description: "Authorization code for auth_code flow"},
+		{Name: "redirect_uri", Description: "Redirect URI for auth_code flow"},
+		{Name: "registered_redirect_uri", Description: "Registered redirect URI to validate against"},
+		{Name: "scope", Description: "Space-delimited OAuth scopes"},
+	}
+}
+
+func (h *OAuth2Handler) Apply(req *client.Request, params map[string]string) error {
+	if err := requireRequest(h.Name(), req); err != nil {
+		return err
+	}
 	h.mu.Lock()
 	if h.cache == nil {
 		h.cache = make(map[string]cachedToken)
@@ -40,47 +56,52 @@ func (h *OAuth2Handler) Apply(req *client.Request, params map[string]string) {
 	}
 	h.mu.Unlock()
 
-	clientID := params["client_id"]
+	clientID, err := requireParam(h.Name(), params, "client_id")
+	if err != nil {
+		return err
+	}
 	clientSecret := params["client_secret"]
-	tokenURL := params["token_url"]
-	flow := params["flow"]
-
-	if clientID == "" || tokenURL == "" {
-		return
+	tokenURL, err := requireParam(h.Name(), params, "token_url")
+	if err != nil {
+		return err
+	}
+	flow, err := requireParam(h.Name(), params, "flow")
+	if err != nil {
+		return err
 	}
 
 	cacheKey := tokenURL + ":" + clientID
 
 	switch flow {
 	case "auth_code":
-		h.applyAuthCodeFlow(req, params, cacheKey, clientID, clientSecret, tokenURL)
+		return h.applyAuthCodeFlow(req, params, cacheKey, clientID, clientSecret, tokenURL)
 	case "client_credentials":
-		h.applyClientCredentialsFlow(req, params, cacheKey, clientID, clientSecret, tokenURL)
+		return h.applyClientCredentialsFlow(req, params, cacheKey, clientID, clientSecret, tokenURL)
 	default:
-		return
+		return fmt.Errorf("oauth2: unsupported flow %q", flow)
 	}
 }
 
-func (h *OAuth2Handler) applyAuthCodeFlow(req *client.Request, params map[string]string, cacheKey, clientID, clientSecret, tokenURL string) {
+func (h *OAuth2Handler) applyAuthCodeFlow(req *client.Request, params map[string]string, cacheKey, clientID, clientSecret, tokenURL string) error {
 	authCode := params["auth_code"]
 	redirectURI := params["redirect_uri"]
 	registeredRedirectURI := params["registered_redirect_uri"]
 	scope := params["scope"]
 
 	if authCode == "" {
-		return
+		return fmt.Errorf("oauth2: missing required param %q for auth_code flow", "auth_code")
 	}
 
 	// Validate redirect_uri if registered one is provided
 	if registeredRedirectURI != "" {
 		if !validateRedirectURI(registeredRedirectURI, redirectURI) {
-			return
+			return fmt.Errorf("oauth2: redirect_uri does not match registered_redirect_uri")
 		}
 	}
 
 	if token, ok := h.getCachedToken(cacheKey); ok {
 		h.setBearerHeader(req, token.accessToken)
-		return
+		return nil
 	}
 
 	data := url.Values{}
@@ -98,19 +119,20 @@ func (h *OAuth2Handler) applyAuthCodeFlow(req *client.Request, params map[string
 
 	token, err := h.fetchToken(tokenURL, data.Encode(), "application/x-www-form-urlencoded")
 	if err != nil {
-		return
+		return fmt.Errorf("oauth2: token request failed: %w", err)
 	}
 
 	h.cacheToken(cacheKey, token)
 	h.setBearerHeader(req, token.accessToken)
+	return nil
 }
 
-func (h *OAuth2Handler) applyClientCredentialsFlow(req *client.Request, params map[string]string, cacheKey, clientID, clientSecret, tokenURL string) {
+func (h *OAuth2Handler) applyClientCredentialsFlow(req *client.Request, params map[string]string, cacheKey, clientID, clientSecret, tokenURL string) error {
 	scope := params["scope"]
 
 	if token, ok := h.getCachedToken(cacheKey); ok {
 		h.setBearerHeader(req, token.accessToken)
-		return
+		return nil
 	}
 
 	var data string
@@ -135,11 +157,12 @@ func (h *OAuth2Handler) applyClientCredentialsFlow(req *client.Request, params m
 
 	token, err := h.fetchToken(tokenURL, data, contentType)
 	if err != nil {
-		return
+		return fmt.Errorf("oauth2: token request failed: %w", err)
 	}
 
 	h.cacheToken(cacheKey, token)
 	h.setBearerHeader(req, token.accessToken)
+	return nil
 }
 
 // validateRedirectURI checks that the sent redirect_uri matches the registered one
@@ -196,6 +219,9 @@ func (h *OAuth2Handler) fetchToken(tokenURL, body, contentType string) (cachedTo
 
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
 		return cachedToken{}, err
+	}
+	if tokenResp.AccessToken == "" {
+		return cachedToken{}, fmt.Errorf("token response missing access_token")
 	}
 
 	expiresAt := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
