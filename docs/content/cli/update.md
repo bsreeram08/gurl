@@ -19,6 +19,8 @@ The `update` command checks for and installs the latest version of gurl. It hand
 
 The updater validates the latest release metadata before choosing an asset. Current releases publish complete macOS and Linux downloads for amd64 and arm64, including tarballs, raw binaries, and `SHA256SUMS`.
 
+If GitHub's release metadata API is temporarily unavailable, the updater falls back to the public latest-release redirect to confirm the current version before showing an error.
+
 ## Flags
 
 None.
@@ -34,6 +36,8 @@ gurl update
 Checks for and installs the latest version.
 
 If the release metadata is missing a usable version or platform asset, the command exits with an error instead of downloading an invalid URL.
+
+If release metadata is temporarily unavailable but the installed version is already current, the command can still report `Already up to date!` by checking GitHub's public latest-release redirect.
 
 ## See also
 

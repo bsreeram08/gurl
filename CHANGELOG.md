@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.2.2] - 2026-05-22
+
+### Fixed
+
+- `gurl update` now falls back to GitHub's public latest-release redirect when release metadata is temporarily unavailable, so current installs can report `Already up to date!` instead of a transient HTTP error.
+
 ## [v0.2.1] - 2026-05-22
 
 ### Fixed
