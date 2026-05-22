@@ -11,6 +11,7 @@ import (
 type mockDB struct {
 	requests map[string]*types.SavedRequest
 	names    map[string]string
+	history  []*types.ExecutionHistory
 }
 
 func newMockDB() *mockDB {
@@ -88,6 +89,7 @@ func (m *mockDB) ListFolderRecursive(path string) ([]*types.SavedRequest, error)
 func (m *mockDB) DeleteFolder(path string) error                                 { return nil }
 func (m *mockDB) GetAllFolders() ([]string, error)                               { return nil, nil }
 func (m *mockDB) SaveHistory(history *types.ExecutionHistory) error {
+	m.history = append(m.history, history)
 	return nil
 }
 func (m *mockDB) GetHistory(requestID string, limit int) ([]*types.ExecutionHistory, error) {

@@ -1335,6 +1335,295 @@ func TestRunner_ExtractedVarsChainIntoNextRequest(t *testing.T) {
 	assertStringMap(t, "ExtractedVars", results[0].RequestResults[0].ExtractedVars, map[string]string{"orderId": "ord_123"})
 }
 
+func TestRunner_CollectionExtractChainUsesPaymentIDStatus(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	var paymentBody string
+	var statusPath string
+	var statusBody string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/orders":
+			_, _ = w.Write([]byte(`{"data":{"orderId":"ord_123"}}`))
+		case "/payments":
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("failed to read payment body: %v", err)
+			}
+			paymentBody = string(body)
+			_, _ = w.Write([]byte(`{"data":{"paymentId":"pay_456"}}`))
+		case "/status/pay_456":
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("failed to read status body: %v", err)
+			}
+			statusPath = r.URL.Path
+			statusBody = string(body)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-create-order-chain",
+		Name:       "create order",
+		URL:        ts.URL + "/orders",
+		Method:     "POST",
+		Collection: "checkout-chain",
+		SortOrder:  1,
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+		},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-initiate-payment-chain",
+		Name:       "initiate payment",
+		URL:        ts.URL + "/payments",
+		Method:     "POST",
+		Collection: "checkout-chain",
+		SortOrder:  2,
+		Headers: []types.Header{
+			{Key: "Content-Type", Value: "application/json"},
+		},
+		Body: `{"orderId":"{{orderId}}"}`,
+		Extracts: []types.Extract{
+			{Name: "paymentId", Source: "jsonpath:$.data.paymentId"},
+		},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-payment-status-chain",
+		Name:       "payment status",
+		URL:        ts.URL + "/status/{{paymentId}}",
+		Method:     "POST",
+		Collection: "checkout-chain",
+		SortOrder:  3,
+		Headers: []types.Header{
+			{Key: "Content-Type", Value: "application/json"},
+		},
+		Body: `{"paymentId":"{{paymentId}}"}`,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "checkout-chain"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if results[0].Failed != 0 || results[0].Passed != 3 {
+		t.Fatalf("expected three-request collection to pass, got result: %+v", results[0])
+	}
+	if paymentBody != `{"orderId":"ord_123"}` {
+		t.Fatalf("expected payment body to use extracted orderId, got %q", paymentBody)
+	}
+	if statusPath != "/status/pay_456" {
+		t.Fatalf("expected status URL to use extracted paymentId, got %q", statusPath)
+	}
+	if statusBody != `{"paymentId":"pay_456"}` {
+		t.Fatalf("expected status body to use extracted paymentId, got %q", statusBody)
+	}
+	assertStringMap(t, "payment ExtractedVars", results[0].RequestResults[1].ExtractedVars, map[string]string{"paymentId": "pay_456"})
+}
+
+func TestRunner_DataDrivenCollectionResetsRunningVarsPerRow(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	envObj := env.NewEnvironment("beta", "")
+	envObj.SetVariable("token", "env-token")
+	envStorage.SaveEnv(envObj)
+
+	tmpDir := t.TempDir()
+	dataPath := filepath.Join(tmpDir, "rows.csv")
+	if err := os.WriteFile(dataPath, []byte("item,token\none,row-token-one\ntwo,row-token-two\n"), 0644); err != nil {
+		t.Fatalf("failed to write data file: %v", err)
+	}
+
+	usedTokenPaths := []string{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/prepare/"):
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case strings.HasPrefix(r.URL.Path, "/use/"):
+			usedTokenPaths = append(usedTokenPaths, r.URL.Path)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-prepare-row",
+		Name:       "prepare row",
+		URL:        ts.URL + "/prepare/{{item}}",
+		Method:     "GET",
+		Collection: "data-driven-chain",
+		SortOrder:  1,
+		PostScript: `if (gurl.getVar("item") === "one") { gurl.setVar("token", "tok_one"); }`,
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-use-token",
+		Name:       "use token",
+		URL:        ts.URL + "/use/{{token}}",
+		Method:     "GET",
+		Collection: "data-driven-chain",
+		SortOrder:  2,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{
+		CollectionName: "data-driven-chain",
+		Environment:    "beta",
+		DataFile:       dataPath,
+		Vars:           map[string]string{"token": "cli-token"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected two data iterations, got %d", len(results))
+	}
+	if got, want := usedTokenPaths, []string{"/use/tok_one", "/use/cli-token"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("expected per-row running vars to reset with CLI defaults re-applied, got paths %v", got)
+	}
+}
+
+func TestRunner_NextRequestOverrideExactName(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	order := []string{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		order = append(order, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-start-next",
+		Name:       "start",
+		URL:        ts.URL + "/start",
+		Method:     "GET",
+		Collection: "next-flow",
+		SortOrder:  1,
+		PostScript: `gurl.setNextRequest("final")`,
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-middle-next",
+		Name:       "middle",
+		URL:        ts.URL + "/middle",
+		Method:     "GET",
+		Collection: "next-flow",
+		SortOrder:  2,
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-final-next",
+		Name:       "final",
+		URL:        ts.URL + "/final",
+		Method:     "GET",
+		Collection: "next-flow",
+		SortOrder:  3,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "next-flow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got, want := order, []string{"/start", "/final"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("expected next-request override to skip natural middle request, got order %v", got)
+	}
+	if results[0].Failed != 0 || results[0].Passed != 2 {
+		t.Fatalf("expected override flow to pass executed requests, got result: %+v", results[0])
+	}
+}
+
+func TestRunner_NextRequestOverrideUnknownTargetFails(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-missing-next",
+		Name:       "start",
+		URL:        ts.URL + "/start",
+		Method:     "GET",
+		Collection: "unknown-next-flow",
+		SortOrder:  1,
+		PostScript: `gurl.setNextRequest("missing")`,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "unknown-next-flow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	requestResult := results[0].RequestResults[0]
+	if results[0].Failed != 1 || requestResult.Passed || !strings.Contains(requestResult.Error, `next request "missing" not found`) {
+		t.Fatalf("expected unknown next-request target to fail current request clearly, got result: %+v", requestResult)
+	}
+}
+
+func TestRunner_NextRequestOverrideLoopDetected(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	order := []string{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		order = append(order, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-loop-a",
+		Name:       "loop-a",
+		URL:        ts.URL + "/loop-a",
+		Method:     "GET",
+		Collection: "loop-next-flow",
+		SortOrder:  1,
+		PostScript: `gurl.setNextRequest("loop-b")`,
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-loop-b",
+		Name:       "loop-b",
+		URL:        ts.URL + "/loop-b",
+		Method:     "GET",
+		Collection: "loop-next-flow",
+		SortOrder:  2,
+		PostScript: `gurl.setNextRequest("loop-a")`,
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "loop-next-flow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got, want := order, []string{"/loop-a", "/loop-b"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("expected loop to fail before revisiting loop-a, got order %v", got)
+	}
+	last := results[0].RequestResults[len(results[0].RequestResults)-1]
+	if results[0].Failed != 1 || !strings.Contains(last.Error, `next request loop detected`) {
+		t.Fatalf("expected next-request loop to fail fast, got result: %+v", last)
+	}
+}
+
 func TestRunner_ExtractedVarsOverrideExistingVars(t *testing.T) {
 	db := newMockDB()
 	envStorage := newMockEnvStorage()

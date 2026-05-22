@@ -52,6 +52,12 @@ type RequestResult struct {
 	NextRequestOverride string
 }
 
+type SingleRequestExecution struct {
+	Result   *RequestResult
+	Request  *client.Request
+	Response *client.Response
+}
+
 const (
 	SkipReasonRunIf  = "run_if"
 	SkipReasonScript = "script"
@@ -63,6 +69,7 @@ const (
 	FailurePhasePreRequestScript   = "pre_request_script"
 	FailurePhasePostResponseScript = "post_response_script"
 	FailurePhaseAssertion          = "assertion"
+	FailurePhaseNextRequest        = "next_request"
 )
 
 type EnvProvider interface {
@@ -106,18 +113,19 @@ func (r *Runner) Run(ctx context.Context, config RunConfig) ([]RunResult, error)
 	// Sort requests by SortOrder before execution
 	requests = sortBySequence(requests)
 
-	baseVars := make(map[string]string)
+	envVars := make(map[string]string)
 	if config.Environment != "" && r.envStorage != nil {
 		env, err := r.envStorage.GetEnvByName(config.Environment)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: environment %q not found: %v\n", config.Environment, err)
 		} else {
 			for k, v := range env.Variables {
-				baseVars[k] = v
+				envVars[k] = v
 			}
 		}
 	}
 
+	baseVars := copyStringMap(envVars)
 	for k, v := range config.Vars {
 		baseVars[k] = v
 	}
@@ -125,7 +133,7 @@ func (r *Runner) Run(ctx context.Context, config RunConfig) ([]RunResult, error)
 	results := make([]RunResult, 0)
 
 	if config.DataFile != "" {
-		dataResults, err := r.runWithData(ctx, requests, baseVars, config)
+		dataResults, err := r.runWithData(ctx, requests, envVars, config)
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +156,7 @@ func (r *Runner) Run(ctx context.Context, config RunConfig) ([]RunResult, error)
 	return results, nil
 }
 
-func (r *Runner) runWithData(ctx context.Context, requests []*types.SavedRequest, baseVars map[string]string, config RunConfig) ([]RunResult, error) {
+func (r *Runner) runWithData(ctx context.Context, requests []*types.SavedRequest, envVars map[string]string, config RunConfig) ([]RunResult, error) {
 	loader, err := NewDataLoader(config.DataFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load data file: %w", err)
@@ -159,10 +167,13 @@ func (r *Runner) runWithData(ctx context.Context, requests []*types.SavedRequest
 
 	err = loader.Iterate(func(rowVars map[string]string) error {
 		mergedVars := make(map[string]string)
-		for k, v := range baseVars {
+		for k, v := range envVars {
 			mergedVars[k] = v
 		}
 		for k, v := range rowVars {
+			mergedVars[k] = v
+		}
+		for k, v := range config.Vars {
 			mergedVars[k] = v
 		}
 
@@ -192,6 +203,8 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 	start := time.Now()
 	runningVars := copyStringMap(vars)
 	extractedVars := make(map[string]string)
+	requestIndex := requestIndexByName(requests)
+	visited := make(map[string]bool, len(requests))
 	result := RunResult{
 		CollectionName: config.CollectionName,
 		Iteration:      iteration,
@@ -199,8 +212,37 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		Total:          len(requests), // Total = full collection size (includes skipped on bail)
 	}
 
-	for i, req := range requests {
+	for i := 0; i < len(requests); {
+		req := requests[i]
+		if visited[req.Name] {
+			reqResult := &RequestResult{
+				RequestName:  req.Name,
+				Error:        fmt.Sprintf("next request loop detected: %q would be revisited", req.Name),
+				FailurePhase: FailurePhaseNextRequest,
+			}
+			result.RequestResults = append(result.RequestResults, reqResult)
+			result.Failed++
+			break
+		}
+		visited[req.Name] = true
+
 		reqResult := r.runRequest(ctx, req, runningVars, extractedVars)
+		nextIndex := i + 1
+		stop := false
+		if reqResult.NextRequestOverride != "" {
+			targetName := reqResult.NextRequestOverride
+			targetIndex, ok := requestIndex[targetName]
+			if !ok {
+				failNextRequestOverride(reqResult, fmt.Sprintf("next request %q not found in collection %q", targetName, config.CollectionName))
+				stop = true
+			} else if visited[targetName] {
+				failNextRequestOverride(reqResult, fmt.Sprintf("next request loop detected: %q would revisit an already executed request", targetName))
+				stop = true
+			} else {
+				nextIndex = targetIndex
+			}
+		}
+
 		result.RequestResults = append(result.RequestResults, reqResult)
 
 		if reqResult.Passed {
@@ -209,14 +251,6 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 			result.Skipped++
 		} else {
 			result.Failed++
-		}
-
-		if config.Delay > 0 && i < len(requests)-1 {
-			select {
-			case <-ctx.Done():
-				return result
-			case <-time.After(config.Delay):
-			}
 		}
 
 		if config.Bail && !reqResult.Passed && !reqResult.Skipped {
@@ -231,6 +265,20 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 			}
 			break
 		}
+
+		if stop {
+			break
+		}
+
+		if config.Delay > 0 && nextIndex < len(requests) {
+			select {
+			case <-ctx.Done():
+				return result
+			case <-time.After(config.Delay):
+			}
+		}
+
+		i = nextIndex
 	}
 
 	result.Duration = time.Since(start)
@@ -238,10 +286,21 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 }
 
 func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string, extractedVars map[string]string) *RequestResult {
+	return r.runRequestLifecycle(ctx, req, vars, extractedVars).Result
+}
+
+func (r *Runner) RunSavedRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string) *SingleRequestExecution {
+	runningVars := copyStringMap(vars)
+	extractedVars := make(map[string]string)
+	return r.runRequestLifecycle(ctx, req, runningVars, extractedVars)
+}
+
+func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedRequest, vars map[string]string, extractedVars map[string]string) *SingleRequestExecution {
 	start := time.Now()
 	result := &RequestResult{
 		RequestName: req.Name,
 	}
+	execution := &SingleRequestExecution{Result: result}
 
 	dirtyVars := make(map[string]string)
 	effectiveReq := req
@@ -252,13 +311,13 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 			result.Error = err.Error()
 			result.FailurePhase = FailurePhaseRunIf
 			result.Duration = time.Since(start)
-			return result
+			return execution
 		}
 		if !ok {
 			result.Skipped = true
 			result.SkipReason = SkipReasonRunIf
 			result.Duration = time.Since(start)
-			return result
+			return execution
 		}
 	}
 
@@ -276,7 +335,7 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 			result.Error = fmt.Sprintf("pre-request script failed: %v", err)
 			result.FailurePhase = FailurePhasePreRequestScript
 			result.Duration = time.Since(start)
-			return result
+			return execution
 		}
 		mergeVars(vars, extractedVars, dirtyVars, engine.DirtyVariables())
 
@@ -285,7 +344,7 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 			result.SkipReason = engine.SkipReason()
 			result.DirtyVars = nonEmptyMap(dirtyVars)
 			result.Duration = time.Since(start)
-			return result
+			return execution
 		}
 
 		copy := *req
@@ -300,8 +359,9 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 	if err != nil {
 		result.Error = fmt.Sprintf("variable substitution failed: %v", err)
 		result.FailurePhase = FailurePhaseRequestBuild
-		return result
+		return execution
 	}
+	execution.Request = &clientReq
 
 	if effectiveReq.Timeout != "" {
 		if d, err := time.ParseDuration(effectiveReq.Timeout); err == nil && d > 0 {
@@ -313,8 +373,9 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 	if err != nil {
 		result.Error = fmt.Sprintf("request failed: %v", err)
 		result.FailurePhase = FailurePhaseHTTP
-		return result
+		return execution
 	}
+	execution.Response = &resp
 
 	result.StatusCode = resp.StatusCode
 	result.Duration = time.Since(start)
@@ -323,7 +384,7 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 		extracted, err := r.extractor.Extract(resp.Body, resp.Headers, effectiveReq.Extracts)
 		if err != nil {
 			result.Error = fmt.Sprintf("extraction failed: %v", err)
-			return result
+			return execution
 		}
 		result.ExtractedVars = extracted
 		mergeVars(vars, extractedVars, dirtyVars, extracted)
@@ -337,7 +398,7 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 			result.Error = fmt.Sprintf("post-response script failed: %v", err)
 			result.FailurePhase = FailurePhasePostResponseScript
 			result.DirtyVars = nonEmptyMap(dirtyVars)
-			return result
+			return execution
 		}
 		mergeVars(vars, extractedVars, dirtyVars, postResult.Variables)
 		result.NextRequestOverride = engine.NextRequest()
@@ -346,7 +407,7 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 
 	if result.StatusCode < 200 || result.StatusCode >= 300 {
 		result.Passed = false
-		return result
+		return execution
 	}
 
 	if len(effectiveReq.Assertions) > 0 {
@@ -368,7 +429,22 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 		result.Passed = result.Error == ""
 	}
 
-	return result
+	return execution
+}
+
+func requestIndexByName(requests []*types.SavedRequest) map[string]int {
+	index := make(map[string]int, len(requests))
+	for i, req := range requests {
+		index[req.Name] = i
+	}
+	return index
+}
+
+func failNextRequestOverride(result *RequestResult, message string) {
+	result.Passed = false
+	result.Skipped = false
+	result.Error = message
+	result.FailurePhase = FailurePhaseNextRequest
 }
 
 func mergeVars(vars map[string]string, extractedVars map[string]string, dirtyVars map[string]string, updates map[string]string) {

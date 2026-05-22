@@ -111,39 +111,51 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 			enableChain := c.Bool("chain")
 			dataFile := c.String("data")
 
-			baseVars := make(map[string]string)
+			envVars := make(map[string]string)
 
 			if envName := c.String("env"); envName != "" {
 				if env, err := envStorage.GetEnvByName(envName); err == nil {
 					for k, v := range env.Variables {
-						baseVars[k] = v
+						envVars[k] = v
 					}
 				}
 			} else if activeEnvName, err := envStorage.GetActiveEnv(); err == nil && activeEnvName != "" {
 				if env, err := envStorage.GetEnvByName(activeEnvName); err == nil {
 					for k, v := range env.Variables {
-						baseVars[k] = v
+						envVars[k] = v
 					}
 				}
 			}
 
+			cliVars := make(map[string]string)
 			for _, pair := range c.StringSlice("var") {
 				if idx := strings.Index(pair, "="); idx != -1 {
-					baseVars[pair[:idx]] = pair[idx+1:]
+					cliVars[pair[:idx]] = pair[idx+1:]
 				}
 			}
+			baseVars := mergeRunVars(envVars, cliVars)
 
 			if dataFile != "" {
-				return executeDataDriven(ctx, db, name, baseVars, c)
+				return executeDataDriven(ctx, db, envStorage, name, envVars, cliVars, c)
 			}
 
 			if enableChain {
 				return executeChain(ctx, db, envStorage, name, baseVars, c)
 			}
 
-			return executeSingleRequest(db, name, baseVars, c)
+			return executeSingleRequest(ctx, db, envStorage, name, baseVars, c)
 		},
 	}
+}
+
+func mergeRunVars(maps ...map[string]string) map[string]string {
+	merged := make(map[string]string)
+	for _, vars := range maps {
+		for key, value := range vars {
+			merged[key] = value
+		}
+	}
+	return merged
 }
 
 func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, vars map[string]string, c *cli.Command) error {
@@ -245,32 +257,27 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 	return fmt.Errorf("max iterations (%d) reached", chainExec.MaxIterations())
 }
 
-func executeSingleRequest(db storage.DB, name string, vars map[string]string, c *cli.Command) error {
+func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, vars map[string]string, c *cli.Command) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
 	}
 
-	clientReq, err := curl.BuildClientRequest(req, vars)
-	if err != nil {
-		return fmt.Errorf("variable substitution failed: %w", err)
-	}
-
-	var timeout time.Duration
 	if timeoutStr := c.String("timeout"); timeoutStr != "" {
-		timeout, _ = time.ParseDuration(timeoutStr)
-	} else if req.Timeout != "" {
-		timeout, _ = time.ParseDuration(req.Timeout)
+		copy := *req
+		copy.Timeout = timeoutStr
+		req = &copy
 	}
 
-	if timeout > 0 {
-		clientReq.Timeout = timeout
+	execution := runner.NewRunner(db, envStorage).RunSavedRequest(ctx, req, vars)
+	if execution.Result.Error != "" {
+		return fmt.Errorf("%s", execution.Result.Error)
 	}
-
-	resp, err := client.Execute(clientReq)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+	if execution.Result.Skipped || execution.Request == nil || execution.Response == nil {
+		return nil
 	}
+	clientReq := *execution.Request
+	resp := *execution.Response
 
 	// Evaluate assertions if provided
 	if assertFlags := c.StringSlice("assert"); len(assertFlags) > 0 {
@@ -280,7 +287,7 @@ func executeSingleRequest(db storage.DB, name string, vars map[string]string, c 
 			return fmt.Errorf("failed to parse assertions: %w", err)
 		}
 		evaluator := assertions.NewEvaluator()
-		results := evaluator.Evaluate(&resp, asserts, map[string]string{})
+		results := evaluator.Evaluate(&resp, asserts, assertionVarsFromResult(execution.Result))
 		summary := assertions.Summarize(results)
 
 		fmt.Fprintf(os.Stderr, "\n=== Assertions: %d passed, %d failed ===\n", summary.Passed, summary.Failed)
@@ -326,10 +333,30 @@ func executeSingleRequest(db storage.DB, name string, vars map[string]string, c 
 	return printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format)
 }
 
-func executeDataDriven(ctx context.Context, db storage.DB, name string, baseVars map[string]string, c *cli.Command) error {
+func assertionVarsFromResult(result *runner.RequestResult) map[string]string {
+	vars := make(map[string]string)
+	for key, value := range result.ExtractedVars {
+		vars[key] = value
+	}
+	for key, value := range result.DirtyVars {
+		vars[key] = value
+	}
+	return vars
+}
+
+func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, envVars map[string]string, cliVars map[string]string, c *cli.Command) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
+	}
+	if timeoutStr := c.String("timeout"); timeoutStr != "" {
+		if _, err := time.ParseDuration(timeoutStr); err != nil {
+			return fmt.Errorf("invalid timeout format '%s': %w", timeoutStr, err)
+		}
+	} else if req.Timeout != "" {
+		if _, err := time.ParseDuration(req.Timeout); err != nil {
+			return fmt.Errorf("invalid timeout format '%s': %w", req.Timeout, err)
+		}
 	}
 
 	dataFile := c.String("data")
@@ -345,47 +372,28 @@ func executeDataDriven(ctx context.Context, db storage.DB, name string, baseVars
 	}
 
 	rowNum := 0
+	singleRunner := runner.NewRunner(db, envStorage)
 	err = loader.Iterate(func(rowVars map[string]string) error {
 		rowNum++
 
-		mergedVars := make(map[string]string)
-		for k, v := range baseVars {
-			mergedVars[k] = v
-		}
-		for k, v := range rowVars {
-			mergedVars[k] = v
-		}
-
-		clientReq, err := curl.BuildClientRequest(req, mergedVars)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Row %d: variable substitution failed: %v\n", rowNum, err)
-			return nil
-		}
-
-		var timeout time.Duration
+		mergedVars := mergeRunVars(envVars, rowVars, cliVars)
+		effectiveReq := req
 		if timeoutStr := c.String("timeout"); timeoutStr != "" {
-			var err error
-			timeout, err = time.ParseDuration(timeoutStr)
-			if err != nil {
-				return fmt.Errorf("invalid timeout format '%s': %w", timeoutStr, err)
-			}
-		} else if req.Timeout != "" {
-			var err error
-			timeout, err = time.ParseDuration(req.Timeout)
-			if err != nil {
-				return fmt.Errorf("invalid timeout format '%s': %w", req.Timeout, err)
-			}
+			copy := *req
+			copy.Timeout = timeoutStr
+			effectiveReq = &copy
 		}
 
-		if timeout > 0 {
-			clientReq.Timeout = timeout
-		}
-
-		resp, err := client.Execute(clientReq)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Row %d: request failed: %v\n", rowNum, err)
+		execution := singleRunner.RunSavedRequest(ctx, effectiveReq, mergedVars)
+		if execution.Result.Error != "" {
+			fmt.Fprintf(os.Stderr, "Row %d: request failed: %v\n", rowNum, execution.Result.Error)
 			return nil
 		}
+		if execution.Result.Skipped || execution.Response == nil {
+			fmt.Fprintf(os.Stdout, "Row %d [%s]: skipped\n", rowNum, name)
+			return nil
+		}
+		resp := *execution.Response
 
 		history := types.NewExecutionHistory(
 			req.ID,

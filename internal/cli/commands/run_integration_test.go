@@ -3,13 +3,17 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/sreeram/gurl/internal/client"
+	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
@@ -170,6 +174,65 @@ func TestRunCommandFullResponseCapture(t *testing.T) {
 		t.Error("expected size > 0")
 	}
 	respMu.Unlock()
+}
+
+func TestRunCommand_SingleSavedRequestLifecycle(t *testing.T) {
+	var gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/orders" {
+			t.Fatalf("expected /orders path, got %q", r.URL.Path)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("failed to read body: %v", err)
+		}
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"data":{"orderId":"ord_789"}}`))
+	}))
+	defer server.Close()
+
+	db := newMockDB()
+	db.requests["single-lifecycle"] = &types.SavedRequest{
+		ID:        "single-lifecycle",
+		Name:      "create order",
+		Method:    "POST",
+		URL:       "{{baseUrl}}/orders",
+		Body:      `{"customerId":"{{customerId}}"}`,
+		PreScript: `gurl.setVar("customerId", "cust_123")`,
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+		},
+		Assertions: []types.Assertion{
+			{Field: "extract:orderId", Op: "equals", Value: "ord_789"},
+		},
+	}
+	db.names["create order"] = "single-lifecycle"
+
+	envDB := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "env.db"))
+	if err := envDB.Open(); err != nil {
+		t.Fatalf("failed to open env db: %v", err)
+	}
+	defer envDB.Close()
+	envStorage := env.NewEnvStorage(envDB)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("baseUrl", server.URL)
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatalf("failed to save env: %v", err)
+	}
+
+	cmd := RunCommand(db, envStorage)
+	if err := cmd.Run(context.Background(), []string{"run", "create order", "--env", "beta"}); err != nil {
+		t.Fatalf("run command failed: %v", err)
+	}
+
+	if gotBody != `{"customerId":"cust_123"}` {
+		t.Fatalf("expected pre-script variable to feed request body, got %q", gotBody)
+	}
+	if len(db.history) != 1 {
+		t.Fatalf("expected single run to preserve history save, got %d entries", len(db.history))
+	}
 }
 
 type fullCaptureClient struct {
