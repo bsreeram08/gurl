@@ -273,6 +273,10 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.En
 	if execution.Result.Error != "" {
 		return fmt.Errorf("%s", execution.Result.Error)
 	}
+	var assertionErr error
+	if execution.Result.FailurePhase == runner.FailurePhaseAssertion {
+		assertionErr = fmt.Errorf("assertion failed: %s", runnerAssertionFailureMessage(execution.Result))
+	}
 	if execution.Result.Skipped || execution.Request == nil || execution.Response == nil {
 		return nil
 	}
@@ -296,7 +300,7 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.En
 		}
 
 		if summary.Failed > 0 {
-			// Don't fail the request, just report
+			assertionErr = mergeAssertionErrors(assertionErr, fmt.Errorf("assertion failed: %s", cliAssertionFailureMessage(results)))
 		}
 	}
 
@@ -326,11 +330,52 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.En
 			return fmt.Errorf("failed to save output: %w", err)
 		}
 		fmt.Printf("Response saved to %s\n", outputPath)
-		return nil
+		return assertionErr
 	}
 
 	format := c.String("format")
-	return printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format)
+	if err := printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
+		return err
+	}
+	return assertionErr
+}
+
+func runnerAssertionFailureMessage(result *runner.RequestResult) string {
+	messages := make([]string, 0, len(result.AssertionResults))
+	for _, assertion := range result.AssertionResults {
+		if assertion.Passed {
+			continue
+		}
+		messages = append(messages, assertion.Message)
+	}
+	if len(messages) == 0 {
+		return "one or more assertions failed"
+	}
+	return strings.Join(messages, "; ")
+}
+
+func cliAssertionFailureMessage(results []assertions.Result) string {
+	messages := make([]string, 0, len(results))
+	for _, assertion := range results {
+		if assertion.Passed {
+			continue
+		}
+		messages = append(messages, assertion.Message)
+	}
+	if len(messages) == 0 {
+		return "one or more assertions failed"
+	}
+	return strings.Join(messages, "; ")
+}
+
+func mergeAssertionErrors(existing error, next error) error {
+	if existing == nil {
+		return next
+	}
+	if next == nil {
+		return existing
+	}
+	return fmt.Errorf("%v; %v", existing, next)
 }
 
 func assertionVarsFromResult(result *runner.RequestResult) map[string]string {

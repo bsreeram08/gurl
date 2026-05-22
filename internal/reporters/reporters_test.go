@@ -152,6 +152,66 @@ func TestReporter_JSON(t *testing.T) {
 	}
 }
 
+func TestReporter_AssertionDetailsPayload(t *testing.T) {
+	results := []RunResult{
+		{
+			CollectionName: "assert-details",
+			Total:          1,
+			Failed:         1,
+			Iteration:      1,
+			RequestResults: []*RequestResult{
+				{
+					RequestName: "check-order",
+					StatusCode:  200,
+					Passed:      false,
+					AssertionResults: []AssertionResult{
+						{
+							Field:    "extract:orderId",
+							Source:   "extract:orderId",
+							Op:       "equals",
+							Operator: "equals",
+							Value:    "ord_456",
+							Expected: "ord_456",
+							Actual:   "ord_123",
+							Passed:   false,
+							Message:  "FAIL: extract:orderId equals ord_456 (actual: ord_123)",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonContent, err := NewJSONReporter().Report(results)
+	if err != nil {
+		t.Fatalf("unexpected JSON reporter error: %v", err)
+	}
+	var report JSONReport
+	if err := json.Unmarshal(jsonContent, &report); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+	assertion := report.Results[0].RequestResults[0].Assertions[0]
+	if assertion.Source != "extract:orderId" || assertion.Operator != "equals" || assertion.Expected != "ord_456" || assertion.Actual != "ord_123" {
+		t.Fatalf("JSON assertion details missing fields: %+v", assertion)
+	}
+
+	junitContent, err := NewJUnitXMLReporter().Report(results)
+	if err != nil {
+		t.Fatalf("unexpected JUnit reporter error: %v", err)
+	}
+	if junit := string(junitContent); !strings.Contains(junit, "extract:orderId") || !strings.Contains(junit, "expected: ord_456") || !strings.Contains(junit, "actual: ord_123") {
+		t.Fatalf("JUnit output missing assertion details: %s", junit)
+	}
+
+	htmlContent, err := NewHTMLReporter().Report(results)
+	if err != nil {
+		t.Fatalf("unexpected HTML reporter error: %v", err)
+	}
+	if html := string(htmlContent); !strings.Contains(html, "extract:orderId") || !strings.Contains(html, "expected: ord_456") || !strings.Contains(html, "actual: ord_123") {
+		t.Fatalf("HTML output missing assertion details: %s", html)
+	}
+}
+
 func TestReporter_HTML(t *testing.T) {
 	reporter := NewHTMLReporter()
 	if reporter.Name() != "html" {

@@ -767,6 +767,117 @@ func TestRunner_StopOnError(t *testing.T) {
 	}
 }
 
+func TestRunner_BailMarksRemainingRequestsWithBailSkipReason(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	order := []string{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		order = append(order, r.URL.Path)
+		if r.URL.Path == "/fail" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{ID: "req-1", Name: "first", URL: ts.URL + "/first", Method: "GET", Collection: "bail-reason-col", SortOrder: 1})
+	db.SaveRequest(&types.SavedRequest{ID: "req-2", Name: "fail", URL: ts.URL + "/fail", Method: "GET", Collection: "bail-reason-col", SortOrder: 2})
+	db.SaveRequest(&types.SavedRequest{ID: "req-3", Name: "third", URL: ts.URL + "/third", Method: "GET", Collection: "bail-reason-col", SortOrder: 3})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "bail-reason-col", Bail: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(order) != 2 {
+		t.Fatalf("expected bail to stop before third request, got order %v", order)
+	}
+	if got := results[0].RequestResults[2].SkipReason; got != SkipReasonBail {
+		t.Fatalf("expected remaining request skip reason %q, got %q", SkipReasonBail, got)
+	}
+}
+
+func TestRunner_AssertBailStopsOnlyAfterAssertionFailure(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	order := []string{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		order = append(order, r.URL.Path)
+		if r.URL.Path == "/http-fail" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{ID: "req-1", Name: "http-fail", URL: ts.URL + "/http-fail", Method: "GET", Collection: "assert-bail-col", SortOrder: 1})
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "req-2",
+		Name:       "assert-fail",
+		URL:        ts.URL + "/assert-fail",
+		Method:     "GET",
+		Collection: "assert-bail-col",
+		SortOrder:  2,
+		Assertions: []types.Assertion{{Field: "status", Op: "equals", Value: "201"}},
+	})
+	db.SaveRequest(&types.SavedRequest{ID: "req-3", Name: "third", URL: ts.URL + "/third", Method: "GET", Collection: "assert-bail-col", SortOrder: 3})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "assert-bail-col", AssertBail: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if want := []string{"/http-fail", "/assert-fail"}; strings.Join(order, ",") != strings.Join(want, ",") {
+		t.Fatalf("expected assert-bail to ignore HTTP failure then stop after assertion failure, got order %v", order)
+	}
+	result := results[0]
+	if result.Failed != 2 || result.Skipped != 1 {
+		t.Fatalf("expected two failures and one assert-bail skip, got failed=%d skipped=%d", result.Failed, result.Skipped)
+	}
+	assertResult := result.RequestResults[1]
+	if assertResult.FailurePhase != FailurePhaseAssertion {
+		t.Fatalf("expected assertion failure phase, got %q", assertResult.FailurePhase)
+	}
+	if got := result.RequestResults[2].SkipReason; got != SkipReasonBail {
+		t.Fatalf("expected remaining request skip reason %q, got %q", SkipReasonBail, got)
+	}
+}
+
+func TestRunner_AssertBailDoesNotStopOnSkippedRequest(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	order := []string{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		order = append(order, r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{ID: "req-1", Name: "optional", URL: ts.URL + "/optional", Method: "GET", Collection: "assert-bail-skip-col", SortOrder: 1, RunIf: "run_optional == true"})
+	db.SaveRequest(&types.SavedRequest{ID: "req-2", Name: "next", URL: ts.URL + "/next", Method: "GET", Collection: "assert-bail-skip-col", SortOrder: 2})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "assert-bail-skip-col", AssertBail: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Join(order, ",") != "/next" {
+		t.Fatalf("expected skipped request to be neutral and next request to run, got order %v", order)
+	}
+	result := results[0]
+	if result.Skipped != 1 || result.Passed != 1 || result.Failed != 0 {
+		t.Fatalf("expected one skipped and one passed request, got passed=%d failed=%d skipped=%d", result.Passed, result.Failed, result.Skipped)
+	}
+}
+
 func TestRunner_Summary(t *testing.T) {
 	db := newMockDB()
 	envStorage := newMockEnvStorage()

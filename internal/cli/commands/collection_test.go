@@ -10,6 +10,7 @@ import (
 
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/pkg/types"
+	"github.com/urfave/cli/v3"
 )
 
 func TestCollectionListCommand(t *testing.T) {
@@ -98,6 +99,41 @@ func TestCollectionShowCommand(t *testing.T) {
 	if !strings.Contains(output, "get-user") || !strings.Contains(output, "https://example.com/users/1") {
 		t.Errorf("expected request details in output, got %q", output)
 	}
+}
+
+func TestCollectionRunCommandIncludesAssertBailFlag(t *testing.T) {
+	db := newMockDB()
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+
+	var runCmd *cli.Command
+	for _, subcommand := range cmd.Commands {
+		if subcommand.Name == "run" {
+			runCmd = subcommand
+			break
+		}
+	}
+	if runCmd == nil {
+		t.Fatal("expected collection run subcommand")
+	}
+
+	if !commandHasFlag(runCmd, "assert-bail") {
+		t.Fatalf("expected collection run command to expose --assert-bail flag")
+	}
+}
+
+func commandHasFlag(cmd *cli.Command, name string) bool {
+	for _, flag := range cmd.Flags {
+		named, ok := flag.(interface{ Names() []string })
+		if !ok {
+			continue
+		}
+		for _, flagName := range named.Names() {
+			if flagName == name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func captureStdout(t *testing.T, fn func()) string {

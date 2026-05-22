@@ -1,9 +1,14 @@
 package commands
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/sreeram/gurl/internal/core/template"
+	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
@@ -90,6 +95,96 @@ func TestRunBackwardCompatNoEnv(t *testing.T) {
 	}
 	if substitutedURL != "https://example.com/testuser" {
 		t.Errorf("expected URL with CLI vars only, got: %s", substitutedURL)
+	}
+}
+
+func TestRunCommandSavedAssertionFailureReturnsError(t *testing.T) {
+	db := newMockDB()
+	envStorage := &env.EnvStorage{}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	db.requests["req-assert"] = &types.SavedRequest{
+		ID:     "req-assert",
+		Name:   "assert-fail",
+		URL:    ts.URL,
+		Method: "GET",
+		Assertions: []types.Assertion{
+			{Field: "status", Op: "equals", Value: "201"},
+		},
+	}
+	db.names["assert-fail"] = "req-assert"
+
+	cmd := RunCommand(db, envStorage)
+	err := cmd.Run(context.Background(), []string{"run", "assert-fail"})
+	if err == nil {
+		t.Fatal("expected saved assertion failure to return an error")
+	}
+	if !strings.Contains(err.Error(), "assertion failed") {
+		t.Fatalf("expected assertion failure error, got %v", err)
+	}
+	if len(db.history) != 1 {
+		t.Fatalf("expected saved assertion failure to preserve history save, got %d entries", len(db.history))
+	}
+}
+
+func TestRunCommandCLIAssertionFailureReturnsError(t *testing.T) {
+	db := newMockDB()
+	envStorage := &env.EnvStorage{}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	db.requests["req-cli-assert"] = &types.SavedRequest{
+		ID:     "req-cli-assert",
+		Name:   "cli-assert",
+		URL:    ts.URL,
+		Method: "GET",
+	}
+	db.names["cli-assert"] = "req-cli-assert"
+
+	cmd := RunCommand(db, envStorage)
+	err := cmd.Run(context.Background(), []string{"run", "cli-assert", "--assert", "status=201"})
+	if err == nil {
+		t.Fatal("expected CLI assertion failure to return an error")
+	}
+	if !strings.Contains(err.Error(), "assertion failed") || !strings.Contains(err.Error(), "status") || !strings.Contains(err.Error(), "201") || !strings.Contains(err.Error(), "200") {
+		t.Fatalf("expected useful assertion failure details, got %v", err)
+	}
+	if len(db.history) != 1 {
+		t.Fatalf("expected CLI assertion failure to preserve history save, got %d entries", len(db.history))
+	}
+}
+
+func TestRunCommandCLIAssertionPassReturnsNilAndSavesHistory(t *testing.T) {
+	db := newMockDB()
+	envStorage := &env.EnvStorage{}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	db.requests["req-cli-assert-pass"] = &types.SavedRequest{
+		ID:     "req-cli-assert-pass",
+		Name:   "cli-assert-pass",
+		URL:    ts.URL,
+		Method: "GET",
+	}
+	db.names["cli-assert-pass"] = "req-cli-assert-pass"
+
+	cmd := RunCommand(db, envStorage)
+	err := cmd.Run(context.Background(), []string{"run", "cli-assert-pass", "--assert", "status=200"})
+	if err != nil {
+		t.Fatalf("expected passing CLI assertion to return nil, got %v", err)
+	}
+	if len(db.history) != 1 {
+		t.Fatalf("expected history to be saved after passing CLI assertion, got %d entries", len(db.history))
 	}
 }
 

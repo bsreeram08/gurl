@@ -21,6 +21,7 @@ type RunConfig struct {
 	Environment    string
 	Iterations     int
 	Bail           bool
+	AssertBail     bool
 	Delay          time.Duration
 	Vars           map[string]string
 	DataFile       string
@@ -253,16 +254,8 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 			result.Failed++
 		}
 
-		if config.Bail && !reqResult.Passed && !reqResult.Skipped {
-			remaining := len(requests) - i - 1
-			result.Skipped += remaining
-			// Add remaining requests as skipped (bail triggered).
-			for j := i + 1; j < len(requests); j++ {
-				result.RequestResults = append(result.RequestResults, &RequestResult{
-					RequestName: requests[j].Name,
-					Skipped:     true,
-				})
-			}
+		if shouldStopForBail(config, reqResult) {
+			appendBailSkippedResults(&result, requests, i+1)
 			break
 		}
 
@@ -283,6 +276,28 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 
 	result.Duration = time.Since(start)
 	return result
+}
+
+func shouldStopForBail(config RunConfig, result *RequestResult) bool {
+	if result.Passed || result.Skipped {
+		return false
+	}
+	if config.Bail {
+		return true
+	}
+	return config.AssertBail && result.FailurePhase == FailurePhaseAssertion
+}
+
+func appendBailSkippedResults(result *RunResult, requests []*types.SavedRequest, start int) {
+	remaining := len(requests) - start
+	result.Skipped += remaining
+	for j := start; j < len(requests); j++ {
+		result.RequestResults = append(result.RequestResults, &RequestResult{
+			RequestName: requests[j].Name,
+			Skipped:     true,
+			SkipReason:  SkipReasonBail,
+		})
+	}
 }
 
 func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string, extractedVars map[string]string) *RequestResult {

@@ -29,6 +29,10 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 				Aliases: []string{"b"},
 				Usage:   "Stop on first failure",
 			},
+			&cli.BoolFlag{
+				Name:  "assert-bail",
+				Usage: "Stop on first assertion failure only",
+			},
 			&cli.IntFlag{
 				Name:    "iterations",
 				Aliases: []string{"n"},
@@ -86,6 +90,7 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 				Environment:    c.String("env"),
 				Iterations:     c.Int("iterations"),
 				Bail:           c.Bool("bail"),
+				AssertBail:     c.Bool("assert-bail"),
 				Delay:          c.Duration("delay"),
 				Vars:           vars,
 				DataFile:       c.String("data"),
@@ -163,11 +168,15 @@ func convertToReporterResults(results []RunResult) []reporters.RunResult {
 			assertionResults := make([]reporters.AssertionResult, len(req.AssertionResults))
 			for k, a := range req.AssertionResults {
 				assertionResults[k] = reporters.AssertionResult{
-					Field:   a.Assertion.Field,
-					Op:      a.Assertion.Op,
-					Value:   a.Assertion.Value,
-					Passed:  a.Passed,
-					Message: a.Message,
+					Field:    a.Assertion.Field,
+					Source:   a.Assertion.Field,
+					Op:       a.Assertion.Op,
+					Operator: a.Assertion.Op,
+					Value:    a.Assertion.Value,
+					Expected: a.Expected,
+					Actual:   a.Actual,
+					Passed:   a.Passed,
+					Message:  a.Message,
 				}
 			}
 			reqResults[j] = &reporters.RequestResult{

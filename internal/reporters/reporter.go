@@ -40,11 +40,15 @@ type RequestResult struct {
 }
 
 type AssertionResult struct {
-	Field   string
-	Op      string
-	Value   string
-	Passed  bool
-	Message string
+	Field    string
+	Source   string
+	Op       string
+	Operator string
+	Value    string
+	Expected string
+	Actual   string
+	Passed   bool
+	Message  string
 }
 
 type JUnitXMLReporter struct{}
@@ -119,10 +123,16 @@ func (r *JUnitXMLReporter) Report(results []RunResult) ([]byte, error) {
 					Content: reqResult.Error,
 				}
 			} else if !reqResult.Passed {
+				message := fmt.Sprintf("Status code: %d", reqResult.StatusCode)
+				content := fmt.Sprintf("Request '%s' failed with status code %d", reqResult.RequestName, reqResult.StatusCode)
+				if details := failedAssertionDetails(reqResult.AssertionResults); details != "" {
+					message = details
+					content = details
+				}
 				failure = &junitFailure{
-					Message: fmt.Sprintf("Status code: %d", reqResult.StatusCode),
+					Message: message,
 					Type:    "assertion_failure",
-					Content: fmt.Sprintf("Request '%s' failed with status code %d", reqResult.RequestName, reqResult.StatusCode),
+					Content: content,
 				}
 			}
 
@@ -204,11 +214,15 @@ type JSONRequestResult struct {
 }
 
 type JSONAssertionResult struct {
-	Field   string `json:"field"`
-	Op      string `json:"op"`
-	Value   string `json:"value"`
-	Passed  bool   `json:"passed"`
-	Message string `json:"message,omitempty"`
+	Field    string `json:"field"`
+	Source   string `json:"source,omitempty"`
+	Op       string `json:"op"`
+	Operator string `json:"operator,omitempty"`
+	Value    string `json:"value"`
+	Expected string `json:"expected,omitempty"`
+	Actual   string `json:"actual,omitempty"`
+	Passed   bool   `json:"passed"`
+	Message  string `json:"message,omitempty"`
 }
 
 func (r *JSONReporter) Report(results []RunResult) ([]byte, error) {
@@ -236,11 +250,15 @@ func (r *JSONReporter) Report(results []RunResult) ([]byte, error) {
 			assertions := make([]JSONAssertionResult, 0, len(reqResult.AssertionResults))
 			for _, ar := range reqResult.AssertionResults {
 				assertions = append(assertions, JSONAssertionResult{
-					Field:   ar.Field,
-					Op:      ar.Op,
-					Value:   ar.Value,
-					Passed:  ar.Passed,
-					Message: ar.Message,
+					Field:    ar.Field,
+					Source:   assertionSource(ar),
+					Op:       ar.Op,
+					Operator: assertionOperator(ar),
+					Value:    ar.Value,
+					Expected: assertionExpected(ar),
+					Actual:   ar.Actual,
+					Passed:   ar.Passed,
+					Message:  ar.Message,
 				})
 			}
 
@@ -394,29 +412,31 @@ h1 { color: #333; margin-bottom: 20px; }
 				class = "failed"
 				if reqResult.Error != "" {
 					message = reqResult.Error
+				} else if details := failedAssertionDetails(reqResult.AssertionResults); details != "" {
+					message = details
 				} else {
 					message = fmt.Sprintf("Status: %d", reqResult.StatusCode)
 				}
 			}
 
-		sb.WriteString(`<div class="test-result `)
-		sb.WriteString(class)
-		sb.WriteString(`">
+			sb.WriteString(`<div class="test-result `)
+			sb.WriteString(class)
+			sb.WriteString(`">
 <span class="status">`)
-		sb.WriteString(status)
-		sb.WriteString(`</span>
+			sb.WriteString(status)
+			sb.WriteString(`</span>
 <span class="name">`)
-		sb.WriteString(html.EscapeString(reqResult.RequestName))
-		sb.WriteString(`</span>
+			sb.WriteString(html.EscapeString(reqResult.RequestName))
+			sb.WriteString(`</span>
 <span class="duration">`)
-		sb.WriteString(reqResult.Duration.String())
-		sb.WriteString(`</span>`)
-		if message != "" {
-			sb.WriteString(`<span class="message">`)
-			sb.WriteString(html.EscapeString(message))
+			sb.WriteString(reqResult.Duration.String())
 			sb.WriteString(`</span>`)
-		}
-		sb.WriteString(`</div>
+			if message != "" {
+				sb.WriteString(`<span class="message">`)
+				sb.WriteString(html.EscapeString(message))
+				sb.WriteString(`</span>`)
+			}
+			sb.WriteString(`</div>
 `)
 		}
 
@@ -441,6 +461,41 @@ func (r *HTMLReporter) WriteToFile(results []RunResult, path string) error {
 		return err
 	}
 	return os.WriteFile(path, content, 0644)
+}
+
+func assertionSource(assertion AssertionResult) string {
+	if assertion.Source != "" {
+		return assertion.Source
+	}
+	return assertion.Field
+}
+
+func assertionOperator(assertion AssertionResult) string {
+	if assertion.Operator != "" {
+		return assertion.Operator
+	}
+	return assertion.Op
+}
+
+func assertionExpected(assertion AssertionResult) string {
+	if assertion.Expected != "" {
+		return assertion.Expected
+	}
+	return assertion.Value
+}
+
+func failedAssertionDetails(assertions []AssertionResult) string {
+	parts := make([]string, 0, len(assertions))
+	for _, assertion := range assertions {
+		if assertion.Passed {
+			continue
+		}
+		source := assertionSource(assertion)
+		operator := assertionOperator(assertion)
+		expected := assertionExpected(assertion)
+		parts = append(parts, fmt.Sprintf("%s %s expected: %s actual: %s message: %s", source, operator, expected, assertion.Actual, assertion.Message))
+	}
+	return strings.Join(parts, "; ")
 }
 
 type ConsoleReporter struct{}
@@ -489,7 +544,9 @@ func (r *ConsoleReporter) Report(results []RunResult) ([]byte, error) {
 				sb.WriteString(formatter.Red + formatter.Bold + "  ✗ FAIL" + formatter.Reset + " ")
 				sb.WriteString(reqResult.RequestName)
 				sb.WriteString(": ")
-				sb.WriteString(formatter.Red + reqResult.Error + formatter.Reset)
+				sb.WriteString(formatter.Red)
+				sb.WriteString(reqResult.Error)
+				sb.WriteString(formatter.Reset)
 				sb.WriteString("\n")
 			} else if reqResult.Passed {
 				sb.WriteString(formatter.Green + formatter.Bold + "  ✓ PASS" + formatter.Reset + " ")
