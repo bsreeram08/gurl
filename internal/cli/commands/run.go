@@ -186,6 +186,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 	currentName := name
 	visited := make(map[string]bool)
 	singleRunner := runner.NewRunner(db, envStorage)
+	var chainAssertionErr error
 	const maxChainIterations = 100
 
 	for i := 0; i < maxChainIterations; i++ {
@@ -222,10 +223,11 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 		var assertionErr error
 		if execution.Result.FailurePhase == runner.FailurePhaseAssertion {
 			assertionErr = fmt.Errorf("assertion failed: %s", runnerAssertionFailureMessage(execution.Result))
+			chainAssertionErr = mergeAssertionErrors(chainAssertionErr, assertionErr)
 		}
 		if execution.Result.Skipped || execution.Request == nil || execution.Response == nil {
 			if execution.Result.NextRequestOverride == "" {
-				return assertionErr
+				return chainAssertionErr
 			}
 			currentName = execution.Result.NextRequestOverride
 			continue
@@ -264,13 +266,9 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 		if err := printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
 			return err
 		}
-		if assertionErr != nil {
-			return assertionErr
-		}
-
 		nextReq := execution.Result.NextRequestOverride
 		if nextReq == "" {
-			return nil
+			return chainAssertionErr
 		}
 
 		currentName = nextReq

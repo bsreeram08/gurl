@@ -282,6 +282,56 @@ func TestRunCommand_ChainUsesSavedPostScriptNextRequest(t *testing.T) {
 	}
 }
 
+func TestRunCommand_ChainHonorsSavedPostScriptNextRequestBeforeAssertionFailure(t *testing.T) {
+	var mu sync.Mutex
+	paths := make([]string, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	db := newMockDB()
+	db.requests["req-first-chain-assertion"] = &types.SavedRequest{
+		ID:         "req-first-chain-assertion",
+		Name:       "first",
+		Method:     "GET",
+		URL:        server.URL + "/first",
+		PostScript: `gurl.setNextRequest("second")`,
+		Assertions: []types.Assertion{
+			{Field: "status", Op: "equals", Value: "201"},
+		},
+	}
+	db.names["first"] = "req-first-chain-assertion"
+	db.requests["req-second-chain-assertion"] = &types.SavedRequest{
+		ID:     "req-second-chain-assertion",
+		Name:   "second",
+		Method: "GET",
+		URL:    server.URL + "/second",
+	}
+	db.names["second"] = "req-second-chain-assertion"
+
+	cmd := RunCommand(db, newRunTestEnvStorage(t))
+	err := cmd.Run(context.Background(), []string{"run", "first", "--chain"})
+	if err == nil || !strings.Contains(err.Error(), "assertion failed") {
+		t.Fatalf("expected assertion failure after chain execution, got %v", err)
+	}
+
+	mu.Lock()
+	got := append([]string(nil), paths...)
+	mu.Unlock()
+	if len(got) != 2 || got[0] != "/first" || got[1] != "/second" {
+		t.Fatalf("expected assertion-failing request to honor next request before returning, got %v", got)
+	}
+	if len(db.history) != 2 {
+		t.Fatalf("expected chain to preserve history save for both requests, got %d entries", len(db.history))
+	}
+}
+
 func TestRunCommand_RequestChainingPRDFlowPersistsExtractedIDs(t *testing.T) {
 	type observedRequest struct {
 		Path   string
