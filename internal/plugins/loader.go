@@ -88,12 +88,16 @@ func (l *Loader) Load(path string) (interface{}, error) {
 		symbol = deref.Elem()
 	}
 
-	// Validate that the symbol implements at least one plugin interface
-	switch symbol.(type) {
-	case MiddlewarePlugin, OutputPlugin, CommandPlugin:
-		return symbol, nil
+	return validatePluginInterface(path, symbol)
+}
+
+func validatePluginInterface(path string, plugin interface{}) (interface{}, error) {
+	// Validate that the symbol implements at least one plugin interface.
+	switch plugin.(type) {
+	case MiddlewarePlugin, OutputPlugin, CommandPlugin, AuthPlugin:
+		return plugin, nil
 	default:
-		return nil, fmt.Errorf("plugin at %s does not implement any known plugin interface (MiddlewarePlugin, OutputPlugin, or CommandPlugin)", path)
+		return nil, fmt.Errorf("plugin at %s does not implement any known plugin interface (MiddlewarePlugin, OutputPlugin, CommandPlugin, or AuthPlugin)", path)
 	}
 }
 

@@ -11,6 +11,7 @@ type Registry struct {
 	middleware []MiddlewarePlugin
 	outputs    []OutputPlugin
 	commands   []CommandPlugin
+	auths      []AuthPlugin
 }
 
 // NewRegistry creates a new Registry with no plugins registered.
@@ -19,6 +20,7 @@ func NewRegistry() *Registry {
 		middleware: []MiddlewarePlugin{},
 		outputs:    []OutputPlugin{},
 		commands:   []CommandPlugin{},
+		auths:      []AuthPlugin{},
 	}
 }
 
@@ -32,10 +34,17 @@ func (r *Registry) Register(plugin interface{}) {
 		r.outputs = append(r.outputs, p)
 	case CommandPlugin:
 		r.commands = append(r.commands, p)
+	case AuthPlugin:
+		r.RegisterAuth(p)
 	default:
 		// Unknown plugin type - ignore silently
 		fmt.Fprintf(os.Stderr, "Warning: unknown plugin type %T, ignoring\n", plugin)
 	}
+}
+
+// RegisterAuth registers an auth plugin.
+func (r *Registry) RegisterAuth(plugin AuthPlugin) {
+	r.auths = append(r.auths, plugin)
 }
 
 // Middleware returns all registered middleware plugins in registration order.
@@ -51,6 +60,27 @@ func (r *Registry) Outputs() []OutputPlugin {
 // Commands returns all registered command plugins.
 func (r *Registry) Commands() []CommandPlugin {
 	return r.commands
+}
+
+// Auths returns all registered auth plugins.
+func (r *Registry) Auths() []AuthPlugin {
+	return r.auths
+}
+
+// ListAuth returns all registered auth plugins.
+func (r *Registry) ListAuth() []AuthPlugin {
+	return r.auths
+}
+
+// GetAuth looks up an auth plugin by its name.
+// Returns the plugin and true if found, or nil and false if not found.
+func (r *Registry) GetAuth(name string) (AuthPlugin, bool) {
+	for _, a := range r.auths {
+		if a.Name() == name {
+			return a, true
+		}
+	}
+	return nil, false
 }
 
 // ApplyBeforeRequest chains all middleware plugins' BeforeRequest in registration order.

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sreeram/gurl/internal/auth"
 	"github.com/sreeram/gurl/internal/client"
 )
 
@@ -80,6 +81,23 @@ func (p *mockCommandPlugin) Command() string     { return p.command }
 func (p *mockCommandPlugin) Description() string { return p.description }
 func (p *mockCommandPlugin) Run(args []string) error {
 	p.ran = true
+	return nil
+}
+
+// --- Test Auth Plugin Implementation ---
+
+type mockAuthPlugin struct {
+	name   string
+	params []auth.ParamDef
+	called bool
+}
+
+func (p *mockAuthPlugin) Name() string { return p.name }
+func (p *mockAuthPlugin) Params() []auth.ParamDef {
+	return p.params
+}
+func (p *mockAuthPlugin) Apply(req *client.Request, params map[string]string) error {
+	p.called = true
 	return nil
 }
 
@@ -258,6 +276,49 @@ func TestRegistry_CommandPlugin(t *testing.T) {
 	}
 }
 
+func TestRegistry_AuthPlugin(t *testing.T) {
+	registry := NewRegistry()
+	authPlugin := &mockAuthPlugin{
+		name:   "custom-token",
+		params: []auth.ParamDef{{Name: "token", Required: true, Secret: true}},
+	}
+
+	registry.Register(authPlugin)
+
+	auths := registry.Auths()
+	if len(auths) != 1 {
+		t.Fatalf("expected 1 auth plugin, got %d", len(auths))
+	}
+	if auths[0].Name() != "custom-token" {
+		t.Errorf("expected auth plugin 'custom-token', got %s", auths[0].Name())
+	}
+
+	listed := registry.ListAuth()
+	if len(listed) != 1 {
+		t.Fatalf("expected 1 listed auth plugin, got %d", len(listed))
+	}
+	if listed[0] != auths[0] {
+		t.Error("expected ListAuth to return registered auth plugins")
+	}
+
+	found, ok := registry.GetAuth("custom-token")
+	if !ok {
+		t.Fatal("expected to find custom-token auth plugin")
+	}
+	if len(found.Params()) != 1 || found.Params()[0].Name != "token" {
+		t.Fatalf("expected auth param metadata to be preserved, got %#v", found.Params())
+	}
+
+	_, ok = registry.GetAuth("missing")
+	if ok {
+		t.Error("expected missing auth plugin lookup to fail")
+	}
+
+	if len(registry.Middleware()) != 0 || len(registry.Outputs()) != 0 || len(registry.Commands()) != 0 {
+		t.Error("expected auth plugin to stay separate from middleware/output/command categories")
+	}
+}
+
 func TestLoader_Discover(t *testing.T) {
 	// Skip on macOS where plugin package doesn't work
 	if runtime.GOOS == "darwin" {
@@ -347,6 +408,7 @@ func TestLoader_BuiltInPlugins(t *testing.T) {
 	loader.RegisterBuiltIn(&mockMiddleware{name: "builtin_mw"})
 	loader.RegisterBuiltIn(&mockOutputPlugin{name: "builtin_out", format: "test"})
 	loader.RegisterBuiltIn(&mockCommandPlugin{name: "builtin_cmd", command: "testcmd", description: "desc"})
+	loader.RegisterBuiltIn(&mockAuthPlugin{name: "builtin_auth"})
 
 	registry, err := loader.LoadAll()
 	if err != nil {
@@ -361,6 +423,31 @@ func TestLoader_BuiltInPlugins(t *testing.T) {
 	}
 	if len(registry.Commands()) != 1 {
 		t.Errorf("expected 1 command, got %d", len(registry.Commands()))
+	}
+	if len(registry.Auths()) != 1 {
+		t.Errorf("expected 1 auth, got %d", len(registry.Auths()))
+	}
+}
+
+func TestLoader_ValidatePluginInterface_AcceptsAuthPlugin(t *testing.T) {
+	authPlugin := &mockAuthPlugin{name: "custom-token"}
+
+	validated, err := validatePluginInterface("custom-token.so", authPlugin)
+	if err != nil {
+		t.Fatalf("expected auth plugin validation to pass: %v", err)
+	}
+	if validated != authPlugin {
+		t.Error("expected validation to return the original auth plugin")
+	}
+}
+
+func TestLoader_ValidatePluginInterface_ErrorMentionsAuthPlugin(t *testing.T) {
+	_, err := validatePluginInterface("invalid.so", struct{}{})
+	if err == nil {
+		t.Fatal("expected invalid plugin validation to fail")
+	}
+	if !strings.Contains(err.Error(), "AuthPlugin") {
+		t.Fatalf("expected validation error to mention AuthPlugin, got: %v", err)
 	}
 }
 
