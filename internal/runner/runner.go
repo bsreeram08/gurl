@@ -36,14 +36,31 @@ type RunResult struct {
 }
 
 type RequestResult struct {
-	RequestName      string
-	StatusCode       int
-	Passed           bool
-	Skipped          bool
-	Error            string
-	Duration         time.Duration
-	AssertionResults []assertions.Result
+	RequestName         string
+	StatusCode          int
+	Passed              bool
+	Skipped             bool
+	Error               string
+	Duration            time.Duration
+	AssertionResults    []assertions.Result
+	ExtractedVars       map[string]string
+	DirtyVars           map[string]string
+	SkipReason          string
+	FailurePhase        string
+	NextRequestOverride string
 }
+
+const (
+	SkipReasonRunIf  = "run_if"
+	SkipReasonScript = "script"
+	SkipReasonBail   = "bail"
+
+	FailurePhaseRequestBuild       = "request_build"
+	FailurePhaseHTTP               = "http"
+	FailurePhasePreRequestScript   = "pre_request_script"
+	FailurePhasePostResponseScript = "post_response_script"
+	FailurePhaseAssertion          = "assertion"
+)
 
 type EnvProvider interface {
 	GetEnvByName(name string) (*env.Environment, error)

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sreeram/gurl/internal/assertions"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
@@ -183,6 +184,143 @@ func TestRunner_RunCollection(t *testing.T) {
 	}
 	if len(result.RequestResults) != 1 {
 		t.Errorf("expected 1 request result, got %d", len(result.RequestResults))
+	}
+}
+
+func TestRequestResultLifecycleMetadata(t *testing.T) {
+	tests := []struct {
+		name                string
+		result              RequestResult
+		extractedVars       map[string]string
+		dirtyVars           map[string]string
+		skipReason          string
+		failurePhase        string
+		nextRequestOverride string
+		passed              bool
+		skipped             bool
+	}{
+		{
+			name: "success carries extracted and dirty vars",
+			result: RequestResult{
+				RequestName:   "login",
+				Passed:        true,
+				ExtractedVars: map[string]string{"token": "abc123"},
+				DirtyVars:     map[string]string{"token": "abc123"},
+			},
+			extractedVars: map[string]string{"token": "abc123"},
+			dirtyVars:     map[string]string{"token": "abc123"},
+			passed:        true,
+		},
+		{
+			name: "skipped request records neutral skip reason",
+			result: RequestResult{
+				RequestName: "optional-step",
+				Skipped:     true,
+				SkipReason:  SkipReasonRunIf,
+			},
+			skipReason: SkipReasonRunIf,
+			skipped:    true,
+		},
+		{
+			name: "assertion failure records assertion phase",
+			result: RequestResult{
+				RequestName:  "check-order",
+				FailurePhase: FailurePhaseAssertion,
+				AssertionResults: []assertions.Result{
+					{
+						Assertion: assertions.Assertion{Field: "status_code", Op: "equals", Value: "201"},
+						Passed:    false,
+						Actual:    "200",
+						Expected:  "201",
+					},
+				},
+			},
+			failurePhase: FailurePhaseAssertion,
+		},
+		{
+			name: "script failure records pre request script phase",
+			result: RequestResult{
+				RequestName:  "prepare-order",
+				Error:        "script failed: boom",
+				FailurePhase: FailurePhasePreRequestScript,
+			},
+			failurePhase: FailurePhasePreRequestScript,
+		},
+		{
+			name: "next request override records target request name",
+			result: RequestResult{
+				RequestName:         "route-order",
+				Passed:              true,
+				NextRequestOverride: "confirm-order",
+			},
+			nextRequestOverride: "confirm-order",
+			passed:              true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.result.Passed != tt.passed {
+				t.Fatalf("expected Passed=%v, got %v", tt.passed, tt.result.Passed)
+			}
+			if tt.result.Skipped != tt.skipped {
+				t.Fatalf("expected Skipped=%v, got %v", tt.skipped, tt.result.Skipped)
+			}
+			assertStringMap(t, "ExtractedVars", tt.result.ExtractedVars, tt.extractedVars)
+			assertStringMap(t, "DirtyVars", tt.result.DirtyVars, tt.dirtyVars)
+			if tt.result.SkipReason != tt.skipReason {
+				t.Fatalf("expected SkipReason=%q, got %q", tt.skipReason, tt.result.SkipReason)
+			}
+			if tt.result.FailurePhase != tt.failurePhase {
+				t.Fatalf("expected FailurePhase=%q, got %q", tt.failurePhase, tt.result.FailurePhase)
+			}
+			if tt.result.NextRequestOverride != tt.nextRequestOverride {
+				t.Fatalf("expected NextRequestOverride=%q, got %q", tt.nextRequestOverride, tt.result.NextRequestOverride)
+			}
+		})
+	}
+}
+
+func TestRequestResultLifecycleMetadataNames(t *testing.T) {
+	tests := map[string]string{
+		"skip run_if":              SkipReasonRunIf,
+		"skip script":              SkipReasonScript,
+		"skip bail":                SkipReasonBail,
+		"request build phase":      FailurePhaseRequestBuild,
+		"http phase":               FailurePhaseHTTP,
+		"pre request script phase": FailurePhasePreRequestScript,
+		"post response script":     FailurePhasePostResponseScript,
+		"assertion phase":          FailurePhaseAssertion,
+	}
+
+	for name, got := range tests {
+		t.Run(name, func(t *testing.T) {
+			want := map[string]string{
+				"skip run_if":              "run_if",
+				"skip script":              "script",
+				"skip bail":                "bail",
+				"request build phase":      "request_build",
+				"http phase":               "http",
+				"pre request script phase": "pre_request_script",
+				"post response script":     "post_response_script",
+				"assertion phase":          "assertion",
+			}[name]
+			if got != want {
+				t.Fatalf("expected %q, got %q", want, got)
+			}
+		})
+	}
+}
+
+func assertStringMap(t *testing.T, name string, got, want map[string]string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("expected %s length %d, got %d", name, len(want), len(got))
+	}
+	for key, wantValue := range want {
+		if gotValue := got[key]; gotValue != wantValue {
+			t.Fatalf("expected %s[%q]=%q, got %q", name, key, wantValue, gotValue)
+		}
 	}
 }
 
