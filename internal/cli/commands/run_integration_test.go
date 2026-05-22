@@ -332,6 +332,162 @@ func TestRunCommand_ChainHonorsSavedPostScriptNextRequestBeforeAssertionFailure(
 	}
 }
 
+func TestRunCommand_ChainPersistWritesDirtyVarsBeforeAssertionFailure(t *testing.T) {
+	var mu sync.Mutex
+	paths := make([]string, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/first/cli_seed":
+			_, _ = w.Write([]byte(`{"data":{"chainId":"chain_first"}}`))
+		case "/second/chain_first":
+			_, _ = w.Write([]byte(`{"data":{"chainId":"chain_second","paymentId":"pay_456"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	db := newMockDB()
+	db.requests["req-first-chain-persist"] = &types.SavedRequest{
+		ID:         "req-first-chain-persist",
+		Name:       "first",
+		Method:     "GET",
+		URL:        "{{baseUrl}}/first/{{chainId}}",
+		PostScript: `gurl.setNextRequest("second"); gurl.setVar("scriptNote", "first-script")`,
+		Extracts: []types.Extract{
+			{Name: "chainId", Source: "jsonpath:$.data.chainId"},
+		},
+	}
+	db.names["first"] = "req-first-chain-persist"
+	db.requests["req-second-chain-persist"] = &types.SavedRequest{
+		ID:         "req-second-chain-persist",
+		Name:       "second",
+		Method:     "GET",
+		URL:        "{{baseUrl}}/second/{{chainId}}",
+		PostScript: `gurl.setVar("scriptNote", "second-script")`,
+		Extracts: []types.Extract{
+			{Name: "chainId", Source: "jsonpath:$.data.chainId"},
+			{Name: "paymentId", Source: "jsonpath:$.data.paymentId"},
+		},
+		Assertions: []types.Assertion{
+			{Field: "status", Op: "equals", Value: "201"},
+		},
+	}
+	db.names["second"] = "req-second-chain-persist"
+
+	envStorage := newRunTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("baseUrl", server.URL)
+	beta.SetVariable("chainId", "env_seed")
+	beta.SetVariable("manualOnly", "keep")
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatalf("failed to save env: %v", err)
+	}
+
+	cmd := RunCommand(db, envStorage)
+	output := captureStdout(t, func() {
+		err := cmd.Run(context.Background(), []string{"run", "first", "--chain", "--persist", "--env", "beta", "--var", "chainId=cli_seed"})
+		if err == nil || !strings.Contains(err.Error(), "assertion failed") {
+			t.Fatalf("expected assertion failure after chain persistence, got %v", err)
+		}
+	})
+
+	mu.Lock()
+	got := append([]string(nil), paths...)
+	mu.Unlock()
+	if len(got) != 2 || got[0] != "/first/cli_seed" || got[1] != "/second/chain_first" {
+		t.Fatalf("expected chain to use CLI var then extracted dirty var, got %v", got)
+	}
+
+	reloaded, err := envStorage.GetEnvByName("beta")
+	if err != nil {
+		t.Fatalf("failed to reload env: %v", err)
+	}
+	if reloaded.Variables["chainId"] != "chain_second" || reloaded.Variables["paymentId"] != "pay_456" || reloaded.Variables["scriptNote"] != "second-script" {
+		t.Fatalf("expected chained dirty vars with later values to persist, got %+v", reloaded.Variables)
+	}
+	if reloaded.Variables["manualOnly"] != "keep" || reloaded.Variables["baseUrl"] != server.URL {
+		t.Fatalf("expected existing env vars to remain unchanged, got %+v", reloaded.Variables)
+	}
+	if strings.Contains(output, "cli_seed") {
+		t.Fatalf("expected CLI input var not to appear in persist summary, got output:\n%s", output)
+	}
+	for _, want := range []string{
+		`Persisted 3 variables to environment "beta"`,
+		`chainId = chain_second`,
+		`paymentId = pay_456`,
+		`scriptNote = second-script`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected persist output to contain %q, got:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunCommand_ChainPersistWritesDirtyVarsBeforeLaterTimeoutError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/first" {
+			t.Fatalf("expected only first request to execute, got %q", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"orderId":"ord_123"}}`))
+	}))
+	defer server.Close()
+
+	db := newMockDB()
+	db.requests["req-first-chain-timeout-persist"] = &types.SavedRequest{
+		ID:         "req-first-chain-timeout-persist",
+		Name:       "first",
+		Method:     "GET",
+		URL:        "{{baseUrl}}/first",
+		PostScript: `gurl.setNextRequest("second")`,
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+		},
+	}
+	db.names["first"] = "req-first-chain-timeout-persist"
+	db.requests["req-second-chain-timeout-persist"] = &types.SavedRequest{
+		ID:      "req-second-chain-timeout-persist",
+		Name:    "second",
+		Method:  "GET",
+		URL:     "{{baseUrl}}/second/{{orderId}}",
+		Timeout: "not-a-duration",
+	}
+	db.names["second"] = "req-second-chain-timeout-persist"
+
+	envStorage := newRunTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("baseUrl", server.URL)
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatalf("failed to save env: %v", err)
+	}
+
+	cmd := RunCommand(db, envStorage)
+	output := captureStdout(t, func() {
+		err := cmd.Run(context.Background(), []string{"run", "first", "--chain", "--persist", "--env", "beta"})
+		if err == nil || !strings.Contains(err.Error(), "invalid timeout format") {
+			t.Fatalf("expected invalid timeout after first chain step, got %v", err)
+		}
+	})
+
+	reloaded, err := envStorage.GetEnvByName("beta")
+	if err != nil {
+		t.Fatalf("failed to reload env: %v", err)
+	}
+	if reloaded.Variables["orderId"] != "ord_123" {
+		t.Fatalf("expected dirty var to persist before timeout error, got %+v", reloaded.Variables)
+	}
+	if !strings.Contains(output, `Persisted 1 variable to environment "beta"`) || !strings.Contains(output, "orderId = ord_123") {
+		t.Fatalf("expected persist summary before timeout error, got output:\n%s", output)
+	}
+}
+
 func TestRunCommand_RequestChainingPRDFlowPersistsExtractedIDs(t *testing.T) {
 	type observedRequest struct {
 		Path   string

@@ -164,7 +164,7 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 			}
 
 			if enableChain {
-				return executeChain(ctx, db, envStorage, name, baseVars, c)
+				return executeChain(ctx, db, envStorage, name, baseVars, c, persistEnvName)
 			}
 
 			return executeSingleRequest(ctx, db, envStorage, name, baseVars, c, persistEnvName)
@@ -182,43 +182,58 @@ func mergeRunVars(maps ...map[string]string) map[string]string {
 	return merged
 }
 
-func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, vars map[string]string, c *cli.Command) error {
+func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, vars map[string]string, c *cli.Command, persistEnvName string) error {
 	currentName := name
 	visited := make(map[string]bool)
 	singleRunner := runner.NewRunner(db, envStorage)
 	var chainAssertionErr error
+	dirtyForPersist := make(map[string]string)
+	chainStarted := false
+	finish := func(err error) error {
+		if persistEnvName != "" && chainStarted {
+			persisted, persistErr := env.PersistVariables(envStorage, persistEnvName, dirtyForPersist)
+			if persistErr != nil {
+				return persistErr
+			}
+			targetEnv, _ := envStorage.GetEnvByName(persistEnvName)
+			runner.PrintPersistSummary(os.Stdout, persistEnvName, persisted, targetEnv)
+		}
+		return err
+	}
 	const maxChainIterations = 100
 
 	for i := 0; i < maxChainIterations; i++ {
 		req, err := db.GetRequestByName(currentName)
 		if err != nil {
-			return fmt.Errorf("request not found: %s", currentName)
+			return finish(fmt.Errorf("request not found: %s", currentName))
 		}
 
 		if visited[currentName] {
-			return fmt.Errorf("next request loop detected: %q would revisit an already executed request", currentName)
+			return finish(fmt.Errorf("next request loop detected: %q would revisit an already executed request", currentName))
 		}
 		visited[currentName] = true
 
 		if timeoutStr := c.String("timeout"); timeoutStr != "" {
 			if _, err := time.ParseDuration(timeoutStr); err != nil {
-				return fmt.Errorf("invalid timeout format '%s': %w", timeoutStr, err)
+				return finish(fmt.Errorf("invalid timeout format '%s': %w", timeoutStr, err))
 			}
 			copy := *req
 			copy.Timeout = timeoutStr
 			req = &copy
 		} else if req.Timeout != "" {
 			if _, err := time.ParseDuration(req.Timeout); err != nil {
-				return fmt.Errorf("invalid timeout format '%s': %w", req.Timeout, err)
+				return finish(fmt.Errorf("invalid timeout format '%s': %w", req.Timeout, err))
 			}
 		}
 
 		execution := singleRunner.RunSavedRequest(ctx, req, vars)
+		chainStarted = true
 		for key, value := range execution.Result.DirtyVars {
 			vars[key] = value
+			dirtyForPersist[key] = value
 		}
 		if execution.Result.Error != "" {
-			return fmt.Errorf("%s", execution.Result.Error)
+			return finish(fmt.Errorf("%s", execution.Result.Error))
 		}
 		var assertionErr error
 		if execution.Result.FailurePhase == runner.FailurePhaseAssertion {
@@ -227,7 +242,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 		}
 		if execution.Result.Skipped || execution.Request == nil || execution.Response == nil {
 			if execution.Result.NextRequestOverride == "" {
-				return chainAssertionErr
+				return finish(chainAssertionErr)
 			}
 			currentName = execution.Result.NextRequestOverride
 			continue
@@ -243,7 +258,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 			resp.Size,
 		)
 		if err := db.SaveHistory(history); err != nil {
-			return fmt.Errorf("failed to save history: %w", err)
+			return finish(fmt.Errorf("failed to save history: %w", err))
 		}
 
 		if outputPath := c.String("output"); outputPath != "" {
@@ -251,30 +266,30 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 				cwd, err := os.Getwd()
 				if err == nil {
 					if err := ValidateSafePath(outputPath, cwd); err != nil {
-						return fmt.Errorf("output path escapes allowed directory: %w", err)
+						return finish(fmt.Errorf("output path escapes allowed directory: %w", err))
 					}
 				}
 			}
 			resp.URL = clientReq.URL
 			force := c.Bool("force")
 			if err := client.SaveToFile(&resp, outputPath, force); err != nil {
-				return fmt.Errorf("failed to save output: %w", err)
+				return finish(fmt.Errorf("failed to save output: %w", err))
 			}
 		}
 
 		format := c.String("format")
 		if err := printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
-			return err
+			return finish(err)
 		}
 		nextReq := execution.Result.NextRequestOverride
 		if nextReq == "" {
-			return chainAssertionErr
+			return finish(chainAssertionErr)
 		}
 
 		currentName = nextReq
 	}
 
-	return fmt.Errorf("max iterations (%d) reached", maxChainIterations)
+	return finish(fmt.Errorf("max iterations (%d) reached", maxChainIterations))
 }
 
 func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, vars map[string]string, c *cli.Command, persistEnvName string) error {
