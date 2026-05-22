@@ -377,6 +377,46 @@ func TestRunner_PreScriptVariablesAvailableForTemplates(t *testing.T) {
 	}
 }
 
+func TestRunner_PreScriptDirtyVarsSurviveExtractionError(t *testing.T) {
+	db := newMockDB()
+	envStorage := newMockEnvStorage()
+
+	requestCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"token":"abc123"}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID:         "pre-script-extract-error",
+		Name:       "pre-script-extract-error",
+		URL:        ts.URL + "/token",
+		Method:     "GET",
+		Collection: "script-extract-error-flow",
+		PreScript:  `gurl.setVar("sessionId", "from-pre-script")`,
+		Extracts: []types.Extract{
+			{Name: "token", Source: "unknown:$.token"},
+		},
+	})
+
+	runner := NewRunner(db, envStorage)
+	results, err := runner.Run(context.Background(), RunConfig{CollectionName: "script-extract-error-flow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if requestCount != 1 {
+		t.Fatalf("expected HTTP response before extraction error, got %d calls", requestCount)
+	}
+	requestResult := results[0].RequestResults[0]
+	if !strings.Contains(requestResult.Error, "extraction failed") {
+		t.Fatalf("expected extraction error, got %q", requestResult.Error)
+	}
+	assertStringMap(t, "DirtyVars", requestResult.DirtyVars, map[string]string{"sessionId": "from-pre-script"})
+}
+
 func TestRunner_PostScriptVariablesAvailableForNextRequestAndExtractAssertion(t *testing.T) {
 	db := newMockDB()
 	envStorage := newMockEnvStorage()

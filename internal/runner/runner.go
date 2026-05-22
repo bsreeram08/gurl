@@ -404,6 +404,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	if err != nil {
 		result.Error = fmt.Sprintf("variable substitution failed: %v", err)
 		result.FailurePhase = FailurePhaseRequestBuild
+		result.DirtyVars = nonEmptyMap(dirtyVars)
 		return execution
 	}
 	execution.Request = &clientReq
@@ -418,6 +419,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	if err != nil {
 		result.Error = fmt.Sprintf("request failed: %v", err)
 		result.FailurePhase = FailurePhaseHTTP
+		result.DirtyVars = nonEmptyMap(dirtyVars)
 		return execution
 	}
 	execution.Response = &resp
@@ -429,6 +431,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 		extracted, err := r.extractor.Extract(resp.Body, resp.Headers, effectiveReq.Extracts)
 		if err != nil {
 			result.Error = fmt.Sprintf("extraction failed: %v", err)
+			result.DirtyVars = nonEmptyMap(dirtyVars)
 			return execution
 		}
 		result.ExtractedVars = extracted
