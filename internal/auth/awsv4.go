@@ -25,16 +25,37 @@ func (h *AWSv4Handler) Name() string {
 	return "awsv4"
 }
 
-func (h *AWSv4Handler) Apply(req *client.Request, params map[string]string) {
-	accessKey := params["access_key"]
-	secretKey := params["secret_key"]
-	region := params["region"]
-	service := params["service"]
-	sessionToken := params["session_token"]
-
-	if accessKey == "" || secretKey == "" || region == "" || service == "" {
-		return
+func (h *AWSv4Handler) Params() []ParamDef {
+	return []ParamDef{
+		{Name: "access_key", Required: true, Description: "AWS access key ID"},
+		{Name: "secret_key", Required: true, Secret: true, Description: "AWS secret access key"},
+		{Name: "region", Required: true, Description: "AWS region, for example us-east-1"},
+		{Name: "service", Required: true, Description: "AWS service name, for example s3 or execute-api"},
+		{Name: "session_token", Secret: true, Description: "Optional AWS session token"},
 	}
+}
+
+func (h *AWSv4Handler) Apply(req *client.Request, params map[string]string) error {
+	if err := requireRequest(h.Name(), req); err != nil {
+		return err
+	}
+	accessKey, err := requireParam(h.Name(), params, "access_key")
+	if err != nil {
+		return err
+	}
+	secretKey, err := requireParam(h.Name(), params, "secret_key")
+	if err != nil {
+		return err
+	}
+	region, err := requireParam(h.Name(), params, "region")
+	if err != nil {
+		return err
+	}
+	service, err := requireParam(h.Name(), params, "service")
+	if err != nil {
+		return err
+	}
+	sessionToken := params["session_token"]
 
 	// Apply clock skew adjustment (default 0 if not set)
 	now := time.Now().UTC().Add(h.ClockSkew)
@@ -45,7 +66,7 @@ func (h *AWSv4Handler) Apply(req *client.Request, params map[string]string) {
 
 	parsedURL, err := url.Parse(req.URL)
 	if err != nil {
-		return
+		return fmt.Errorf("awsv4: invalid request URL: %w", err)
 	}
 
 	// Inject Host header from URL if not explicitly provided
@@ -109,6 +130,7 @@ func (h *AWSv4Handler) Apply(req *client.Request, params map[string]string) {
 			Value: sessionToken,
 		})
 	}
+	return nil
 }
 
 func hasHostHeader(headers []client.Header) bool {
