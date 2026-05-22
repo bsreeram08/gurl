@@ -2,9 +2,11 @@ package commands
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/sreeram/gurl/pkg/types"
+	"github.com/urfave/cli/v3"
 )
 
 func TestEditCommand(t *testing.T) {
@@ -286,5 +288,151 @@ func TestEditCommand(t *testing.T) {
 				tt.checkFn(t, db)
 			}
 		})
+	}
+}
+
+func TestEditCommandPersistsScriptsRunIfAndMergesExtractsByName(t *testing.T) {
+	db := newMockDB()
+	db.requests["id1"] = &types.SavedRequest{
+		ID:           "id1",
+		Name:         "api",
+		URL:          "https://example.com",
+		Method:       "GET",
+		OutputFormat: "auto",
+		Extracts: []types.Extract{
+			{Name: "token", Source: "jsonpath:$.oldToken"},
+			{Name: "requestId", Source: "header:X-Request-Id"},
+		},
+	}
+	db.names["api"] = "id1"
+
+	cmd := EditCommand(db)
+	err := cmd.Run(context.Background(), []string{
+		"edit",
+		"api",
+		"--extract", "token=jsonpath:$.token",
+		"--extract", "orderId=jq:$.order.id",
+		"--pre-script", "gurl.setVar('tenant', 'acme')",
+		"--post-script", "gurl.setVar('seen', 'yes')",
+		"--run-if", "tenant != ''",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req, err := db.GetRequestByName("api")
+	if err != nil {
+		t.Fatalf("load edited request: %v", err)
+	}
+	if req.PreScript != "gurl.setVar('tenant', 'acme')" {
+		t.Fatalf("pre script not persisted: %q", req.PreScript)
+	}
+	if req.PostScript != "gurl.setVar('seen', 'yes')" {
+		t.Fatalf("post script not persisted: %q", req.PostScript)
+	}
+	if req.RunIf != "tenant != ''" {
+		t.Fatalf("run_if not persisted: %q", req.RunIf)
+	}
+	want := []types.Extract{
+		{Name: "token", Source: "jsonpath:$.token"},
+		{Name: "requestId", Source: "header:X-Request-Id"},
+		{Name: "orderId", Source: "jsonpath:$.order.id"},
+	}
+	if len(req.Extracts) != len(want) {
+		t.Fatalf("expected %d extracts, got %#v", len(want), req.Extracts)
+	}
+	for i := range want {
+		if req.Extracts[i] != want[i] {
+			t.Fatalf("extract[%d] mismatch: got %#v want %#v", i, req.Extracts[i], want[i])
+		}
+	}
+}
+
+func TestEditCommandRemoveExtractByName(t *testing.T) {
+	db := newMockDB()
+	db.requests["id1"] = &types.SavedRequest{
+		ID:     "id1",
+		Name:   "api",
+		URL:    "https://example.com",
+		Method: "GET",
+		Extracts: []types.Extract{
+			{Name: "token", Source: "jsonpath:$.token"},
+			{Name: "requestId", Source: "header:X-Request-Id"},
+		},
+	}
+	db.names["api"] = "id1"
+
+	cmd := EditCommand(db)
+	err := cmd.Run(context.Background(), []string{"edit", "api", "--remove-extract", "token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req, err := db.GetRequestByName("api")
+	if err != nil {
+		t.Fatalf("load edited request: %v", err)
+	}
+	if len(req.Extracts) != 1 || req.Extracts[0].Name != "requestId" {
+		t.Fatalf("expected only requestId extract to remain, got %#v", req.Extracts)
+	}
+}
+
+func TestEditCommandRemoveMissingExtractExitsZeroWithMessage(t *testing.T) {
+	db := newMockDB()
+	db.requests["id1"] = &types.SavedRequest{
+		ID:     "id1",
+		Name:   "api",
+		URL:    "https://example.com",
+		Method: "GET",
+		Extracts: []types.Extract{
+			{Name: "token", Source: "jsonpath:$.token"},
+		},
+	}
+	db.names["api"] = "id1"
+
+	cmd := EditCommand(db)
+	output := captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"edit", "api", "--remove-extract", "missing"}); err != nil {
+			t.Fatalf("missing extract removal should exit 0, got %v", err)
+		}
+	})
+	if !strings.Contains(output, "extract missing not found") {
+		t.Fatalf("expected not found message, got %q", output)
+	}
+
+	req, err := db.GetRequestByName("api")
+	if err != nil {
+		t.Fatalf("load edited request: %v", err)
+	}
+	if len(req.Extracts) != 1 || req.Extracts[0].Name != "token" {
+		t.Fatalf("missing removal should not change extracts, got %#v", req.Extracts)
+	}
+}
+
+func TestEditCommandRejectsMalformedExtractWithExitCode2(t *testing.T) {
+	db := newMockDB()
+	db.requests["id1"] = &types.SavedRequest{
+		ID:     "id1",
+		Name:   "api",
+		URL:    "https://example.com",
+		Method: "GET",
+	}
+	db.names["api"] = "id1"
+
+	cmd := EditCommand(db)
+	cmd.ExitErrHandler = func(context.Context, *cli.Command, error) {}
+	err := cmd.Run(context.Background(), []string{"edit", "api", "--extract", "token=xml:$.token"})
+	if err == nil {
+		t.Fatal("expected malformed extract error")
+	}
+	if !strings.Contains(err.Error(), "extract method must be one of jsonpath, header, regex, jq") {
+		t.Fatalf("expected clear extract method error, got %v", err)
+	}
+	exitCoder, ok := err.(cli.ExitCoder)
+	if !ok {
+		t.Fatalf("expected cli.ExitCoder error, got %T: %v", err, err)
+	}
+	if exitCoder.ExitCode() != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitCoder.ExitCode())
 	}
 }

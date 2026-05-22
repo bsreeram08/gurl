@@ -77,6 +77,18 @@ func EditCommand(db storage.DB) *cli.Command {
 				Aliases: []string{"post"},
 				Usage:   "Set post-response script path",
 			},
+			&cli.StringFlag{
+				Name:  "run-if",
+				Usage: "Set conditional run expression",
+			},
+			&cli.StringSliceFlag{
+				Name:  "extract",
+				Usage: "Add or replace extraction rule (format: VAR_NAME=METHOD:EXPRESSION)",
+			},
+			&cli.StringSliceFlag{
+				Name:  "remove-extract",
+				Usage: "Remove extraction rule by variable name",
+			},
 			&cli.StringSliceFlag{
 				Name:    "assert",
 				Aliases: []string{"a"},
@@ -151,6 +163,43 @@ func EditCommand(db storage.DB) *cli.Command {
 				changes = append(changes, "body updated")
 			}
 
+			if preScript := c.String("pre-script"); preScript != "" {
+				req.PreScript = preScript
+				changes = append(changes, "pre-script updated")
+			}
+
+			if postScript := c.String("post-script"); postScript != "" {
+				req.PostScript = postScript
+				changes = append(changes, "post-script updated")
+			}
+
+			if runIf := c.String("run-if"); runIf != "" {
+				req.RunIf = runIf
+				changes = append(changes, "run-if updated")
+			}
+
+			for _, name := range c.StringSlice("remove-extract") {
+				removed := removeExtractByName(req, name)
+				if removed {
+					changes = append(changes, fmt.Sprintf("removed extract %s", name))
+				} else {
+					fmt.Printf("extract %s not found\n", name)
+				}
+			}
+
+			extracts, err := parseExtractFlags(c.StringSlice("extract"))
+			if err != nil {
+				return cli.Exit(err.Error(), 2)
+			}
+			for _, extract := range extracts {
+				replaced := mergeExtract(req, extract)
+				if replaced {
+					changes = append(changes, fmt.Sprintf("updated extract %s", extract.Name))
+				} else {
+					changes = append(changes, fmt.Sprintf("added extract %s", extract.Name))
+				}
+			}
+
 			// Handle collection change
 			if collection := c.String("collection"); collection != "" {
 				req.Collection = collection
@@ -203,6 +252,36 @@ func EditCommand(db storage.DB) *cli.Command {
 			return nil
 		},
 	}
+}
+
+func mergeExtract(req *types.SavedRequest, extract types.Extract) bool {
+	for i := range req.Extracts {
+		if req.Extracts[i].Name == extract.Name {
+			req.Extracts[i] = extract
+			return true
+		}
+	}
+	req.Extracts = append(req.Extracts, extract)
+	return false
+}
+
+func removeExtractByName(req *types.SavedRequest, name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+
+	filtered := req.Extracts[:0]
+	removed := false
+	for _, extract := range req.Extracts {
+		if extract.Name == name {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, extract)
+	}
+	req.Extracts = filtered
+	return removed
 }
 
 // parseAssertion parses an assertion string in format "field=op=value"

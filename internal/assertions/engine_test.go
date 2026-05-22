@@ -26,7 +26,7 @@ func TestAssert_StatusCode(t *testing.T) {
 	assertions := []Assertion{
 		{Field: "status", Op: "=", Value: "200"},
 	}
-	results := evaluator.Evaluate(resp, assertions)
+	results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -55,7 +55,7 @@ func TestAssert_StatusRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resp := newTestResponse(tt.status, "OK", nil, 0, 2)
 			assertions := []Assertion{{Field: "status", Op: tt.op, Value: tt.value}}
-			results := evaluator.Evaluate(resp, assertions)
+			results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 			if results[0].Passed != tt.expected {
 				t.Errorf("expected pass=%v, got %v - %s", tt.expected, results[0].Passed, results[0].Message)
@@ -84,7 +84,7 @@ func TestAssert_HeaderExists(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assertions := []Assertion{{Field: tt.field, Op: "exists", Value: ""}}
-			results := evaluator.Evaluate(resp, assertions)
+			results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 			if results[0].Passed != tt.expected {
 				t.Errorf("expected pass=%v, got %v", tt.expected, results[0].Passed)
@@ -103,7 +103,7 @@ func TestAssert_HeaderValue(t *testing.T) {
 	assertions := []Assertion{
 		{Field: "headers.Content-Type", Op: "=", Value: "application/json"},
 	}
-	results := evaluator.Evaluate(resp, assertions)
+	results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 	if !results[0].Passed {
 		t.Errorf("expected Content-Type=application/json to pass, got: %s", results[0].Message)
@@ -120,7 +120,7 @@ func TestAssert_HeaderContains(t *testing.T) {
 	assertions := []Assertion{
 		{Field: "headers.Cache-Control", Op: "contains", Value: "no-store"},
 	}
-	results := evaluator.Evaluate(resp, assertions)
+	results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 	if !results[0].Passed {
 		t.Errorf("expected header contains 'no-store' to pass, got: %s", results[0].Message)
@@ -144,7 +144,7 @@ func TestAssert_BodyContains(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assertions := []Assertion{{Field: "body", Op: "contains", Value: tt.value}}
-			results := evaluator.Evaluate(resp, assertions)
+			results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 			if results[0].Passed != tt.expected {
 				t.Errorf("expected pass=%v, got %v", tt.expected, results[0].Passed)
@@ -176,7 +176,7 @@ func TestAssert_BodyJSONPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assertions := []Assertion{{Field: tt.path, Op: tt.op, Value: tt.value}}
-			results := evaluator.Evaluate(resp, assertions)
+			results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 			if results[0].Passed != tt.expected {
 				t.Errorf("expected pass=%v, got %v - %s (actual: %s)", tt.expected, results[0].Passed, results[0].Message, results[0].Actual)
@@ -206,7 +206,7 @@ func TestAssert_ResponseTime(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assertions := []Assertion{{Field: "time", Op: tt.op, Value: tt.value}}
-			results := evaluator.Evaluate(resp, assertions)
+			results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 			if results[0].Passed != tt.expected {
 				t.Errorf("expected pass=%v, got %v - %s", tt.expected, results[0].Passed, results[0].Message)
@@ -236,7 +236,7 @@ func TestAssert_BodySize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assertions := []Assertion{{Field: "size", Op: tt.op, Value: tt.value}}
-			results := evaluator.Evaluate(resp, assertions)
+			results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 			if results[0].Passed != tt.expected {
 				t.Errorf("expected pass=%v, got %v - %s", tt.expected, results[0].Passed, results[0].Message)
@@ -257,7 +257,7 @@ func TestAssert_MultipleAssertions(t *testing.T) {
 		{Field: "time", Op: "<", Value: "200"},
 		{Field: "body", Op: "contains", Value: "ok"},
 	}
-	results := evaluator.Evaluate(resp, assertions)
+	results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 	if len(results) != 4 {
 		t.Fatalf("expected 4 results, got %d", len(results))
@@ -294,7 +294,7 @@ func TestAssert_FromSavedRequest(t *testing.T) {
 		assertions[i] = Assertion{Field: a.Field, Op: a.Op, Value: a.Value}
 	}
 
-	results := evaluator.Evaluate(resp, assertions)
+	results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 	if len(results) != 4 {
 		t.Fatalf("expected 4 results, got %d", len(results))
@@ -427,7 +427,7 @@ func TestAssert_NotContains(t *testing.T) {
 	assertions := []Assertion{
 		{Field: "body", Op: "not_contains", Value: "password"},
 	}
-	results := evaluator.Evaluate(resp, assertions)
+	results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 	if !results[0].Passed {
 		t.Errorf("expected body not_contains 'password' to pass, got: %s", results[0].Message)
@@ -451,7 +451,7 @@ func TestAssert_Matches(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assertions := []Assertion{{Field: "body", Op: "matches", Value: tt.pattern}}
-			results := evaluator.Evaluate(resp, assertions)
+			results := evaluator.Evaluate(resp, assertions, map[string]string{})
 
 			if results[0].Passed != tt.expected {
 				t.Errorf("expected pass=%v, got %v", tt.expected, results[0].Passed)
