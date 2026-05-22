@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -32,43 +33,20 @@ func UpdateCommand() *cli.Command {
 }
 
 const (
-	owner       = "bsreeram08"
-	repo        = "gurl"
-	latestURL   = "https://api.github.com/repos/%s/%s/releases/latest"
-	downloadURL = "https://github.com/%s/%s/releases/download/%s/gurl-%s-%s"
+	owner        = "bsreeram08"
+	repo         = "gurl"
+	latestURL    = "https://api.github.com/repos/%s/%s/releases/latest"
+	latestWebURL = "https://github.com/%s/%s/releases/latest"
+	downloadURL  = "https://github.com/%s/%s/releases/download/%s/gurl-%s-%s"
 )
 
 func updateGurl() error {
 	currentVersion := CurrentVersion
 	fmt.Printf("Current version: %s\n", currentVersion)
 
-	// Get latest release
-	resp, err := http.Get(fmt.Sprintf(latestURL, owner, repo))
+	releaseTag, err := fetchLatestReleaseTag()
 	if err != nil {
-		return fmt.Errorf("failed to check for updates: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to check latest release: HTTP %d", resp.StatusCode)
-	}
-
-	// Parse response to get latest version tag
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var release struct {
-		TagName string `json:"tag_name"`
-	}
-
-	if err := json.Unmarshal(body, &release); err != nil {
-		return fmt.Errorf("failed to parse latest release: %w", err)
-	}
-
-	releaseTag := strings.TrimSpace(release.TagName)
-	if releaseTag == "" {
-		return fmt.Errorf("latest release response missing tag_name")
+		return err
 	}
 	latestVersion := releaseTag
 
@@ -115,7 +93,7 @@ func updateGurl() error {
 	fmt.Printf("Downloading from: %s\n", downloadLink)
 
 	// Download new binary
-	resp, err = http.Get(downloadLink)
+	resp, err := http.Get(downloadLink)
 	if err != nil {
 		return fmt.Errorf("failed to download: %w", err)
 	}
@@ -229,4 +207,94 @@ func updateGurl() error {
 	fmt.Println("Run 'gurl --version' to verify.")
 
 	return nil
+}
+
+func fetchLatestReleaseTag() (string, error) {
+	resp, err := http.Get(fmt.Sprintf(latestURL, owner, repo))
+	if err != nil {
+		return "", fmt.Errorf("failed to check for updates: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		if shouldUseLatestReleaseRedirectFallback(resp.StatusCode) {
+			tag, fallbackErr := fetchLatestReleaseTagFromRedirect()
+			if fallbackErr == nil {
+				return tag, nil
+			}
+			return "", fmt.Errorf("failed to check latest release: HTTP %d; fallback via public releases/latest failed: %w", resp.StatusCode, fallbackErr)
+		}
+		return "", fmt.Errorf("failed to check latest release: HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var release struct {
+		TagName string `json:"tag_name"`
+	}
+
+	if err := json.Unmarshal(body, &release); err != nil {
+		return "", fmt.Errorf("failed to parse latest release: %w", err)
+	}
+
+	releaseTag := strings.TrimSpace(release.TagName)
+	if releaseTag == "" {
+		return "", fmt.Errorf("latest release response missing tag_name")
+	}
+	return releaseTag, nil
+}
+
+func shouldUseLatestReleaseRedirectFallback(statusCode int) bool {
+	return statusCode == http.StatusForbidden || (statusCode >= http.StatusInternalServerError && statusCode < 600)
+}
+
+func fetchLatestReleaseTagFromRedirect() (string, error) {
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	resp, err := client.Get(fmt.Sprintf(latestWebURL, owner, repo))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusMultipleChoices || resp.StatusCode >= http.StatusBadRequest {
+		return "", fmt.Errorf("expected redirect from public releases/latest, got HTTP %d", resp.StatusCode)
+	}
+
+	location := strings.TrimSpace(resp.Header.Get("Location"))
+	if location == "" {
+		return "", fmt.Errorf("fallback redirect missing Location header")
+	}
+
+	return releaseTagFromLatestRedirectLocation(location)
+}
+
+func releaseTagFromLatestRedirectLocation(location string) (string, error) {
+	parsed, err := url.Parse(location)
+	if err != nil {
+		return "", fmt.Errorf("invalid fallback Location header %q: %w", location, err)
+	}
+
+	const marker = "/releases/tag/"
+	path := parsed.Path
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	_, tag, ok := strings.Cut(path, marker)
+	if !ok {
+		return "", fmt.Errorf("fallback Location header does not include release tag: %s", location)
+	}
+
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return "", fmt.Errorf("fallback Location header has empty release tag: %s", location)
+	}
+	return tag, nil
 }
