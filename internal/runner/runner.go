@@ -57,6 +57,7 @@ const (
 	SkipReasonScript = "script"
 	SkipReasonBail   = "bail"
 
+	FailurePhaseRunIf              = "run_if"
 	FailurePhaseRequestBuild       = "request_build"
 	FailurePhaseHTTP               = "http"
 	FailurePhasePreRequestScript   = "pre_request_script"
@@ -244,6 +245,22 @@ func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars m
 
 	dirtyVars := make(map[string]string)
 	effectiveReq := req
+
+	if req.RunIf != "" {
+		ok, err := evaluateRunIf(req.RunIf, vars)
+		if err != nil {
+			result.Error = err.Error()
+			result.FailurePhase = FailurePhaseRunIf
+			result.Duration = time.Since(start)
+			return result
+		}
+		if !ok {
+			result.Skipped = true
+			result.SkipReason = SkipReasonRunIf
+			result.Duration = time.Since(start)
+			return result
+		}
+	}
 
 	if req.PreScript != "" {
 		engine := scripting.NewEngine(nil)
