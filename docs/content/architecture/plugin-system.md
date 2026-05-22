@@ -1,12 +1,12 @@
 ---
 title: "Plugin System"
-description: "Extensible middleware, output, and command plugins"
+description: "Extensible middleware, output, command, and auth plugins"
 weight: 2
 ---
 
 # Plugin System
 
-Gurl's plugin system lets you extend functionality through three plugin interfaces. Plugins are discovered from `~/.config/gurl/plugins/` and loaded on startup.
+Gurl's plugin system lets you extend functionality through middleware, output, command, and auth plugin interfaces. Go plugins are discovered from `~/.config/gurl/plugins/` and loaded into the plugin registry on startup.
 
 ## Plugin Interfaces
 
@@ -16,9 +16,9 @@ Runs before and after each request. Use for logging, timing, retry logic, and re
 
 ```go
 type MiddlewarePlugin interface {
-    Register(reg *MiddlewareRegistry)
-    ApplyBeforeRequest(req *Request) error
-    ApplyAfterResponse(req *Request, resp *Response) error
+    Name() string
+    BeforeRequest(ctx *RequestContext) *RequestContext
+    AfterResponse(ctx *ResponseContext) *ResponseContext
 }
 ```
 
@@ -29,7 +29,8 @@ Formats and displays responses. Gurl includes built-in output plugins, but custo
 ```go
 type OutputPlugin interface {
     Name() string
-    Format(resp *Response) string
+    Format() string
+    Render(ctx *ResponseContext) string
 }
 ```
 
@@ -39,33 +40,60 @@ Adds new CLI commands. Use for project-specific workflows or integrations.
 
 ```go
 type CommandPlugin interface {
-    Register(cmd *CommandRegistry)
+    Name() string
+    Command() string
+    Description() string
     Run(args []string) error
+}
+```
+
+### AuthPlugin
+
+Applies authentication to an outgoing request. Auth plugins expose parameter metadata through the same `auth.ParamDef` shape used by built-in handlers.
+
+```go
+type AuthPlugin interface {
+    Name() string
+    Params() []auth.ParamDef
+    Apply(req *client.Request, params map[string]string) error
 }
 ```
 
 ## Plugin Registry
 
-The registry pattern manages plugin lifecycle and execution order.
+The registry stores each plugin by the interfaces it implements.
 
 ```go
-type MiddlewareRegistry struct {
-    plugins []MiddlewarePlugin
+type Registry struct {
+    middleware []MiddlewarePlugin
+    outputs    []OutputPlugin
+    commands   []CommandPlugin
+    auths      []AuthPlugin
 }
 
-func (r *MiddlewareRegistry) Register(p MiddlewarePlugin) {
-    r.plugins = append(r.plugins, p)
+func (r *Registry) Register(plugin interface{}) {
+    switch p := plugin.(type) {
+    case MiddlewarePlugin:
+        r.middleware = append(r.middleware, p)
+    case OutputPlugin:
+        r.outputs = append(r.outputs, p)
+    case CommandPlugin:
+        r.commands = append(r.commands, p)
+    case AuthPlugin:
+        r.auths = append(r.auths, p)
+    }
 }
 ```
 
-## Middleware Chain
+Auth plugins are stored separately from middleware and can be listed or looked up by name before their `Apply` method updates a request.
 
-Built-in middleware executes in this order:
+## Request execution touchpoints
 
-1. **Timing** - Measures request duration
-2. **User-Agent** - Sets default User-Agent header
-3. **Retry-401** - Automatically retry with fresh credentials on 401
-4. **Logging** - Records request/response details
+During a request run, extensions can affect different parts of execution:
+
+1. **Middleware plugins** - Can inspect or change request context before the request and response context after the response
+2. **Auth handlers** - Apply saved auth settings after templates are substituted and before the request is sent
+3. **Output plugins** - Render the response when their format is selected
 
 Custom middleware inserts into this chain via the registry.
 
@@ -87,7 +115,7 @@ gurl run "api" --format slack
 
 ## Plugin Discovery
 
-On startup, Gurl scans `~/.config/gurl/plugins/` for `.so` files. Each plugin file must export the `PluginSymbol` function:
+On startup, Gurl discovers shared objects at `~/.config/gurl/plugins/<name>/<name>.so`. If an enabled-plugin list is configured, only matching names are loaded. Each plugin file must export a `Plugin` symbol:
 
 ```go
 // plugin.go
@@ -95,76 +123,64 @@ package main
 
 import "github.com/sreeram/gurl/..."
 
-func PluginSymbol() interface{} {
-    return &MyMiddlewarePlugin{}
-}
+var Plugin = MyMiddlewarePlugin{}
 ```
 
 ## Security
 
 Plugins run with the user's permissions. Gurl applies these safeguards:
 
-- Only explicitly enabled plugins are loaded
-- Each plugin call is wrapped in panic recovery
-- A failing plugin does not block request execution
-- Plugin logs are written to `~/.local/share/gurl/plugin.log`
+- If an enabled list is configured, plugins not on that list are skipped
+- Middleware `BeforeRequest` and `AfterResponse` calls are wrapped in panic recovery
+- Plugin discovery treats a missing plugin directory as empty
+- Individual plugin load failures print a warning to stderr and do not stop other plugins from loading
 
 ## Creating a Custom Plugin
 
-### Example: Request Signing Middleware
+Custom plugins are currently low-level Go plugins, not a polished external SDK. A plugin must export a `Plugin` symbol whose value implements at least one known plugin interface. This example imports gurl's `internal/...` packages, so build it under the gurl module tree or another module path that Go permits to import those internal packages.
+
+Minimal middleware plugin:
 
 ```go
 package main
 
 import (
-    "crypto/hmac"
-    "crypto/sha256"
-    "encoding/hex"
-    "github.com/sreeram/gurl"
+    "github.com/sreeram/gurl/internal/client"
+    "github.com/sreeram/gurl/internal/plugins"
 )
 
-type SigningPlugin struct{}
+type HeaderPlugin struct{}
 
-func (p *SigningPlugin) Register(reg *gurl.MiddlewareRegistry) {
-    reg.Register(p)
-}
+func (HeaderPlugin) Name() string { return "example-header" }
 
-func (p *SigningPlugin) ApplyBeforeRequest(req *gurl.Request) error {
-    secret := req.GetVariable("SIGNING_SECRET")
-    if secret == "" {
-        return nil
+func (HeaderPlugin) BeforeRequest(ctx *plugins.RequestContext) *plugins.RequestContext {
+    if ctx != nil && ctx.Request != nil {
+        ctx.Request.Headers = append(ctx.Request.Headers, client.Header{
+            Key:   "X-Gurl-Plugin",
+            Value: "example-header",
+        })
     }
-
-    body := req.Body()
-    h := hmac.New(sha256.New, []byte(secret))
-    h.Write(body)
-    signature := hex.EncodeToString(h.Sum(nil))
-
-    req.Headers.Set("X-Signature", signature)
-    return nil
+    return ctx
 }
 
-func (p *SigningPlugin) ApplyAfterResponse(req *gurl.Request, resp *gurl.Response) error {
-    return nil
+func (HeaderPlugin) AfterResponse(ctx *plugins.ResponseContext) *plugins.ResponseContext {
+    return ctx
 }
 
-func PluginSymbol() interface{} {
-    return &SigningPlugin{}
-}
+var Plugin = HeaderPlugin{}
 ```
 
-Compile and install:
+Build and place the shared object where the loader expects it:
 
 ```bash
-go build -o ~/.config/gurl/plugins/signing.so ./plugin.go
+mkdir -p ~/.config/gurl/plugins/example-header
+go build -buildmode=plugin -o ~/.config/gurl/plugins/example-header/example-header.so ./plugin.go
 ```
 
-Enable in `~/.config/gurl/config.toml`:
+The loader discovers enabled plugins at `~/.config/gurl/plugins/<name>/<name>.so`, looks up the exported `Plugin` symbol, and accepts values that implement `MiddlewarePlugin`, `OutputPlugin`, `CommandPlugin`, or `AuthPlugin`.
 
-```toml
-[plugins]
-enabled = ["signing"]
-```
+## Current support
 
-> [!TIP]
-> Use the `gurl plugin list` command to see all discovered and enabled plugins.
+The registry and loader can categorize values that implement `MiddlewarePlugin`, `OutputPlugin`, `CommandPlugin`, or `AuthPlugin`. Auth plugins are stored separately from middleware and can be listed or looked up through the registry.
+
+External plugin packaging is still low-level Go plugin support. The loader expects plugins under `~/.config/gurl/plugins/<name>/<name>.so` and a `Plugin` symbol that implements at least one known plugin interface. Go plugin loading is only supported on Linux amd64 and Linux arm64.

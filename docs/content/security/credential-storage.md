@@ -24,20 +24,22 @@ Environment variables marked `--secret` are encrypted before storage. This appli
 1. First launch generates a 256-bit key using `crypto/rand` and saves it to `~/.local/share/gurl/.secret-key`
 2. File permissions are set to 0600 (owner read/write only)
 3. When you create a secret: `gurl env create prod --secret "API_KEY=sk-xxx"`, the value is encrypted with AES-256-GCM and stored
-4. At request execution time, the key is loaded, the value is decrypted, and it is injected into HTTP headers by an auth handler
+4. At request execution time, the key is loaded, the value is decrypted, and templates such as `{{API_KEY}}` can be used by request fields or auth parameters
 5. The decrypted value lives only in memory during the request
 
 **Machine dependency**: Because the key is stored locally, encrypted values cannot be decrypted on a different machine. If you copy your Gurl data to another machine, secrets are unreadable.
 
 ## Auth Credentials in Requests
 
-Saved requests store auth configuration in a goleveldb database at `~/.local/share/gurl/gurl.db`.
+Saved requests store auth configuration in a goleveldb database at `~/.local/share/gurl/gurl.db`. Save or edit auth with `--auth` and repeated `--auth-param key=value` flags.
 
 **Database**: goleveldb (LevelDB port, memory-mapped, transactional)
 
-**Auth params**: Username, password, tokens stored as JSON in `SavedRequest.AuthConfig`
+**Auth params**: Values are stored as JSON in `SavedRequest.AuthConfig`. If you put a literal password or token in `--auth-param`, it is saved in the request database. Prefer templates that point at encrypted environment secrets, such as `--auth-param token='{{API_TOKEN}}'`.
 
 **Permissions**: Database file has owner-only permissions by default
+
+At execution time, gurl substitutes templates in auth parameters before the auth handler applies credentials to the outgoing request. Saved auth can be replaced with `gurl edit <name> --auth ...` or cleared with `gurl edit <name> --auth none`.
 
 **Future**: Keychain integration for macOS and Windows is under consideration.
 
@@ -71,4 +73,4 @@ The TOML config file at `~/.config/gurl/config.toml` or `~/.gurlrc` contains gen
 | Machine key | Per-machine 256-bit key (0600) | AI has no equivalent |
 | Token caching | OAuth2 tokens cached in memory with TTL | AI might expose cached tokens |
 
-The key difference is that Gurl treats credential handling as a separate concern from request execution. Auth handlers inject credentials at the HTTP transport layer, so the calling process never sees the raw values.
+The key difference is that Gurl treats credential handling as a separate concern from request execution. Auth handlers apply credentials at the HTTP request layer, and templated auth params let saved requests refer to encrypted environment secrets instead of storing raw secret values in the request.
