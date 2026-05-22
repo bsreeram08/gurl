@@ -12,13 +12,11 @@ import (
 
 	"github.com/sreeram/gurl/internal/assertions"
 	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/core/curl"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/formatter"
 	"github.com/sreeram/gurl/internal/plugins"
 	"github.com/sreeram/gurl/internal/plugins/builtins"
 	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/internal/scripting"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
@@ -185,51 +183,55 @@ func mergeRunVars(maps ...map[string]string) map[string]string {
 }
 
 func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, vars map[string]string, c *cli.Command) error {
-	engine := scripting.NewEngine(envStorage)
-	chainExec := scripting.NewChainExecutor(engine)
-
 	currentName := name
-	visited := make(map[string]int)
+	visited := make(map[string]bool)
+	singleRunner := runner.NewRunner(db, envStorage)
+	const maxChainIterations = 100
 
-	for i := 0; i < chainExec.MaxIterations() || i == 0; i++ {
+	for i := 0; i < maxChainIterations; i++ {
 		req, err := db.GetRequestByName(currentName)
 		if err != nil {
 			return fmt.Errorf("request not found: %s", currentName)
 		}
 
-		visited[currentName]++
-		if visited[currentName] >= 3 {
-			return fmt.Errorf("circular chain detected: request '%s' visited 3 times", currentName)
+		if visited[currentName] {
+			return fmt.Errorf("next request loop detected: %q would revisit an already executed request", currentName)
 		}
+		visited[currentName] = true
 
-		clientReq, err := curl.BuildClientRequest(req, vars)
-		if err != nil {
-			return fmt.Errorf("variable substitution failed: %w", err)
-		}
-
-		var timeout time.Duration
 		if timeoutStr := c.String("timeout"); timeoutStr != "" {
-			var err error
-			timeout, err = time.ParseDuration(timeoutStr)
-			if err != nil {
+			if _, err := time.ParseDuration(timeoutStr); err != nil {
 				return fmt.Errorf("invalid timeout format '%s': %w", timeoutStr, err)
 			}
+			copy := *req
+			copy.Timeout = timeoutStr
+			req = &copy
 		} else if req.Timeout != "" {
-			var err error
-			timeout, err = time.ParseDuration(req.Timeout)
-			if err != nil {
+			if _, err := time.ParseDuration(req.Timeout); err != nil {
 				return fmt.Errorf("invalid timeout format '%s': %w", req.Timeout, err)
 			}
 		}
 
-		if timeout > 0 {
-			clientReq.Timeout = timeout
+		execution := singleRunner.RunSavedRequest(ctx, req, vars)
+		for key, value := range execution.Result.DirtyVars {
+			vars[key] = value
 		}
-
-		resp, err := client.Execute(clientReq)
-		if err != nil {
-			return fmt.Errorf("request failed: %w", err)
+		if execution.Result.Error != "" {
+			return fmt.Errorf("%s", execution.Result.Error)
 		}
+		var assertionErr error
+		if execution.Result.FailurePhase == runner.FailurePhaseAssertion {
+			assertionErr = fmt.Errorf("assertion failed: %s", runnerAssertionFailureMessage(execution.Result))
+		}
+		if execution.Result.Skipped || execution.Request == nil || execution.Response == nil {
+			if execution.Result.NextRequestOverride == "" {
+				return assertionErr
+			}
+			currentName = execution.Result.NextRequestOverride
+			continue
+		}
+		clientReq := *execution.Request
+		resp := *execution.Response
 
 		history := types.NewExecutionHistory(
 			req.ID,
@@ -262,25 +264,19 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 		if err := printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
 			return err
 		}
-
-		chainExec.MarkIteration(currentName)
-		if chainExec.IsCircular() {
-			return fmt.Errorf("circular chain detected for request '%s'", currentName)
+		if assertionErr != nil {
+			return assertionErr
 		}
 
-		nextReq := chainExec.GetNextRequest()
+		nextReq := execution.Result.NextRequestOverride
 		if nextReq == "" {
 			return nil
-		}
-
-		for k, v := range chainExec.Variables() {
-			vars[k] = v
 		}
 
 		currentName = nextReq
 	}
 
-	return fmt.Errorf("max iterations (%d) reached", chainExec.MaxIterations())
+	return fmt.Errorf("max iterations (%d) reached", maxChainIterations)
 }
 
 func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, vars map[string]string, c *cli.Command, persistEnvName string) error {

@@ -236,6 +236,52 @@ func TestRunCommand_SingleSavedRequestLifecycle(t *testing.T) {
 	}
 }
 
+func TestRunCommand_ChainUsesSavedPostScriptNextRequest(t *testing.T) {
+	var mu sync.Mutex
+	paths := make([]string, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	db := newMockDB()
+	db.requests["req-first-chain"] = &types.SavedRequest{
+		ID:         "req-first-chain",
+		Name:       "first",
+		Method:     "GET",
+		URL:        server.URL + "/first",
+		PostScript: `gurl.setNextRequest("second")`,
+	}
+	db.names["first"] = "req-first-chain"
+	db.requests["req-second-chain"] = &types.SavedRequest{
+		ID:     "req-second-chain",
+		Name:   "second",
+		Method: "GET",
+		URL:    server.URL + "/second",
+	}
+	db.names["second"] = "req-second-chain"
+
+	cmd := RunCommand(db, newRunTestEnvStorage(t))
+	if err := cmd.Run(context.Background(), []string{"run", "first", "--chain"}); err != nil {
+		t.Fatalf("run command failed: %v", err)
+	}
+
+	mu.Lock()
+	got := append([]string(nil), paths...)
+	mu.Unlock()
+	if len(got) != 2 || got[0] != "/first" || got[1] != "/second" {
+		t.Fatalf("expected post-script chain to execute first then second, got %v", got)
+	}
+	if len(db.history) != 2 {
+		t.Fatalf("expected chain to preserve history save for both requests, got %d entries", len(db.history))
+	}
+}
+
 func TestRunCommand_RequestChainingPRDFlowPersistsExtractedIDs(t *testing.T) {
 	type observedRequest struct {
 		Path   string
