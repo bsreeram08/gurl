@@ -1,4 +1,4 @@
-# Gurl — Your API Workspace, in the Terminal
+# gurl
 
 [![Latest Release](https://img.shields.io/github/v/release/bsreeram08/gurl)](https://github.com/bsreeram08/gurl/releases/latest)
 [![Go Version](https://img.shields.io/badge/go-1.25.0%2B-blue)](https://go.dev)
@@ -6,55 +6,32 @@
 
 ![gurl logo](assets/logo.jpg)
 
-Import from Postman. Run with environments. Assert on responses. Generate client code. All without leaving your shell.
+A CLI API workbench. Save requests, run them with environments, assert on responses, generate client code. All from the terminal.
 
-**Gurl is not a curl wrapper.** It's a full API development environment — collections, environments, scripting, assertions, history, and multi-protocol support — built for the terminal. If Postman and httpie had a baby that grew up in a shell, this is it.
+Not a curl wrapper. gurl persists requests, manages collections and environments, runs JavaScript hooks, and speaks HTTP, GraphQL, gRPC, WebSocket, and SSE.
 
-### Why not just use...?
-
-| Feature | httpie / xh | Hurl | ATAC | Slumber | Bruno CLI | **gurl** |
-|---------|:-----------:|:----:|:----:|:-------:|:---------:|:--------:|
-| Save & replay named requests | ❌ | file | ✅ | ✅ | ✅ | ✅ |
-| Environments (dev/staging/prod) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Import from Postman/Insomnia/OpenAPI | ❌ | HAR | ❌ | Insomnia | ✅ | ✅ |
-| Scripting (pre/post-request hooks) | ❌ | ❌ | Rhai | ❌ | ❌ | **JS** |
-| Response assertions | ❌ | ✅ | ❌ | ❌ | ✅ | ✅ |
-| Collection runner (data-driven) | ❌ | ❌ | ❌ | ❌ | CSV | ✅ |
-| Multi-protocol (HTTP, GQL, gRPC, WS, SSE) | ❌ | HTTP | ❌ | HTTP | HTTP | **✅** |
-| Execution history + diff | session | ❌ | ❌ | SQLite | ❌ | ✅ |
-| Interactive TUI | ❌ | ❌ | ✅ | ✅ | ❌ | ✅ |
-| Code generation (curl/Go/Python/JS) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-
-- **httpie / xh** — beautiful one-shot requests. No persistence, no collections, no environments.
-- **Hurl** — excellent for CI testing with `.hurl` files. No TUI, no scripting, no environments, HTTP only.
-- **ATAC** — closest Postman-in-terminal experience. Rust TUI with collections. No JS scripting, no import from Postman, no codegen.
-- **Slumber** — YAML-based TUI REST client with profiles. No scripting, no assertions, HTTP only.
-- **Bruno CLI** — runs `.bru` collections. GUI needed for authoring. No interactive exploration.
-
-## What it looks like
-
-![gurl TUI](assets/tui-mockup.jpg)
+> **Status: early (v0.3.x).** The CLI works. The TUI (`gurl tui`) exists in code but is not functional yet. Everything below describes the CLI interface.
 
 ## Features
 
-- **Named requests** — save any curl command with a memorable name, run it forever
-- **Variable templates** — auto-detect IDs/UUIDs, substitute at runtime with `--var`
+- **Named requests** — save any curl command with a name, replay it forever
+- **Variable templates** — `{{token}}`, `{{BASE_URL}}`, substituted at runtime with `--var` or environments
 - **Environments** — swap base URLs, secrets, and tokens between dev/staging/prod
 - **Import** — OpenAPI, Insomnia, Bruno, Postman, HAR
-- **Auth handlers** — Basic, Bearer, API Key, Digest, OAuth 1/2, AWS SigV4, NTLM
+- **Auth handlers** — Basic, Bearer, API Key, Digest, OAuth 1/2, AWS SigV4, NTLM — saved with requests, template-aware
 - **Protocols** — HTTP, GraphQL, gRPC, WebSocket, SSE
-- **Scripting** — JavaScript pre/post-request hooks via goja runtime
-- **Assertions** — assert on status, headers, body, and extracted variables (`extract:varName`)
-- **Request chaining** - route follow-up requests with `setNextRequest`, `run-if`, and extracted variables
-- **Collection runner** - data-driven testing with CSV/JSON input, dry runs, and assertion bail mode
-- **Code generation** — generate curl, Go, Python, JavaScript from any saved request
-- **Interactive TUI** — full bubbletea interface for browsing and running requests
-- **Execution history** — per-request history + global timeline + diff between runs
-- **Plugin system** — middleware, custom output formatters, commands, and auth handlers
+- **Scripting** — JavaScript pre/post-request hooks (goja runtime)
+- **Assertions** — assert on status, headers, body, jsonpath, regex, and extracted variables
+- **Request chaining** — `setNextRequest`, `run-if`, extracted variables flow between requests
+- **Collection runner** — data-driven testing with CSV/JSON, dry runs, assertion bail mode
+- **Code generation** — curl, Go, Python, JavaScript from any saved request
+- **Execution history** — per-request history, global timeline, diff between runs
+- **Plugin system** — middleware, output formatters, commands, and auth handlers
 
-## Key capabilities
+### Known limitations
 
-![gurl features](assets/features.jpg)
+- The TUI is not functional. Use the CLI commands below.
+- Collection-level auth inheritance is defined but not wired into the execution path yet.
 
 ## Installation
 
@@ -216,8 +193,8 @@ gurl codegen "create-order" --lang curl
 | `run` | Execute a saved request with variable substitution |
 | `list` | List saved requests (filter by collection, tag, pattern) |
 | `auth` | Discover supported authentication types and parameters |
-| `detect` | Parse curl from stdin interactively (TUI) |
-| `edit` | Edit a saved request in TUI form |
+| `detect` | Parse curl from stdin |
+| `edit` | Edit a saved request |
 | `delete` | Delete a saved request |
 | `rename` | Rename a saved request |
 | `show` | Show full request details |
@@ -232,7 +209,7 @@ gurl codegen "create-order" --lang curl
 | `import` | Import from OpenAPI/Insomnia/Bruno/Postman/HAR |
 | `paste` | Copy request as curl command to clipboard |
 | `codegen` | Generate code (curl, Go, Python, JavaScript) |
-| `tui` | Launch full interactive TUI |
+| `tui` | Launch interactive TUI (not functional yet) |
 | `update` | Self-update to latest release |
 
 ## Environments
@@ -265,14 +242,6 @@ timeout = "30s"
 default_format = "auto"
 syntax_highlight = true
 json_pretty = true
-```
-
-## Agent Skills
-
-For AI coding agents (Cursor, Claude Code, etc.):
-
-```bash
-npx skills add https://github.com/bsreeram08/gurl
 ```
 
 ## Contributing
