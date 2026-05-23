@@ -2,9 +2,12 @@ package commands
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 )
@@ -272,6 +275,100 @@ func TestSaveCommandConfirmationUsesSavedNameAndURL(t *testing.T) {
 	want := "✓ Saved request 'foo' (https://example.com)"
 	if !strings.Contains(output, want) {
 		t.Errorf("expected confirmation %q, got %q", want, output)
+	}
+}
+
+func TestSaveCommandErrorsForMissingCollectionNonInteractive(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	oldInteractive := saveCollectionIsInteractive
+	saveCollectionIsInteractive = func() bool { return false }
+	defer func() { saveCollectionIsInteractive = oldInteractive }()
+
+	cmd := SaveCommand(db)
+	err := cmd.Run(context.Background(), []string{"save", "list payments", "https://example.com/payments", "--collection", "payments"})
+	if err == nil || !strings.Contains(err.Error(), "collection \"payments\" does not exist") {
+		t.Fatalf("expected missing collection error, got %v", err)
+	}
+	if _, err := db.GetRequestByName("list payments"); err == nil {
+		t.Fatal("request should not be saved when collection is missing")
+	}
+}
+
+func TestSaveCommandSavesIntoExistingCollection(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+	if err := db.SaveCollection(types.NewCollection("payments")); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+
+	cmd := SaveCommand(db)
+	if err := cmd.Run(context.Background(), []string{"save", "list payments", "https://example.com/payments", "--collection", "payments"}); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+	req, err := db.GetRequestByName("list payments")
+	if err != nil {
+		t.Fatalf("GetRequestByName failed: %v", err)
+	}
+	if req.Collection != "payments" {
+		t.Fatalf("expected request collection payments, got %q", req.Collection)
+	}
+}
+
+func TestSaveCommandCanCreateMissingCollectionInteractively(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	oldInteractive := saveCollectionIsInteractive
+	saveCollectionIsInteractive = func() bool { return true }
+	defer func() { saveCollectionIsInteractive = oldInteractive }()
+
+	oldStdin := os.Stdin
+	stdin, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create stdin pipe: %v", err)
+	}
+	if _, err := writer.WriteString("yes\n"); err != nil {
+		t.Fatalf("failed to write confirmation: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("failed to close stdin writer: %v", err)
+	}
+	os.Stdin = stdin
+	defer func() {
+		os.Stdin = oldStdin
+		stdin.Close()
+	}()
+
+	cmd := SaveCommand(db)
+	output := captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"save", "list payments", "https://example.com/payments", "--collection", "payments"}); err != nil {
+			t.Fatalf("save failed: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "Collection \"payments\" does not exist. Create it? [y/N]") {
+		t.Fatalf("expected create prompt, got %q", output)
+	}
+	if _, err := db.GetCollectionByName("payments"); err != nil {
+		t.Fatalf("expected collection to be created: %v", err)
+	}
+	req, err := db.GetRequestByName("list payments")
+	if err != nil {
+		t.Fatalf("expected request to be saved: %v", err)
+	}
+	if req.Collection != "payments" {
+		t.Fatalf("expected request collection payments, got %q", req.Collection)
 	}
 }
 
