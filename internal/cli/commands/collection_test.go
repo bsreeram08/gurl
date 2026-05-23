@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -158,6 +159,94 @@ func TestCollectionMigrateCommandExportsDBCollectionToFiles(t *testing.T) {
 	}
 	if req.URL != "https://example.com" || req.Collection != "legacy" {
 		t.Fatalf("unexpected migrated request: %+v", req)
+	}
+}
+
+func TestCollectionMigrateCommandCanPassphraseProtectFiles(t *testing.T) {
+	base := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "gurl.db"))
+	if err := base.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer base.Close()
+	collection := types.NewCollection("payments")
+	collection.SetVariable("BASE_URL", "https://api.example.com")
+	collection.SetSecretVariable("API_KEY", "secret-token")
+	if err := base.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	if err := base.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "list payments",
+		URL:        "{{BASE_URL}}/payments",
+		Method:     "GET",
+		Collection: "payments",
+	}); err != nil {
+		t.Fatalf("SaveRequest failed: %v", err)
+	}
+
+	proj, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	fileStore := storage.NewFileStore(proj)
+	db := storage.NewProjectDB(base, fileStore)
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+
+	if err := cmd.Run(context.Background(), []string{
+		"collection",
+		"migrate",
+		"payments",
+		"--project-dir",
+		proj.Root,
+		"--passphrase",
+		"team-pass",
+	}); err != nil {
+		t.Fatalf("migrate command failed: %v", err)
+	}
+
+	collectionPath, err := fileStore.CollectionPath("payments")
+	if err != nil {
+		t.Fatalf("CollectionPath failed: %v", err)
+	}
+	rawData, err := os.ReadFile(filepath.Join(collectionPath, "collection.json"))
+	if err != nil {
+		t.Fatalf("failed to read collection file: %v", err)
+	}
+	if strings.Contains(string(rawData), "secret-token") {
+		t.Fatal("migrated collection should not contain plaintext secret")
+	}
+	var rawCollection types.Collection
+	if err := json.Unmarshal(rawData, &rawCollection); err != nil {
+		t.Fatalf("failed to unmarshal raw collection: %v", err)
+	}
+	if rawCollection.Encryption == nil || rawCollection.Encryption.Mode != storage.CollectionEncryptionModePassphrase {
+		t.Fatalf("expected passphrase encryption metadata, got %+v", rawCollection.Encryption)
+	}
+	if _, err := os.Stat(filepath.Join(collectionPath, "collection.key")); !os.IsNotExist(err) {
+		t.Fatalf("expected passphrase migration to omit local collection key, got %v", err)
+	}
+	if _, err := fileStore.GetCollectionByName("payments"); !storage.IsCollectionLocked(err) {
+		t.Fatalf("expected migrated collection to be locked before unlock, got %v", err)
+	}
+	if err := fileStore.UnlockCollection("payments", "team-pass"); err != nil {
+		t.Fatalf("UnlockCollection failed: %v", err)
+	}
+	unlocked, err := fileStore.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("GetCollectionByName after unlock failed: %v", err)
+	}
+	if unlocked.Variables["API_KEY"] != "secret-token" {
+		t.Fatalf("expected decrypted secret after unlock, got %q", unlocked.Variables["API_KEY"])
+	}
+	if _, err := os.Stat(filepath.Join(collectionPath, "collection.key")); err != nil {
+		t.Fatalf("expected local collection key after unlock: %v", err)
+	}
+	req, err := fileStore.GetRequest("req-1")
+	if err != nil {
+		t.Fatalf("expected migrated request file after unlock: %v", err)
+	}
+	if req.Collection != "payments" {
+		t.Fatalf("unexpected migrated request collection: %+v", req)
 	}
 }
 
