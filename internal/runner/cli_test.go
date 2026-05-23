@@ -164,6 +164,132 @@ func TestCollectionRunCommandDryRunPrintsDiagnostics(t *testing.T) {
 	}
 }
 
+func TestCollectionRunUsesCollectionVarsBetweenEnvAndCLI(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	envStorage := newTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("ROOT", server.URL)
+	beta.SetVariable("BASE_URL", "https://wrong.example.com")
+	beta.SetVariable("VERSION", "env-version")
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatalf("failed to save env: %v", err)
+	}
+
+	collection := types.NewCollection("payments")
+	collection.SetVariable("BASE_URL", "{{ROOT}}/collection")
+	collection.SetVariable("VERSION", "collection-version")
+	if err := db.SaveCollection(collection); err != nil {
+		t.Fatalf("failed to save collection: %v", err)
+	}
+	if err := db.SaveRequest(&types.SavedRequest{
+		ID:         "list-payments",
+		Name:       "list payments",
+		Method:     "GET",
+		URL:        "{{BASE_URL}}/{{VERSION}}",
+		Collection: "payments",
+	}); err != nil {
+		t.Fatalf("failed to save request: %v", err)
+	}
+
+	results, err := NewRunner(db, envStorage).Run(context.Background(), RunConfig{
+		CollectionName: "payments",
+		Environment:    "beta",
+		Vars:           map[string]string{"VERSION": "cli-version"},
+	})
+	if err != nil {
+		t.Fatalf("collection run failed: %v", err)
+	}
+	if len(results) != 1 || results[0].Passed != 1 {
+		t.Fatalf("expected request to pass, got %+v", results)
+	}
+	if gotPath != "/collection/cli-version" {
+		t.Fatalf("expected env-expanded collection BASE_URL and CLI VERSION, got path %q", gotPath)
+	}
+}
+
+func TestCollectionRunCommandPersistRoutesDirtyVarsByOrigin(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"orderId":"ord-new","envToken":"env-new","newVar":"new-value"}}`))
+	}))
+	defer server.Close()
+
+	envStorage := newTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("envToken", "env-old")
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatalf("failed to save env: %v", err)
+	}
+
+	collection := types.NewCollection("orders")
+	collection.SetVariable("orderId", "ord-old")
+	if err := db.SaveCollection(collection); err != nil {
+		t.Fatalf("failed to save collection: %v", err)
+	}
+	if err := db.SaveRequest(&types.SavedRequest{
+		ID:         "create-order",
+		Name:       "create order",
+		Method:     "GET",
+		URL:        server.URL,
+		Collection: "orders",
+		Extracts: []types.Extract{
+			{Name: "orderId", Source: "jsonpath:$.data.orderId"},
+			{Name: "envToken", Source: "jsonpath:$.data.envToken"},
+			{Name: "newVar", Source: "jsonpath:$.data.newVar"},
+		},
+	}); err != nil {
+		t.Fatalf("failed to save request: %v", err)
+	}
+
+	cmd := CollectionRunCommand(db, envStorage)
+	output := captureStdoutFile(t, func() {
+		if err := cmd.Run(context.Background(), []string{"run", "orders", "--env", "beta", "--persist"}); err != nil {
+			t.Fatalf("collection run failed: %v", err)
+		}
+	})
+
+	reloadedEnv, err := envStorage.GetEnvByName("beta")
+	if err != nil {
+		t.Fatalf("failed to reload env: %v", err)
+	}
+	if reloadedEnv.Variables["envToken"] != "env-new" {
+		t.Fatalf("expected env-origin var persisted to env, got %+v", reloadedEnv.Variables)
+	}
+	if _, ok := reloadedEnv.Variables["orderId"]; ok {
+		t.Fatalf("collection-origin var leaked into env: %+v", reloadedEnv.Variables)
+	}
+
+	reloadedCollection, err := db.GetCollectionByName("orders")
+	if err != nil {
+		t.Fatalf("failed to reload collection: %v", err)
+	}
+	if reloadedCollection.Variables["orderId"] != "ord-new" || reloadedCollection.Variables["newVar"] != "new-value" {
+		t.Fatalf("expected collection vars to be persisted, got %+v", reloadedCollection.Variables)
+	}
+	if strings.Contains(output, "Persisted 1 variable to environment \"beta\"") == false ||
+		strings.Contains(output, "Persisted 2 variables to collection \"orders\"") == false {
+		t.Fatalf("expected persist summaries for env and collection, got:\n%s", output)
+	}
+}
+
 func newTestEnvStorage(t *testing.T) *env.EnvStorage {
 	t.Helper()
 	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "env.db"))

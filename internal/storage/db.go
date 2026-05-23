@@ -162,6 +162,7 @@ func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	var existing *types.SavedRequest
 	if req.ID == "" {
 		// Check if a request with this name already exists
 		nameKey := fmt.Sprintf("idx:name:%s", req.Name)
@@ -169,6 +170,11 @@ func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
 			req.ID = string(existingID)
 		} else {
 			req.ID = uuid.New().String()
+		}
+	}
+	if req.ID != "" {
+		if found, err := db.getRequestLocked(req.ID); err == nil {
+			existing = found
 		}
 	}
 
@@ -179,6 +185,11 @@ func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
 
 	// Use atomic batch write for all index updates
 	batch := new(leveldb.Batch)
+	if existing != nil {
+		if err := db.cleanupRequestIndicesBatch(batch, existing, req); err != nil {
+			return err
+		}
+	}
 
 	// Save the request
 	key := fmt.Sprintf("request:%s", req.ID)
@@ -190,8 +201,13 @@ func (db *LMDB) SaveRequest(req *types.SavedRequest) error {
 
 	// Add to collection index if set
 	if req.Collection != "" {
+		if err := db.ensureCollectionBatch(batch, req.Collection); err != nil {
+			return err
+		}
 		colKey := fmt.Sprintf("idx:collection:%s", req.Collection)
-		db.addToIndexBatch(batch, colKey, req.ID)
+		if err := db.addToIndexBatch(batch, colKey, req.ID); err != nil {
+			return err
+		}
 	}
 
 	// Add to tag indices
@@ -532,6 +548,34 @@ func (db *LMDB) removeFromIndexBatch(batch *leveldb.Batch, indexKey string, requ
 	return nil
 }
 
+func (db *LMDB) cleanupRequestIndicesBatch(batch *leveldb.Batch, existing *types.SavedRequest, next *types.SavedRequest) error {
+	if existing == nil || next == nil {
+		return nil
+	}
+	if existing.Name != "" && existing.Name != next.Name {
+		batch.Delete([]byte(fmt.Sprintf("idx:name:%s", existing.Name)))
+	}
+	if existing.Collection != "" && existing.Collection != next.Collection {
+		if err := db.removeFromIndexBatch(batch, fmt.Sprintf("idx:collection:%s", existing.Collection), existing.ID); err != nil {
+			return err
+		}
+	}
+	nextTags := stringSet(next.Tags)
+	for _, tag := range existing.Tags {
+		if !nextTags[tag] {
+			if err := db.removeFromIndexBatch(batch, fmt.Sprintf("idx:tag:%s", tag), existing.ID); err != nil {
+				return err
+			}
+		}
+	}
+	if existing.Folder != "" && existing.Folder != next.Folder {
+		if err := db.removeFromIndexBatch(batch, fmt.Sprintf("idx:folder:%s", existing.Folder), existing.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // UpdateRequest updates an existing request
 func (db *LMDB) UpdateRequest(req *types.SavedRequest) error {
 	db.mu.Lock()
@@ -569,6 +613,7 @@ func (db *LMDB) UpdateRequest(req *types.SavedRequest) error {
 // saveRequestLocked saves a request to the database atomically (must be called with lock held).
 // If a request with this name already exists, it is updated in-place (upsert).
 func (db *LMDB) saveRequestLocked(req *types.SavedRequest) error {
+	var existing *types.SavedRequest
 	if req.ID == "" {
 		// Check if a request with this name already exists
 		nameKey := fmt.Sprintf("idx:name:%s", req.Name)
@@ -576,6 +621,11 @@ func (db *LMDB) saveRequestLocked(req *types.SavedRequest) error {
 			req.ID = string(existingID)
 		} else {
 			req.ID = uuid.New().String()
+		}
+	}
+	if req.ID != "" {
+		if found, err := db.getRequestLocked(req.ID); err == nil {
+			existing = found
 		}
 	}
 
@@ -586,6 +636,11 @@ func (db *LMDB) saveRequestLocked(req *types.SavedRequest) error {
 
 	// Use atomic batch write for all index updates
 	batch := new(leveldb.Batch)
+	if existing != nil {
+		if err := db.cleanupRequestIndicesBatch(batch, existing, req); err != nil {
+			return err
+		}
+	}
 
 	// Save the request
 	key := fmt.Sprintf("request:%s", req.ID)
@@ -597,8 +652,13 @@ func (db *LMDB) saveRequestLocked(req *types.SavedRequest) error {
 
 	// Add to collection index if set
 	if req.Collection != "" {
+		if err := db.ensureCollectionBatch(batch, req.Collection); err != nil {
+			return err
+		}
 		colKey := fmt.Sprintf("idx:collection:%s", req.Collection)
-		db.addToIndexBatch(batch, colKey, req.ID)
+		if err := db.addToIndexBatch(batch, colKey, req.ID); err != nil {
+			return err
+		}
 	}
 
 	// Add to tag indices
@@ -878,6 +938,14 @@ func uniqueStrings(slice []string) []string {
 		}
 	}
 	return result
+}
+
+func stringSet(values []string) map[string]bool {
+	set := make(map[string]bool, len(values))
+	for _, value := range values {
+		set[value] = true
+	}
+	return set
 }
 
 var JSONMarshal = json.Marshal

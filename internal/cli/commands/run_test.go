@@ -245,6 +245,117 @@ func TestRunCommandPersistWritesSingleRequestDirtyVars(t *testing.T) {
 	}
 }
 
+func TestRunCommandPersistWithoutEnvFailsBeforeRequestOutsideCollection(t *testing.T) {
+	db := newMockDB()
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	db.requests["req-persist-no-env"] = &types.SavedRequest{
+		ID:         "req-persist-no-env",
+		Name:       "persist no env",
+		URL:        server.URL,
+		Method:     "GET",
+		PostScript: `gurl.setVar("flowNote", "scripted")`,
+	}
+	db.names["persist no env"] = "req-persist-no-env"
+
+	cmd := RunCommand(db, newRunTestEnvStorage(t))
+	err := cmd.Run(context.Background(), []string{"run", "persist no env", "--persist"})
+	if err == nil {
+		t.Fatal("expected --persist without env to fail")
+	}
+	if !strings.Contains(err.Error(), "--persist requires --env or an active environment") {
+		t.Fatalf("expected clear persist target error, got %v", err)
+	}
+	if requestCount != 0 {
+		t.Fatalf("expected fail-fast before HTTP, got %d requests", requestCount)
+	}
+}
+
+func TestRunCommandChainRefreshesCollectionContextPerStep(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "chain-collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		if r.URL.Path != "/first" && r.URL.Path != "/second/beta-token" {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":"wrong path"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	alpha := types.NewCollection("alpha")
+	alpha.SetVariable("BASE_URL", server.URL)
+	alpha.SetVariable("SECOND_TOKEN", "alpha-token")
+	if err := db.SaveCollection(alpha); err != nil {
+		t.Fatalf("failed to save alpha collection: %v", err)
+	}
+	beta := types.NewCollection("beta")
+	beta.SetVariable("BASE_URL", server.URL)
+	beta.SetVariable("SECOND_TOKEN", "beta-token")
+	if err := db.SaveCollection(beta); err != nil {
+		t.Fatalf("failed to save beta collection: %v", err)
+	}
+
+	if err := db.SaveRequest(&types.SavedRequest{
+		Name:       "first",
+		URL:        "{{BASE_URL}}/first",
+		Method:     "GET",
+		Collection: "alpha",
+		PostScript: `gurl.setNextRequest("second")`,
+	}); err != nil {
+		t.Fatalf("failed to save first request: %v", err)
+	}
+	if err := db.SaveRequest(&types.SavedRequest{
+		Name:       "second",
+		URL:        "{{BASE_URL}}/second/{{SECOND_TOKEN}}",
+		Method:     "GET",
+		Collection: "beta",
+		PostScript: `gurl.setVar("SECOND_TOKEN", "changed-token")`,
+	}); err != nil {
+		t.Fatalf("failed to save second request: %v", err)
+	}
+
+	cmd := RunCommand(db, newRunTestEnvStorage(t))
+	output := captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"run", "first", "--chain", "--persist"}); err != nil {
+			t.Fatalf("run command failed: %v", err)
+		}
+	})
+
+	if strings.Join(paths, ",") != "/first,/second/beta-token" {
+		t.Fatalf("expected second request to use beta collection vars, got paths %+v", paths)
+	}
+	reloadedAlpha, err := db.GetCollectionByName("alpha")
+	if err != nil {
+		t.Fatalf("failed to reload alpha collection: %v", err)
+	}
+	if reloadedAlpha.Variables["SECOND_TOKEN"] != "alpha-token" {
+		t.Fatalf("expected alpha collection to remain unchanged, got %+v", reloadedAlpha.Variables)
+	}
+	reloadedBeta, err := db.GetCollectionByName("beta")
+	if err != nil {
+		t.Fatalf("failed to reload beta collection: %v", err)
+	}
+	if reloadedBeta.Variables["SECOND_TOKEN"] != "changed-token" {
+		t.Fatalf("expected dirty beta var to persist to beta, got %+v", reloadedBeta.Variables)
+	}
+	if !strings.Contains(output, "Persisted 1 variable to collection \"beta\"") || strings.Contains(output, "collection \"alpha\"") {
+		t.Fatalf("expected persist summary for beta only, got output:\n%s", output)
+	}
+}
+
 func TestRunCommandWithoutPersistLeavesEnvUnchanged(t *testing.T) {
 	db := newMockDB()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

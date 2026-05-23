@@ -141,4 +141,53 @@ func (db *LazyDB) GetAllFolders() ([]string, error) {
 	return result, err
 }
 
+func (db *LazyDB) SaveCollection(collection *types.Collection) error {
+	return db.withDB(func(lmdb *LMDB) error {
+		return lmdb.SaveCollection(collection)
+	})
+}
+
+func (db *LazyDB) GetCollection(id string) (*types.Collection, error) {
+	var result *types.Collection
+	err := db.withDB(func(lmdb *LMDB) error {
+		var innerErr error
+		result, innerErr = lmdb.GetCollection(id)
+		return innerErr
+	})
+	return result, err
+}
+
+func (db *LazyDB) GetCollectionByName(name string) (*types.Collection, error) {
+	var result *types.Collection
+	err := db.withDB(func(lmdb *LMDB) error {
+		var innerErr error
+		result, innerErr = lmdb.GetCollectionByName(name)
+		return innerErr
+	})
+	return result, err
+}
+
+func (db *LazyDB) ListCollections() ([]*types.Collection, error) {
+	var result []*types.Collection
+	err := db.withDB(func(lmdb *LMDB) error {
+		var innerErr error
+		result, innerErr = lmdb.ListCollections()
+		return innerErr
+	})
+	return result, err
+}
+
+func (db *LazyDB) DeleteCollection(id string) error {
+	return db.withDB(func(lmdb *LMDB) error {
+		return lmdb.DeleteCollection(id)
+	})
+}
+
+func (db *LazyDB) UpdateCollection(collection *types.Collection) error {
+	return db.withDB(func(lmdb *LMDB) error {
+		return lmdb.UpdateCollection(collection)
+	})
+}
+
 var _ DB = (*LazyDB)(nil)
+var _ CollectionStore = (*LazyDB)(nil)
