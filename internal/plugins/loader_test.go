@@ -92,7 +92,8 @@ type mockAuthPlugin struct {
 	called bool
 }
 
-func (p *mockAuthPlugin) Name() string { return p.name }
+func (p *mockAuthPlugin) Name() string        { return p.name }
+func (p *mockAuthPlugin) Description() string { return "mock auth plugin" }
 func (p *mockAuthPlugin) Params() []auth.ParamDef {
 	return p.params
 }
@@ -850,5 +851,40 @@ func TestRegistry_ApplyAfterResponse_Empty(t *testing.T) {
 	result := registry.ApplyAfterResponse(&ResponseContext{Request: &client.Request{}, Response: &client.Response{}})
 	if result == nil {
 		t.Error("expected non-nil result with no middleware")
+	}
+}
+
+type panicAuthPlugin struct{}
+
+func (p *panicAuthPlugin) Name() string        { return "panic-auth" }
+func (p *panicAuthPlugin) Description() string { return "panics on apply" }
+func (p *panicAuthPlugin) Params() []auth.ParamDef {
+	return nil
+}
+func (p *panicAuthPlugin) Apply(req *client.Request, params map[string]string) error {
+	panic("auth plugin exploded")
+}
+
+func TestRegistry_AuthPlugin_PanicRecovery(t *testing.T) {
+	registry := NewRegistry()
+	registry.RegisterAuth(&panicAuthPlugin{})
+
+	err := registry.ApplyAuth("panic-auth", &client.Request{Method: "GET", URL: "http://example.com"}, nil)
+	if err == nil {
+		t.Fatal("expected error from panicking auth plugin")
+	}
+	if !strings.Contains(err.Error(), "panicked") {
+		t.Fatalf("expected panic error message, got: %v", err)
+	}
+}
+
+func TestRegistry_ApplyAuth_UnknownPlugin(t *testing.T) {
+	registry := NewRegistry()
+	err := registry.ApplyAuth("nonexistent", &client.Request{}, nil)
+	if err == nil {
+		t.Fatal("expected error for unknown auth plugin")
+	}
+	if !strings.Contains(err.Error(), "unknown auth plugin") {
+		t.Fatalf("expected unknown auth plugin error, got: %v", err)
 	}
 }

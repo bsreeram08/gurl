@@ -21,9 +21,8 @@ type AWSv4Handler struct {
 	ClockSkew time.Duration
 }
 
-func (h *AWSv4Handler) Name() string {
-	return "awsv4"
-}
+func (h *AWSv4Handler) Name() string        { return "awsv4" }
+func (h *AWSv4Handler) Description() string { return "AWS Signature Version 4 request signing" }
 
 func (h *AWSv4Handler) Params() []ParamDef {
 	return []ParamDef{

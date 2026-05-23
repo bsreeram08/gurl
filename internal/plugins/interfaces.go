@@ -44,6 +44,7 @@ type CommandPlugin interface {
 // AuthPlugin is implemented by plugins that apply authentication to requests.
 type AuthPlugin interface {
 	Name() string
+	Description() string
 	Params() []auth.ParamDef
 	Apply(req *client.Request, params map[string]string) error
 }

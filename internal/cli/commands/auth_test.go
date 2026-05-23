@@ -20,6 +20,11 @@ func TestAuthCommandListShowsBuiltInTypes(t *testing.T) {
 			t.Fatalf("expected auth list to include %q, got %q", authType, output)
 		}
 	}
+	for _, desc := range []string{"RFC 7617", "RFC 6750", "API key", "RFC 7616", "NTLM", "RFC 5849", "RFC 6749", "AWS Signature"} {
+		if !strings.Contains(output, desc) {
+			t.Fatalf("expected auth list to include description %q, got %q", desc, output)
+		}
+	}
 }
 
 func TestAuthCommandInfoShowsParameterMetadata(t *testing.T) {

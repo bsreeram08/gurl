@@ -10,9 +10,8 @@ import (
 
 type APIKeyHandler struct{}
 
-func (h *APIKeyHandler) Name() string {
-	return "apikey"
-}
+func (h *APIKeyHandler) Name() string        { return "apikey" }
+func (h *APIKeyHandler) Description() string { return "API key in header or query parameter" }
 
 func (h *APIKeyHandler) Params() []ParamDef {
 	return []ParamDef{

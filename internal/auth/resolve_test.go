@@ -218,3 +218,31 @@ func TestResolveAuthConfig_CollectionWithNoAuthAndNilRequest(t *testing.T) {
 		t.Errorf("expected nil when collection has no auth and request is nil, got %+v", result)
 	}
 }
+
+func TestResolveAuthConfig_ExplicitNoneOnRequestPreventsInheritance(t *testing.T) {
+	request := &types.SavedRequest{
+		ID:   "req-1",
+		Name: "Test Request",
+		AuthConfig: &types.AuthConfig{
+			Type:   "none",
+			Params: map[string]string{},
+		},
+	}
+	collection := &types.Collection{
+		ID:   "col-1",
+		Name: "Test Collection",
+		AuthConfig: &types.AuthConfig{
+			Type:   "bearer",
+			Params: map[string]string{"token": "col-token"},
+		},
+	}
+
+	result := ResolveAuthConfig(request, collection)
+
+	if result == nil {
+		t.Fatal("expected non-nil result when request has explicit none auth")
+	}
+	if result.Type != "none" {
+		t.Errorf("expected type=none to prevent inheritance, got type=%s", result.Type)
+	}
+}

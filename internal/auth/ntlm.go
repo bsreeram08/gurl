@@ -11,9 +11,8 @@ import (
 
 type NTLMHandler struct{}
 
-func (h *NTLMHandler) Name() string {
-	return "ntlm"
-}
+func (h *NTLMHandler) Name() string        { return "ntlm" }
+func (h *NTLMHandler) Description() string { return "NTLM authentication for Windows networks" }
 
 func (h *NTLMHandler) Params() []ParamDef {
 	return []ParamDef{

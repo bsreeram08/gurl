@@ -4,9 +4,8 @@ import "github.com/sreeram/gurl/internal/client"
 
 type BearerHandler struct{}
 
-func (h *BearerHandler) Name() string {
-	return "bearer"
-}
+func (h *BearerHandler) Name() string        { return "bearer" }
+func (h *BearerHandler) Description() string { return "Bearer token authentication (RFC 6750)" }
 
 func (h *BearerHandler) Params() []ParamDef {
 	return []ParamDef{

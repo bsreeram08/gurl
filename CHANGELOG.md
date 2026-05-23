@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.3.1] - 2026-05-23
+
+### Fixed
+
+- Digest auth handler now rejects unsupported algorithm values instead of silently falling back to MD5.
+- OAuth 1.0a handler now propagates URL parse errors instead of producing incorrect signatures silently.
+- Auth plugin dispatch now has panic recovery, matching the existing middleware plugin safety pattern.
+
+### Added
+
+- `Description()` method on all auth handlers, enabling `gurl auth list` to show one-line descriptions alongside type names.
+- `ApplyAuth` dispatch method on plugin registry with panic recovery for third-party auth plugins.
+- Tests for duplicate handler registration, `type=none` no-op, explicit-none inheritance prevention, and plugin panic recovery.
+
 ## [v0.3.0] - 2026-05-23
 
 ### Added

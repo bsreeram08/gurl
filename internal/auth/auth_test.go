@@ -245,3 +245,33 @@ func TestRegistry_Apply_BasicAuthEndToEnd(t *testing.T) {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
 	}
 }
+
+type stubHandler struct {
+	name  string
+	value string
+}
+
+func (s *stubHandler) Name() string        { return s.name }
+func (s *stubHandler) Description() string { return "stub" }
+func (s *stubHandler) Params() []ParamDef  { return nil }
+func (s *stubHandler) Apply(req *client.Request, params map[string]string) error {
+	req.Headers = append(req.Headers, client.Header{Key: "X-Stub", Value: s.value})
+	return nil
+}
+
+func TestRegistry_DuplicateRegistrationOverwrites(t *testing.T) {
+	r := NewRegistry()
+	r.Register(&stubHandler{name: "test", value: "first"})
+	r.Register(&stubHandler{name: "test", value: "second"})
+
+	h := r.Get("test")
+	if h == nil {
+		t.Fatal("expected handler for 'test'")
+	}
+
+	req := &client.Request{Method: "GET", URL: "http://example.com"}
+	h.Apply(req, nil)
+	if len(req.Headers) != 1 || req.Headers[0].Value != "second" {
+		t.Fatalf("expected second handler to win, got headers: %v", req.Headers)
+	}
+}

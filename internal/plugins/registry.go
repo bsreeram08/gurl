@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+
+	"github.com/sreeram/gurl/internal/client"
 )
 
 // Registry manages plugins and provides dispatch for applying them to requests/responses.
@@ -139,6 +141,25 @@ func (r *Registry) safeAfterResponse(plugin MiddlewarePlugin, ctx *ResponseConte
 		}
 	}()
 	return plugin.AfterResponse(ctx)
+}
+
+// ApplyAuth dispatches to a named auth plugin with panic recovery.
+func (r *Registry) ApplyAuth(name string, req *client.Request, params map[string]string) error {
+	plugin, ok := r.GetAuth(name)
+	if !ok {
+		return fmt.Errorf("unknown auth plugin %q", name)
+	}
+	return r.safeApplyAuth(plugin, req, params)
+}
+
+func (r *Registry) safeApplyAuth(plugin AuthPlugin, req *client.Request, params map[string]string) (err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = fmt.Errorf("auth plugin %s panicked: %v", plugin.Name(), rec)
+			fmt.Fprintf(os.Stderr, "Warning: auth plugin %s panicked in Apply: %v\n%s\n", plugin.Name(), rec, debug.Stack())
+		}
+	}()
+	return plugin.Apply(req, params)
 }
 
 // GetOutputByFormat looks up an output plugin by its format name.

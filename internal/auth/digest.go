@@ -19,9 +19,8 @@ type DigestHandler struct {
 	nonceCounts map[string]int
 }
 
-func (h *DigestHandler) Name() string {
-	return "digest"
-}
+func (h *DigestHandler) Name() string        { return "digest" }
+func (h *DigestHandler) Description() string { return "HTTP Digest authentication (RFC 7616)" }
 
 func (h *DigestHandler) Params() []ParamDef {
 	return []ParamDef{
@@ -67,6 +66,12 @@ func (h *DigestHandler) Apply(req *client.Request, params map[string]string) err
 	// Default client qop to "auth" if not specified
 	if clientQop == "" {
 		clientQop = "auth"
+	}
+
+	switch algorithm {
+	case "", "MD5", "SHA-256":
+	default:
+		return fmt.Errorf("digest: unsupported algorithm %q: supported values are MD5, SHA-256", algorithm)
 	}
 
 	method := req.Method

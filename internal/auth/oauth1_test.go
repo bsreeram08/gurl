@@ -293,3 +293,21 @@ func parseAuthHeader(header string) (map[string]string, error) {
 
 	return result, nil
 }
+
+func TestOAuth1Handler_Apply_MalformedURL(t *testing.T) {
+	h := &OAuth1Handler{}
+	req := &client.Request{
+		Method: "GET",
+		URL:    "://invalid",
+	}
+	params := map[string]string{
+		"consumer_key":    "ck",
+		"consumer_secret": "cs",
+		"token":           "t",
+		"token_secret":    "ts",
+	}
+	err := h.Apply(req, params)
+	if err == nil {
+		t.Fatal("expected error for malformed URL, got nil")
+	}
+}

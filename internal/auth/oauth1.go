@@ -17,9 +17,8 @@ import (
 
 type OAuth1Handler struct{}
 
-func (h *OAuth1Handler) Name() string {
-	return "oauth1"
-}
+func (h *OAuth1Handler) Name() string        { return "oauth1" }
+func (h *OAuth1Handler) Description() string { return "OAuth 1.0a signature-based authentication (RFC 5849)" }
 
 func (h *OAuth1Handler) Params() []ParamDef {
 	return []ParamDef{
@@ -54,7 +53,10 @@ func (h *OAuth1Handler) Apply(req *client.Request, params map[string]string) err
 	nonce := generateNonce()
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 
-	reqURL, queryString := splitURL(req.URL)
+	reqURL, queryString, err := splitURL(req.URL)
+	if err != nil {
+		return fmt.Errorf("oauth1: %w", err)
+	}
 
 	signatureBase := signatureBaseString(req.Method, reqURL, queryString)
 
@@ -114,16 +116,16 @@ func buildAuthHeader(consumerKey, nonce, timestamp, signature, token, body strin
 	return "OAuth " + strings.Join(params, ", ")
 }
 
-func splitURL(requestURL string) (baseURL, queryString string) {
+func splitURL(requestURL string) (baseURL, queryString string, err error) {
 	u, err := url.Parse(requestURL)
 	if err != nil {
-		return requestURL, ""
+		return "", "", fmt.Errorf("parsing URL: %w", err)
 	}
 
 	baseURL = u.Scheme + "://" + u.Host + u.Path
 	queryString = u.RawQuery
 
-	return baseURL, queryString
+	return baseURL, queryString, nil
 }
 
 func percentEncode(s string) string {

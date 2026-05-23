@@ -20,6 +20,8 @@ type ParamDef struct {
 type Handler interface {
 	// Name returns the unique name of the auth handler (e.g., "basic", "bearer", "apikey").
 	Name() string
+	// Description returns a one-line summary of the auth type.
+	Description() string
 	// Params returns metadata for the handler's supported parameters.
 	Params() []ParamDef
 	// Apply applies the auth handler to the given request using params.

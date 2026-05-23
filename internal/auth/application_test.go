@@ -127,6 +127,19 @@ func TestApplyAuthSupportsSavedAPIKeyHeaderValueParams(t *testing.T) {
 	}
 }
 
+func TestApplyAuth_TypeNone_IsNoOp(t *testing.T) {
+	req := &client.Request{Method: "GET", URL: "https://example.com"}
+	config := &types.AuthConfig{Type: "none", Params: map[string]string{}}
+
+	err := ApplyAuth(BuiltinRegistry(), config, req, nil)
+	if err != nil {
+		t.Fatalf("expected type=none to be a no-op, got error: %v", err)
+	}
+	if len(req.Headers) != 0 {
+		t.Fatalf("expected no headers added for type=none, got %v", req.Headers)
+	}
+}
+
 func headerValue(headers []client.Header, key string) string {
 	for _, header := range headers {
 		if header.Key == key {

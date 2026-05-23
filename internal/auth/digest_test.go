@@ -341,3 +341,20 @@ func TestDigestHandler_ParsesWWWAuthenticateHeader(t *testing.T) {
 		})
 	}
 }
+
+func TestDigestHandler_Apply_UnsupportedAlgorithm(t *testing.T) {
+	handler := &DigestHandler{}
+	req := &client.Request{Method: "GET", URL: "http://example.com"}
+	params := map[string]string{
+		"username":  "testuser",
+		"password":  "testpass",
+		"algorithm": "SHA-512",
+	}
+	err := handler.Apply(req, params)
+	if err == nil {
+		t.Fatal("expected error for unsupported algorithm, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported") {
+		t.Errorf("expected error to mention unsupported, got %q", err.Error())
+	}
+}

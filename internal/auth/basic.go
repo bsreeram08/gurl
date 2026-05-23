@@ -13,9 +13,8 @@ import (
 // ISO-8859-1 (Latin-1). Use the charset parameter to specify the encoding.
 type BasicHandler struct{}
 
-func (h *BasicHandler) Name() string {
-	return "basic"
-}
+func (h *BasicHandler) Name() string        { return "basic" }
+func (h *BasicHandler) Description() string { return "HTTP Basic authentication (RFC 7617)" }
 
 func (h *BasicHandler) Params() []ParamDef {
 	return []ParamDef{

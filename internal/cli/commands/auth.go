@@ -20,9 +20,11 @@ func AuthCommand() *cli.Command {
 				Name:  "list",
 				Usage: "List built-in authentication types",
 				Action: func(ctx context.Context, c *cli.Command) error {
+					registry := authpkg.BuiltinRegistry()
 					fmt.Println("Built-in auth types:")
 					for _, name := range builtinAuthTypeNames() {
-						fmt.Printf("  %s\n", name)
+						handler := registry.Get(name)
+						fmt.Printf("  %-10s  %s\n", name, handler.Description())
 					}
 					return nil
 				},
