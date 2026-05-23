@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -20,6 +21,28 @@ type CollectionStore interface {
 	ListCollections() ([]*types.Collection, error)
 	DeleteCollection(id string) error
 	UpdateCollection(collection *types.Collection) error
+}
+
+var ErrCollectionNotFound = errors.New("collection not found")
+
+type CollectionNotFoundError struct {
+	Ref string
+}
+
+func (e *CollectionNotFoundError) Error() string {
+	return fmt.Sprintf("%s: %s", ErrCollectionNotFound, e.Ref)
+}
+
+func (e *CollectionNotFoundError) Unwrap() error {
+	return ErrCollectionNotFound
+}
+
+func newCollectionNotFoundError(ref string) error {
+	return &CollectionNotFoundError{Ref: ref}
+}
+
+func IsCollectionNotFound(err error) bool {
+	return errors.Is(err, ErrCollectionNotFound)
 }
 
 func (db *LMDB) SaveCollection(collection *types.Collection) error {
@@ -84,7 +107,7 @@ func (db *LMDB) getCollectionLocked(id string) (*types.Collection, error) {
 	data, err := db.DB.Get([]byte(collectionKey(id)), nil)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
-			return nil, fmt.Errorf("collection not found: %s", id)
+			return nil, newCollectionNotFoundError(id)
 		}
 		return nil, fmt.Errorf("failed to get collection: %w", err)
 	}
@@ -109,7 +132,7 @@ func (db *LMDB) GetCollectionByName(name string) (*types.Collection, error) {
 	idData, err := db.DB.Get([]byte(collectionNameIndexKey(name)), nil)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
-			return nil, fmt.Errorf("collection not found: %s", name)
+			return nil, newCollectionNotFoundError(name)
 		}
 		return nil, fmt.Errorf("failed to look up collection name index: %w", err)
 	}

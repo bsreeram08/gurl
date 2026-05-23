@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -299,6 +300,26 @@ func TestSaveCommandErrorsForMissingCollectionNonInteractive(t *testing.T) {
 	}
 }
 
+func TestSaveCommandReturnsCollectionLookupErrors(t *testing.T) {
+	db := &failingCollectionLookupDB{
+		mockDB:    newMockDB(),
+		lookupErr: errors.New("collection index unavailable"),
+	}
+
+	oldInteractive := saveCollectionIsInteractive
+	saveCollectionIsInteractive = func() bool { return false }
+	defer func() { saveCollectionIsInteractive = oldInteractive }()
+
+	cmd := SaveCommand(db)
+	err := cmd.Run(context.Background(), []string{"save", "list payments", "https://example.com/payments", "--collection", "payments"})
+	if err == nil || !strings.Contains(err.Error(), "collection index unavailable") {
+		t.Fatalf("expected lookup error, got %v", err)
+	}
+	if _, err := db.GetRequestByName("list payments"); err == nil {
+		t.Fatal("request should not be saved when collection lookup fails")
+	}
+}
+
 func TestSaveCommandSavesIntoExistingCollection(t *testing.T) {
 	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
 	if err := db.Open(); err != nil {
@@ -409,6 +430,35 @@ func TestSaveCommandPersistsExtractsScriptsAndJQAlias(t *testing.T) {
 	if req.Extracts[1].Name != "requestId" || req.Extracts[1].Source != "jsonpath:$.request.id" {
 		t.Fatalf("jq alias should store as jsonpath, got %#v", req.Extracts[1])
 	}
+}
+
+type failingCollectionLookupDB struct {
+	*mockDB
+	lookupErr error
+}
+
+func (db *failingCollectionLookupDB) SaveCollection(collection *types.Collection) error {
+	return nil
+}
+
+func (db *failingCollectionLookupDB) GetCollection(id string) (*types.Collection, error) {
+	return nil, storage.ErrCollectionNotFound
+}
+
+func (db *failingCollectionLookupDB) GetCollectionByName(name string) (*types.Collection, error) {
+	return nil, db.lookupErr
+}
+
+func (db *failingCollectionLookupDB) ListCollections() ([]*types.Collection, error) {
+	return nil, nil
+}
+
+func (db *failingCollectionLookupDB) DeleteCollection(id string) error {
+	return nil
+}
+
+func (db *failingCollectionLookupDB) UpdateCollection(collection *types.Collection) error {
+	return nil
 }
 
 func TestSaveCommandPersistsAuthConfigInAllSaveModes(t *testing.T) {

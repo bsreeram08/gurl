@@ -285,6 +285,8 @@ func saveRequestWithCollectionGuard(db storage.DB, req *types.SavedRequest) erro
 		return db.SaveRequest(req)
 	} else if storage.IsCollectionLocked(err) {
 		return db.SaveRequest(req)
+	} else if !storage.IsCollectionNotFound(err) {
+		return err
 	}
 
 	if err := confirmCreateCollection(store, req.Collection); err != nil {
