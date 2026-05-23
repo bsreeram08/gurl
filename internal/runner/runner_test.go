@@ -15,6 +15,7 @@ import (
 
 	"github.com/sreeram/gurl/internal/assertions"
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/project"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 )
@@ -188,6 +189,67 @@ func TestRunner_RunCollection(t *testing.T) {
 	}
 	if len(result.RequestResults) != 1 {
 		t.Errorf("expected 1 request result, got %d", len(result.RequestResults))
+	}
+}
+
+func TestRunnerReloadsFileBackedCollectionBetweenIterations(t *testing.T) {
+	originalWatchOptions := collectionRunWatchOptions
+	collectionRunWatchOptions = storage.CollectionWatchOptions{
+		PollInterval: 5 * time.Millisecond,
+		Debounce:     15 * time.Millisecond,
+	}
+	defer func() {
+		collectionRunWatchOptions = originalWatchOptions
+	}()
+
+	base := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "gurl.db"))
+	if err := base.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer base.Close()
+	proj, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	db := storage.NewProjectDB(base, storage.NewFileStore(proj))
+	if err := db.SaveCollection(types.NewCollection("watched")); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	req := &types.SavedRequest{
+		ID:         "req-1",
+		Name:       "reload me",
+		URL:        "https://old.example.com",
+		Method:     "GET",
+		Collection: "watched",
+	}
+	if err := db.SaveRequest(req); err != nil {
+		t.Fatalf("SaveRequest failed: %v", err)
+	}
+
+	time.AfterFunc(40*time.Millisecond, func() {
+		req.URL = "https://new.example.com"
+		req.UpdatedAt = time.Now().Unix()
+		_ = db.SaveRequest(req)
+	})
+
+	runner := NewRunner(db, newMockEnvStorage())
+	results, err := runner.Run(context.Background(), RunConfig{
+		CollectionName: "watched",
+		Iterations:     2,
+		Delay:          120 * time.Millisecond,
+		DryRun:         true,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected two iterations, got %d", len(results))
+	}
+	if got := results[0].RequestResults[0].PlannedURL; got != "https://old.example.com" {
+		t.Fatalf("expected first iteration to use old URL, got %q", got)
+	}
+	if got := results[1].RequestResults[0].PlannedURL; got != "https://new.example.com" {
+		t.Fatalf("expected second iteration to reload new URL, got %q", got)
 	}
 }
 

@@ -31,6 +31,17 @@ type RunConfig struct {
 	DataFile       string
 }
 
+var collectionRunWatchOptions = storage.CollectionWatchOptions{}
+
+type runCollectionState struct {
+	requests             []*types.SavedRequest
+	envVars              map[string]string
+	collectionVars       map[string]string
+	baseVars             map[string]string
+	baseOrigins          map[string]VarOrigin
+	defaultPersistOrigin VarOrigin
+}
+
 type VarOrigin string
 
 const (
@@ -122,34 +133,165 @@ func (r *Runner) Run(ctx context.Context, config RunConfig) ([]RunResult, error)
 		config.Iterations = 1
 	}
 
+	envVars := r.loadRunEnvVars(config)
+	state, err := r.loadCollectionRunState(config, envVars)
+	if err != nil {
+		return nil, err
+	}
+
+	watcher := r.startCollectionRunWatcher(ctx, config.CollectionName)
+	defer watcher.stop()
+
+	reloadState := func() error {
+		next, err := r.loadCollectionRunState(config, envVars)
+		if err != nil {
+			return err
+		}
+		*state = *next
+		return nil
+	}
+	beforeIteration := func() error {
+		if !watcher.changed() {
+			return nil
+		}
+		return reloadState()
+	}
+	waitDelay := func(delay time.Duration) error {
+		return watcher.wait(ctx, delay)
+	}
+	results := make([]RunResult, 0)
+
+	if config.DataFile != "" {
+		dataResults, err := r.runWithData(ctx, state, config, beforeIteration, waitDelay)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, dataResults...)
+	} else {
+		for iter := 0; iter < config.Iterations; iter++ {
+			if iter > 0 {
+				if err := beforeIteration(); err != nil {
+					return results, err
+				}
+			}
+			result := r.runIteration(ctx, state.requests, state.baseVars, state.baseOrigins, state.defaultPersistOrigin, config, iter+1)
+			results = append(results, result)
+
+			if config.Delay > 0 && iter < config.Iterations-1 {
+				if err := waitDelay(config.Delay); err != nil {
+					return results, ctx.Err()
+				}
+			}
+		}
+	}
+
+	return results, nil
+}
+
+type collectionRunWatcher struct {
+	watcher      *storage.CollectionWatcher
+	reloadNeeded bool
+}
+
+func (r *Runner) startCollectionRunWatcher(ctx context.Context, collection string) *collectionRunWatcher {
+	runWatcher := &collectionRunWatcher{}
+	if collection == "" {
+		return runWatcher
+	}
+	store, ok := r.db.(storage.CollectionWatcherStore)
+	if !ok {
+		return runWatcher
+	}
+	watcher, err := store.WatchCollection(ctx, collection, collectionRunWatchOptions)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: file watcher disabled for collection %q: %v\n", collection, err)
+		return runWatcher
+	}
+	runWatcher.watcher = watcher
+	return runWatcher
+}
+
+func (w *collectionRunWatcher) stop() {
+	if w == nil || w.watcher == nil {
+		return
+	}
+	w.watcher.Stop()
+}
+
+func (w *collectionRunWatcher) changed() bool {
+	if w == nil || w.watcher == nil {
+		return false
+	}
+	if w.watcher.Changed() {
+		w.reloadNeeded = true
+	}
+	if !w.reloadNeeded {
+		return false
+	}
+	w.reloadNeeded = false
+	return true
+}
+
+func (w *collectionRunWatcher) wait(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+	if w == nil || w.watcher == nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+			return nil
+		}
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case _, ok := <-w.watcher.Events():
+			if !ok {
+				w.watcher = nil
+				continue
+			}
+			w.reloadNeeded = true
+		case <-timer.C:
+			return nil
+		}
+	}
+}
+
+func (r *Runner) loadRunEnvVars(config RunConfig) map[string]string {
+	envVars := make(map[string]string)
+	if config.Environment == "" || r.envStorage == nil {
+		return envVars
+	}
+	env, err := r.envStorage.GetEnvByName(config.Environment)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: environment %q not found: %v\n", config.Environment, err)
+		return envVars
+	}
+	for k, v := range env.Variables {
+		envVars[k] = v
+	}
+	return envVars
+}
+
+func (r *Runner) loadCollectionRunState(config RunConfig, envVars map[string]string) (*runCollectionState, error) {
 	requests, err := r.db.ListRequests(&storage.ListOptions{
 		Collection: config.CollectionName,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list collection: %w", err)
 	}
-
 	if len(requests) == 0 {
 		return nil, &EmptyCollectionError{Collection: config.CollectionName}
 	}
 
-	// Sort requests by SortOrder before execution
 	requests = sortBySequence(requests)
-
-	envVars := make(map[string]string)
-	if config.Environment != "" && r.envStorage != nil {
-		env, err := r.envStorage.GetEnvByName(config.Environment)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: environment %q not found: %v\n", config.Environment, err)
-		} else {
-			for k, v := range env.Variables {
-				envVars[k] = v
-			}
-		}
-	}
-
 	collectionVars := r.collectionVariables(config.CollectionName, envVars)
-
 	baseVars := copyStringMap(envVars)
 	baseOrigins := originsFor(envVars, VarOriginEnvironment)
 	for k, v := range collectionVars {
@@ -165,33 +307,17 @@ func (r *Runner) Run(ctx context.Context, config RunConfig) ([]RunResult, error)
 		defaultPersistOrigin = VarOriginCollection
 	}
 
-	results := make([]RunResult, 0)
-
-	if config.DataFile != "" {
-		dataResults, err := r.runWithData(ctx, requests, envVars, collectionVars, baseOrigins, defaultPersistOrigin, config)
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, dataResults...)
-	} else {
-		for iter := 0; iter < config.Iterations; iter++ {
-			result := r.runIteration(ctx, requests, baseVars, baseOrigins, defaultPersistOrigin, config, iter+1)
-			results = append(results, result)
-
-			if config.Delay > 0 && iter < config.Iterations-1 {
-				select {
-				case <-ctx.Done():
-					return results, ctx.Err()
-				case <-time.After(config.Delay):
-				}
-			}
-		}
-	}
-
-	return results, nil
+	return &runCollectionState{
+		requests:             requests,
+		envVars:              envVars,
+		collectionVars:       collectionVars,
+		baseVars:             baseVars,
+		baseOrigins:          baseOrigins,
+		defaultPersistOrigin: defaultPersistOrigin,
+	}, nil
 }
 
-func (r *Runner) runWithData(ctx context.Context, requests []*types.SavedRequest, envVars map[string]string, collectionVars map[string]string, baseOrigins map[string]VarOrigin, defaultPersistOrigin VarOrigin, config RunConfig) ([]RunResult, error) {
+func (r *Runner) runWithData(ctx context.Context, state *runCollectionState, config RunConfig, beforeIteration func() error, waitDelay func(time.Duration) error) ([]RunResult, error) {
 	loader, err := NewDataLoader(config.DataFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load data file: %w", err)
@@ -201,12 +327,17 @@ func (r *Runner) runWithData(ctx context.Context, requests []*types.SavedRequest
 	var results []RunResult
 
 	err = loader.Iterate(func(rowVars map[string]string) error {
+		if iteration > 1 {
+			if err := beforeIteration(); err != nil {
+				return err
+			}
+		}
 		mergedVars := make(map[string]string)
-		mergedOrigins := copyOriginMap(baseOrigins)
-		for k, v := range envVars {
+		mergedOrigins := copyOriginMap(state.baseOrigins)
+		for k, v := range state.envVars {
 			mergedVars[k] = v
 		}
-		for k, v := range collectionVars {
+		for k, v := range state.collectionVars {
 			mergedVars[k] = v
 		}
 		for k, v := range rowVars {
@@ -218,16 +349,12 @@ func (r *Runner) runWithData(ctx context.Context, requests []*types.SavedRequest
 			mergedOrigins[k] = VarOriginCLI
 		}
 
-		result := r.runIteration(ctx, requests, mergedVars, mergedOrigins, defaultPersistOrigin, config, iteration)
+		result := r.runIteration(ctx, state.requests, mergedVars, mergedOrigins, state.defaultPersistOrigin, config, iteration)
 		results = append(results, result)
 		iteration++
 
 		if config.Delay > 0 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(config.Delay):
-			}
+			return waitDelay(config.Delay)
 		}
 
 		return nil

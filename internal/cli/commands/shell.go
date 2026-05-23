@@ -196,6 +196,9 @@ func newShellSession(db storage.DB, envStorage shellEnvStore, in io.Reader, out 
 func (s *shellSession) Run(ctx context.Context) error {
 	defer s.closeTerminal()
 
+	watcher := s.startFileWatcher(ctx)
+	defer watcher.Stop()
+
 	fmt.Fprintln(s.out, "gurl shell")
 	fmt.Fprintln(s.out, "Type `help` for commands. This shell only uses typed commands.")
 
@@ -211,6 +214,7 @@ func (s *shellSession) Run(ctx context.Context) error {
 
 		line = strings.TrimSpace(line)
 		if line != "" {
+			s.refreshCurrentFromFileChanges(watcher)
 			shouldExit, execErr := s.executeLine(line)
 			if execErr != nil {
 				fmt.Fprintf(s.out, "error: %v\n", execErr)
@@ -225,6 +229,38 @@ func (s *shellSession) Run(ctx context.Context) error {
 			return nil
 		}
 	}
+}
+
+func (s *shellSession) startFileWatcher(ctx context.Context) *storage.CollectionWatcher {
+	store, ok := s.db.(storage.CollectionWatcherStore)
+	if !ok {
+		return nil
+	}
+	watcher, err := store.WatchCollections(ctx, storage.CollectionWatchOptions{})
+	if err != nil {
+		return nil
+	}
+	return watcher
+}
+
+func (s *shellSession) refreshCurrentFromFileChanges(watcher *storage.CollectionWatcher) {
+	if watcher == nil || !watcher.Changed() || s.current == nil || !s.persisted || s.dirty {
+		return
+	}
+
+	var (
+		req *types.SavedRequest
+		err error
+	)
+	if s.current.ID != "" {
+		req, err = s.db.GetRequest(s.current.ID)
+	} else {
+		req, err = s.db.GetRequestByName(s.current.Name)
+	}
+	if err != nil || req == nil {
+		return
+	}
+	s.current = cloneRequest(req)
 }
 
 func (s *shellSession) initTerminal() {
