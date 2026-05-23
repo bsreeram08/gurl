@@ -9,7 +9,7 @@ set -euo pipefail
 
 # Configuration
 REPO="bsreeram08/gurl"
-INSTALL_DIR="${HOME}/.local/bin"
+INSTALL_DIR="${INSTALL_DIR:-${HOME}/.local/bin}"
 VERSION="${VERSION:-latest}"
 
 # Colors
@@ -21,6 +21,62 @@ NC='\033[0m' # No Color
 log() { echo -e "${GREEN}[gurl]${NC} $1"; }
 warn() { echo -e "${YELLOW}[gurl]${NC} $1"; }
 error() { echo -e "${RED}[gurl]${NC} $1" >&2; }
+
+validate_release_tag() {
+    [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
+resolve_release_tag() {
+    local version="${1:-}"
+    local release_tag
+
+    version="${version#v}"
+    release_tag="v${version}"
+
+    if ! validate_release_tag "$release_tag"; then
+        error "Invalid version: ${1:-<empty>}"
+        return 1
+    fi
+
+    echo "$release_tag"
+}
+
+latest_release_tag_from_api() {
+    local body release_tag
+
+    if ! body=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest"); then
+        return 1
+    fi
+
+    release_tag=$(printf '%s\n' "$body" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+    release_tag="${release_tag//$'\r'/}"
+
+    if ! validate_release_tag "$release_tag"; then
+        return 1
+    fi
+
+    echo "$release_tag"
+}
+
+latest_release_tag_from_redirect() {
+    local location release_tag
+
+    location=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest")
+    release_tag="${location%%[?#]*}"
+    release_tag="${release_tag#*/releases/tag/}"
+
+    if [[ "$release_tag" == "$location" ]]; then
+        return 1
+    fi
+
+    release_tag="${release_tag%%/*}"
+
+    if ! validate_release_tag "$release_tag"; then
+        return 1
+    fi
+
+    echo "$release_tag"
+}
 
 # Detect OS and architecture
 detect_os() {
@@ -42,21 +98,32 @@ detect_arch() {
 
 # Get latest version tag
 get_latest_version() {
-    local version
-    version=$(curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
-    echo "${version#v}"
+    local release_tag
+
+    if release_tag=$(latest_release_tag_from_api); then
+        echo "$release_tag"
+        return 0
+    fi
+
+    if release_tag=$(latest_release_tag_from_redirect); then
+        echo "$release_tag"
+        return 0
+    fi
+
+    error "Unable to determine latest release version from GitHub"
+    return 1
 }
 
 # Download and install
 install() {
-    local os arch version filename url
+    local os arch release_tag filename url
     os=$(detect_os)
     arch=$(detect_arch)
     
     if [[ "${VERSION}" == "latest" ]]; then
-        version=$(get_latest_version)
+        release_tag=$(get_latest_version) || return 1
     else
-        version="${VERSION#v}"
+        release_tag=$(resolve_release_tag "${VERSION}") || return 1
     fi
     
     filename="gurl-${os}-${arch}"
@@ -64,18 +131,18 @@ install() {
         filename="${filename}.exe"
     fi
     
-    url="https://github.com/${REPO}/releases/download/v${version}/${filename}"
+    url="https://github.com/${REPO}/releases/download/${release_tag}/${filename}"
     
-    log "Downloading ${filename} (v${version})..."
+    log "Downloading ${filename} (${release_tag})..."
     
     # Create install directory
     mkdir -p "${INSTALL_DIR}"
     
     # Download
     if command -v curl >/dev/null 2>&1; then
-        curl -sL "${url}" -o "${INSTALL_DIR}/gurl"
+        curl -fsSL "${url}" -o "${INSTALL_DIR}/gurl" || return 1
     elif command -v wget >/dev/null 2>&1; then
-        wget -q "${url}" -O "${INSTALL_DIR}/gurl"
+        wget -q "${url}" -O "${INSTALL_DIR}/gurl" || return 1
     else
         error "Neither curl nor wget found. Please install one of them."
         exit 1
@@ -84,7 +151,7 @@ install() {
     # Make executable
     chmod +x "${INSTALL_DIR}/gurl"
     
-    log "Installed gurl v${version} to ${INSTALL_DIR}/gurl"
+    log "Installed gurl ${release_tag} to ${INSTALL_DIR}/gurl"
     
     # Check if install dir is in PATH
     if [[ ":${PATH}:" != *":${INSTALL_DIR}:"* ]]; then
@@ -119,4 +186,6 @@ main() {
     log "Run 'gurl --help' to get started!"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
