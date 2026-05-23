@@ -93,7 +93,7 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 			persistEnvName := ""
 			if c.Bool("persist") {
 				var err error
-				persistEnvName, err = env.ResolvePersistEnvironmentName(envStorage, c.String("env"))
+				persistEnvName, err = env.ResolveOptionalPersistEnvironmentName(envStorage, c.String("env"))
 				if err != nil {
 					return cli.Exit(err.Error(), 2)
 				}
@@ -170,15 +170,15 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 
 			printSummary(os.Stdout, results)
 			if c.Bool("persist") {
-				dirtyVars := CollectDirtyVarsForPersist(results)
-				persisted, err := env.PersistVariables(envStorage, persistEnvName, dirtyVars)
+				dirtyVars, dirtyOrigins := CollectDirtyVarsWithOrigins(results)
+				collectionStore, _ := db.(storage.CollectionStore)
+				persisted, err := PersistDirtyVariables(envStorage, collectionStore, persistEnvName, name, dirtyVars, dirtyOrigins)
 				if err != nil {
 					return err
 				}
-				targetEnv, _ := envStorage.GetEnvByName(persistEnvName)
-				PrintPersistSummary(os.Stdout, persistEnvName, persisted, targetEnv)
+				PrintPersistSummaries(os.Stdout, persisted)
 				if collectionRunAborted(results) {
-					fmt.Fprintf(os.Stdout, "Run aborted after persisting %d variables.\n", len(persisted))
+					fmt.Fprintf(os.Stdout, "Run aborted after persisting %d variables.\n", len(dirtyVars))
 				}
 			}
 

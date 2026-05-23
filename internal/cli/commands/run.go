@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -126,11 +127,11 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 			persistEnvName := ""
 			if c.Bool("persist") {
 				var err error
-				persistEnvName, err = env.ResolvePersistEnvironmentName(envStorage, requestedEnv)
+				persistEnvName, err = env.ResolveOptionalPersistEnvironmentName(envStorage, requestedEnv)
 				if err != nil {
 					return cli.Exit(err.Error(), 2)
 				}
-				if requestedEnv == "" {
+				if requestedEnv == "" && persistEnvName != "" {
 					requestedEnv = persistEnvName
 				}
 			}
@@ -157,46 +158,86 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 					cliVars[pair[:idx]] = pair[idx+1:]
 				}
 			}
-			baseVars := mergeRunVars(envVars, cliVars)
 
 			if dataFile != "" {
 				return executeDataDriven(ctx, db, envStorage, name, envVars, cliVars, c, persistEnvName)
 			}
 
 			if enableChain {
-				return executeChain(ctx, db, envStorage, name, baseVars, c, persistEnvName)
+				return executeChain(ctx, db, envStorage, name, envVars, cliVars, c, persistEnvName)
 			}
 
-			return executeSingleRequest(ctx, db, envStorage, name, baseVars, c, persistEnvName)
+			return executeSingleRequest(ctx, db, envStorage, name, envVars, cliVars, c, persistEnvName)
 		},
 	}
 }
 
-func mergeRunVars(maps ...map[string]string) map[string]string {
-	merged := make(map[string]string)
-	for _, vars := range maps {
-		for key, value := range vars {
-			merged[key] = value
+func requestVarsAndOrigins(db storage.DB, req *types.SavedRequest, envVars map[string]string, cliVars map[string]string, rowVars map[string]string) (map[string]string, map[string]runner.VarOrigin, runner.VarOrigin) {
+	vars := make(map[string]string)
+	origins := make(map[string]runner.VarOrigin)
+	for key, value := range envVars {
+		vars[key] = value
+		origins[key] = runner.VarOriginEnvironment
+	}
+
+	if req != nil && req.Collection != "" {
+		if collectionStore, ok := db.(storage.CollectionStore); ok {
+			if collection, err := collectionStore.GetCollectionByName(req.Collection); err == nil && collection != nil {
+				keys := sortedStringKeys(collection.Variables)
+				for _, key := range keys {
+					vars[key] = env.Resolve(collection.Variables[key], envVars)
+					origins[key] = runner.VarOriginCollection
+				}
+			}
 		}
 	}
-	return merged
+
+	for key, value := range rowVars {
+		vars[key] = value
+		origins[key] = runner.VarOriginData
+	}
+	for key, value := range cliVars {
+		vars[key] = value
+		origins[key] = runner.VarOriginCLI
+	}
+
+	defaultPersistOrigin := runner.VarOriginEnvironment
+	if req != nil && req.Collection != "" {
+		defaultPersistOrigin = runner.VarOriginCollection
+	}
+	return vars, origins, defaultPersistOrigin
 }
 
-func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, vars map[string]string, c *cli.Command, persistEnvName string) error {
+func sortedStringKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, envVars map[string]string, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
 	currentName := name
 	visited := make(map[string]bool)
 	singleRunner := runner.NewRunner(db, envStorage)
 	var chainAssertionErr error
 	dirtyForPersist := make(map[string]string)
+	dirtyOriginsForPersist := make(map[string]runner.VarOrigin)
+	dirtyCollectionTargets := make(map[string]string)
+	var vars map[string]string
+	var origins map[string]runner.VarOrigin
+	defaultPersistOrigin := runner.VarOriginEnvironment
+	currentCollectionName := ""
 	chainStarted := false
 	finish := func(err error) error {
-		if persistEnvName != "" && chainStarted {
-			persisted, persistErr := env.PersistVariables(envStorage, persistEnvName, dirtyForPersist)
+		if c.Bool("persist") && chainStarted {
+			collectionStore, _ := db.(storage.CollectionStore)
+			persisted, persistErr := runner.PersistDirtyVariablesWithCollectionTargets(envStorage, collectionStore, persistEnvName, currentCollectionName, dirtyForPersist, dirtyOriginsForPersist, dirtyCollectionTargets)
 			if persistErr != nil {
 				return persistErr
 			}
-			targetEnv, _ := envStorage.GetEnvByName(persistEnvName)
-			runner.PrintPersistSummary(os.Stdout, persistEnvName, persisted, targetEnv)
+			runner.PrintPersistSummaries(os.Stdout, persisted)
 		}
 		return err
 	}
@@ -212,6 +253,17 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 			return finish(fmt.Errorf("next request loop detected: %q would revisit an already executed request", currentName))
 		}
 		visited[currentName] = true
+		if c.Bool("persist") && req.Collection == "" && persistEnvName == "" {
+			return finish(fmt.Errorf("--persist requires --env or an active environment"))
+		}
+		vars, origins, defaultPersistOrigin = requestVarsAndOrigins(db, req, envVars, cliVars, nil)
+		for key, value := range dirtyForPersist {
+			vars[key] = value
+			if origin, ok := dirtyOriginsForPersist[key]; ok {
+				origins[key] = origin
+			}
+		}
+		currentCollectionName = req.Collection
 
 		if timeoutStr := c.String("timeout"); timeoutStr != "" {
 			if _, err := time.ParseDuration(timeoutStr); err != nil {
@@ -226,11 +278,20 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 			}
 		}
 
-		execution := singleRunner.RunSavedRequest(ctx, req, vars)
+		execution := singleRunner.RunSavedRequestWithOrigins(ctx, req, vars, origins, defaultPersistOrigin)
 		chainStarted = true
 		for key, value := range execution.Result.DirtyVars {
 			vars[key] = value
 			dirtyForPersist[key] = value
+			if origin, ok := execution.Result.DirtyVarOrigins[key]; ok {
+				origins[key] = origin
+				dirtyOriginsForPersist[key] = origin
+				if origin != runner.VarOriginEnvironment && req.Collection != "" {
+					dirtyCollectionTargets[key] = req.Collection
+				} else {
+					delete(dirtyCollectionTargets, key)
+				}
+			}
 		}
 		if execution.Result.Error != "" {
 			return finish(fmt.Errorf("%s", execution.Result.Error))
@@ -292,10 +353,13 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 	return finish(fmt.Errorf("max iterations (%d) reached", maxChainIterations))
 }
 
-func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, vars map[string]string, c *cli.Command, persistEnvName string) error {
+func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, envVars map[string]string, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
+	}
+	if c.Bool("persist") && req.Collection == "" && persistEnvName == "" {
+		return fmt.Errorf("--persist requires --env or an active environment")
 	}
 
 	if timeoutStr := c.String("timeout"); timeoutStr != "" {
@@ -304,16 +368,17 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.En
 		req = &copy
 	}
 
-	execution := runner.NewRunner(db, envStorage).RunSavedRequest(ctx, req, vars)
-	if persistEnvName != "" {
-		persisted, persistErr := env.PersistVariables(envStorage, persistEnvName, execution.Result.DirtyVars)
+	vars, origins, defaultPersistOrigin := requestVarsAndOrigins(db, req, envVars, cliVars, nil)
+	execution := runner.NewRunner(db, envStorage).RunSavedRequestWithOrigins(ctx, req, vars, origins, defaultPersistOrigin)
+	if c.Bool("persist") {
+		collectionStore, _ := db.(storage.CollectionStore)
+		persisted, persistErr := runner.PersistDirtyVariables(envStorage, collectionStore, persistEnvName, req.Collection, execution.Result.DirtyVars, execution.Result.DirtyVarOrigins)
 		if persistErr != nil {
 			return persistErr
 		}
-		targetEnv, _ := envStorage.GetEnvByName(persistEnvName)
-		runner.PrintPersistSummary(os.Stdout, persistEnvName, persisted, targetEnv)
-		if execution.Result.Error != "" && len(persisted) > 0 {
-			fmt.Fprintf(os.Stdout, "Run aborted after persisting %d variables.\n", len(persisted))
+		runner.PrintPersistSummaries(os.Stdout, persisted)
+		if execution.Result.Error != "" && len(execution.Result.DirtyVars) > 0 {
+			fmt.Fprintf(os.Stdout, "Run aborted after persisting %d variables.\n", len(execution.Result.DirtyVars))
 		}
 	}
 	if execution.Result.Error != "" {
@@ -440,6 +505,9 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvSt
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
 	}
+	if c.Bool("persist") && req.Collection == "" && persistEnvName == "" {
+		return fmt.Errorf("--persist requires --env or an active environment")
+	}
 	if timeoutStr := c.String("timeout"); timeoutStr != "" {
 		if _, err := time.ParseDuration(timeoutStr); err != nil {
 			return fmt.Errorf("invalid timeout format '%s': %w", timeoutStr, err)
@@ -464,11 +532,11 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvSt
 
 	rowNum := 0
 	dirtyForPersist := make(map[string]string)
+	dirtyOriginsForPersist := make(map[string]runner.VarOrigin)
 	singleRunner := runner.NewRunner(db, envStorage)
 	err = loader.Iterate(func(rowVars map[string]string) error {
 		rowNum++
 
-		mergedVars := mergeRunVars(envVars, rowVars, cliVars)
 		effectiveReq := req
 		if timeoutStr := c.String("timeout"); timeoutStr != "" {
 			copy := *req
@@ -476,9 +544,13 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvSt
 			effectiveReq = &copy
 		}
 
-		execution := singleRunner.RunSavedRequest(ctx, effectiveReq, mergedVars)
+		mergedVars, origins, defaultPersistOrigin := requestVarsAndOrigins(db, effectiveReq, envVars, cliVars, rowVars)
+		execution := singleRunner.RunSavedRequestWithOrigins(ctx, effectiveReq, mergedVars, origins, defaultPersistOrigin)
 		for key, value := range execution.Result.DirtyVars {
 			dirtyForPersist[key] = value
+			if origin, ok := execution.Result.DirtyVarOrigins[key]; ok {
+				dirtyOriginsForPersist[key] = origin
+			}
 		}
 		if execution.Result.Error != "" {
 			fmt.Fprintf(os.Stderr, "Row %d: request failed: %v\n", rowNum, execution.Result.Error)
@@ -509,13 +581,13 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvSt
 	if err != nil {
 		return fmt.Errorf("data iteration failed: %w", err)
 	}
-	if persistEnvName != "" {
-		persisted, persistErr := env.PersistVariables(envStorage, persistEnvName, dirtyForPersist)
+	if c.Bool("persist") {
+		collectionStore, _ := db.(storage.CollectionStore)
+		persisted, persistErr := runner.PersistDirtyVariables(envStorage, collectionStore, persistEnvName, req.Collection, dirtyForPersist, dirtyOriginsForPersist)
 		if persistErr != nil {
 			return persistErr
 		}
-		targetEnv, _ := envStorage.GetEnvByName(persistEnvName)
-		runner.PrintPersistSummary(os.Stdout, persistEnvName, persisted, targetEnv)
+		runner.PrintPersistSummaries(os.Stdout, persisted)
 	}
 
 	return nil

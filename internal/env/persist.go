@@ -28,6 +28,20 @@ func ResolvePersistEnvironmentName(store ActiveEnvStore, explicitName string) (s
 	return activeName, nil
 }
 
+func ResolveOptionalPersistEnvironmentName(store ActiveEnvStore, explicitName string) (string, error) {
+	if explicitName != "" {
+		return explicitName, nil
+	}
+	if store == nil {
+		return "", nil
+	}
+	activeName, err := store.GetActiveEnv()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve active environment for --persist: %w", err)
+	}
+	return activeName, nil
+}
+
 func PersistVariables(store PersistStore, envName string, vars map[string]string) (map[string]string, error) {
 	if envName == "" {
 		return nil, fmt.Errorf("--persist requires --env or an active environment")

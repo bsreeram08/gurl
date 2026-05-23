@@ -109,6 +109,57 @@ type Collection struct {
 	UpdatedAt  int64             `json:"updated_at"`
 }
 
+// NewCollection creates a collection with generated ID, initialized metadata,
+// and empty variable maps.
+func NewCollection(name string) *Collection {
+	now := time.Now().Unix()
+	return &Collection{
+		ID:         uuid.New().String(),
+		Name:       name,
+		Variables:  make(map[string]string),
+		SecretKeys: make(map[string]bool),
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+}
+
+func (c *Collection) SetVariable(key, value string) {
+	if c.Variables == nil {
+		c.Variables = make(map[string]string)
+	}
+	c.Variables[key] = value
+	if c.SecretKeys != nil {
+		delete(c.SecretKeys, key)
+	}
+	c.UpdatedAt = time.Now().Unix()
+}
+
+func (c *Collection) SetSecretVariable(key, value string) {
+	if c.Variables == nil {
+		c.Variables = make(map[string]string)
+	}
+	if c.SecretKeys == nil {
+		c.SecretKeys = make(map[string]bool)
+	}
+	c.Variables[key] = value
+	c.SecretKeys[key] = true
+	c.UpdatedAt = time.Now().Unix()
+}
+
+func (c *Collection) DeleteVariable(key string) {
+	if c.Variables != nil {
+		delete(c.Variables, key)
+	}
+	if c.SecretKeys != nil {
+		delete(c.SecretKeys, key)
+	}
+	c.UpdatedAt = time.Now().Unix()
+}
+
+func (c *Collection) IsSecret(key string) bool {
+	return c != nil && c.SecretKeys != nil && c.SecretKeys[key]
+}
+
 // Config represents the application configuration
 type Config struct {
 	General struct {

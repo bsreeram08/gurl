@@ -5,10 +5,12 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 )
@@ -166,6 +168,43 @@ func TestCollectionAddCommand(t *testing.T) {
 	err := cmd.Run(context.Background(), []string{"collection", "add", "newcollection"})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCollectionCreateAndShowVariables(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	cmd := CollectionCommand(db, env.NewEnvStorage(db))
+	if err := cmd.Run(context.Background(), []string{
+		"collection", "create", "payments",
+		"--var", "BASE_URL=https://api.example.com",
+		"--secret", "API_KEY=secret-value",
+	}); err != nil {
+		t.Fatalf("collection create failed: %v", err)
+	}
+
+	collection, err := db.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("failed to load collection: %v", err)
+	}
+	if collection.Variables["BASE_URL"] != "https://api.example.com" || collection.Variables["API_KEY"] != "secret-value" || !collection.IsSecret("API_KEY") {
+		t.Fatalf("collection variables mismatch: %+v", collection)
+	}
+
+	output := captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"collection", "show", "payments"}); err != nil {
+			t.Fatalf("collection show failed: %v", err)
+		}
+	})
+	if !strings.Contains(output, "BASE_URL = https://api.example.com") || !strings.Contains(output, "API_KEY = *****") {
+		t.Fatalf("expected variables with masked secret, got:\n%s", output)
+	}
+	if strings.Contains(output, "secret-value") {
+		t.Fatalf("collection show leaked secret value:\n%s", output)
 	}
 }
 
