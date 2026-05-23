@@ -141,12 +141,8 @@ func TestFileStoreUnlocksPassphraseCollectionToLocalKey(t *testing.T) {
 		t.Fatalf("failed to write collection file: %v", err)
 	}
 
-	locked, err := store.GetCollectionByName("shared")
-	if err != nil {
-		t.Fatalf("GetCollectionByName failed: %v", err)
-	}
-	if !IsCollectionEncryptedValue(locked.Variables["TOKEN"]) {
-		t.Fatalf("expected collection to start locked, got %q", locked.Variables["TOKEN"])
+	if _, err := store.GetCollectionByName("shared"); !IsCollectionLocked(err) {
+		t.Fatalf("expected collection to start locked, got %v", err)
 	}
 
 	if err := store.UnlockCollection("shared", "team-pass"); err != nil {
@@ -169,5 +165,131 @@ func TestFileStoreUnlocksPassphraseCollectionToLocalKey(t *testing.T) {
 	}
 	if strings.Contains(string(rawData), "shared-secret") {
 		t.Fatal("unlocked collection should be re-encrypted with local key")
+	}
+}
+
+func TestFileStoreMissingLocalCollectionKeyFailsLocked(t *testing.T) {
+	proj, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	store := NewFileStore(proj)
+
+	collection := types.NewCollection("cloned")
+	collection.SetSecretVariable("TOKEN", "local-secret")
+	if err := store.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	if err := store.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "uses secret",
+		URL:        "https://example.com/{{TOKEN}}",
+		Collection: "cloned",
+	}); err != nil {
+		t.Fatalf("SaveRequest failed: %v", err)
+	}
+
+	collectionPath, err := store.CollectionPath("cloned")
+	if err != nil {
+		t.Fatalf("CollectionPath failed: %v", err)
+	}
+	if err := os.Remove(filepath.Join(collectionPath, collectionKeyFileName)); err != nil {
+		t.Fatalf("failed to remove collection key: %v", err)
+	}
+
+	if _, err := store.GetCollectionByName("cloned"); !IsCollectionLocked(err) {
+		t.Fatalf("expected locked collection error, got %v", err)
+	}
+	if _, err := store.GetRequestByName("uses secret"); !IsCollectionLocked(err) {
+		t.Fatalf("expected request lookup to fail locked, got %v", err)
+	}
+	if _, err := store.ListRequests(&ListOptions{Collection: "cloned"}); !IsCollectionLocked(err) {
+		t.Fatalf("expected request list to fail locked, got %v", err)
+	}
+}
+
+func TestProjectDBDoesNotFallbackToDBForLockedCollection(t *testing.T) {
+	base := NewLMDBWithPath(filepath.Join(t.TempDir(), "gurl.db"))
+	if err := base.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer base.Close()
+	if err := base.SaveRequest(&types.SavedRequest{
+		ID:         "db-req",
+		Name:       "uses secret",
+		URL:        "https://db.example.com",
+		Collection: "cloned",
+	}); err != nil {
+		t.Fatalf("base SaveRequest failed: %v", err)
+	}
+	if err := base.SaveRequest(&types.SavedRequest{
+		ID:         "file-req",
+		Name:       "file shadow",
+		URL:        "https://db-shadow.example.com",
+		Collection: "cloned",
+	}); err != nil {
+		t.Fatalf("base shadow SaveRequest failed: %v", err)
+	}
+
+	proj, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	fileStore := NewFileStore(proj)
+	collection := types.NewCollection("cloned")
+	collection.SetSecretVariable("TOKEN", "local-secret")
+	if err := fileStore.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	if err := fileStore.SaveRequest(&types.SavedRequest{
+		ID:         "file-req",
+		Name:       "uses secret",
+		URL:        "https://file.example.com/{{TOKEN}}",
+		Collection: "cloned",
+	}); err != nil {
+		t.Fatalf("file SaveRequest failed: %v", err)
+	}
+	collectionPath, err := fileStore.CollectionPath("cloned")
+	if err != nil {
+		t.Fatalf("CollectionPath failed: %v", err)
+	}
+	if err := os.Remove(filepath.Join(collectionPath, collectionKeyFileName)); err != nil {
+		t.Fatalf("failed to remove collection key: %v", err)
+	}
+
+	db := NewProjectDB(base, fileStore)
+	if _, err := db.GetRequestByName("uses secret"); !IsCollectionLocked(err) {
+		t.Fatalf("expected locked collection error instead of DB fallback, got %v", err)
+	}
+	if err := db.SaveRequest(&types.SavedRequest{
+		ID:         "new-req",
+		Name:       "new request",
+		URL:        "https://new.example.com/{{TOKEN}}",
+		Collection: "cloned",
+	}); !IsCollectionLocked(err) {
+		t.Fatalf("expected SaveRequest to fail locked, got %v", err)
+	}
+	if err := db.UpdateRequest(&types.SavedRequest{
+		ID:         "file-req",
+		Name:       "uses secret",
+		URL:        "https://updated.example.com/{{TOKEN}}",
+		Collection: "cloned",
+	}); !IsCollectionLocked(err) {
+		t.Fatalf("expected UpdateRequest to fail locked, got %v", err)
+	}
+	if err := db.DeleteRequest("file-req"); !IsCollectionLocked(err) {
+		t.Fatalf("expected DeleteRequest to fail locked, got %v", err)
+	}
+	if _, err := base.GetRequest("file-req"); err != nil {
+		t.Fatalf("expected DB shadow row to survive locked delete attempt: %v", err)
+	}
+	if err := db.SaveCollection(collection); !IsCollectionLocked(err) {
+		t.Fatalf("expected SaveCollection to fail locked, got %v", err)
+	}
+	if err := db.UpdateCollection(collection); !IsCollectionLocked(err) {
+		t.Fatalf("expected UpdateCollection to fail locked, got %v", err)
+	}
+	if err := db.DeleteCollection(collection.ID); !IsCollectionLocked(err) {
+		t.Fatalf("expected DeleteCollection to fail locked, got %v", err)
 	}
 }

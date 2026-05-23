@@ -236,6 +236,87 @@ func TestCollectionExportImportRoundTripEncryptsSecrets(t *testing.T) {
 	}
 }
 
+func TestCollectionImportForceReusesExistingRequestID(t *testing.T) {
+	sourceBase := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "source.db"))
+	if err := sourceBase.Open(); err != nil {
+		t.Fatalf("failed to open source db: %v", err)
+	}
+	defer sourceBase.Close()
+	sourceProject, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("source Init failed: %v", err)
+	}
+	sourceDB := storage.NewProjectDB(sourceBase, storage.NewFileStore(sourceProject))
+	if err := sourceDB.SaveCollection(types.NewCollection("payments")); err != nil {
+		t.Fatalf("source SaveCollection failed: %v", err)
+	}
+	if err := sourceDB.SaveRequest(&types.SavedRequest{
+		ID:         "exported-id",
+		Name:       "list payments",
+		URL:        "https://new.example.com/payments",
+		Method:     "GET",
+		Collection: "payments",
+	}); err != nil {
+		t.Fatalf("source SaveRequest failed: %v", err)
+	}
+
+	exportPath := filepath.Join(t.TempDir(), "payments.gurl")
+	exportCmd := CollectionCommand(sourceDB, &env.EnvStorage{})
+	if err := exportCmd.Run(context.Background(), []string{"collection", "export", "payments", "--output", exportPath}); err != nil {
+		t.Fatalf("collection export failed: %v", err)
+	}
+
+	targetBase := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "target.db"))
+	if err := targetBase.Open(); err != nil {
+		t.Fatalf("failed to open target db: %v", err)
+	}
+	defer targetBase.Close()
+	targetProject, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("target Init failed: %v", err)
+	}
+	targetStore := storage.NewFileStore(targetProject)
+	targetDB := storage.NewProjectDB(targetBase, targetStore)
+	if err := targetDB.SaveCollection(types.NewCollection("payments")); err != nil {
+		t.Fatalf("target SaveCollection failed: %v", err)
+	}
+	if err := targetDB.SaveRequest(&types.SavedRequest{
+		ID:         "existing-id",
+		Name:       "list payments",
+		URL:        "https://old.example.com/payments",
+		Method:     "GET",
+		Collection: "payments",
+	}); err != nil {
+		t.Fatalf("target SaveRequest failed: %v", err)
+	}
+
+	importCmd := CollectionCommand(targetDB, &env.EnvStorage{})
+	if err := importCmd.Run(context.Background(), []string{"collection", "import", exportPath, "--force"}); err != nil {
+		t.Fatalf("collection import --force failed: %v", err)
+	}
+
+	loaded, err := targetDB.GetRequestByName("list payments")
+	if err != nil {
+		t.Fatalf("GetRequestByName failed: %v", err)
+	}
+	if loaded.ID != "existing-id" {
+		t.Fatalf("expected forced import to reuse existing ID, got %q", loaded.ID)
+	}
+	if loaded.URL != "https://new.example.com/payments" {
+		t.Fatalf("expected request to be overwritten, got %s", loaded.URL)
+	}
+	requests, err := targetDB.ListRequests(&storage.ListOptions{Collection: "payments"})
+	if err != nil {
+		t.Fatalf("ListRequests failed: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("expected one request after forced overwrite, got %+v", requests)
+	}
+	if _, err := targetDB.GetRequest("exported-id"); err == nil {
+		t.Fatal("expected exported ID not to create a second request")
+	}
+}
+
 func TestCollectionPassphraseUsesEnvFallback(t *testing.T) {
 	t.Setenv("GURL_IMPORT_PASSPHRASE", "env-pass")
 

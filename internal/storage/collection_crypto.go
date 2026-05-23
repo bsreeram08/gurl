@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,23 @@ const (
 
 func IsCollectionEncryptedValue(value string) bool {
 	return secrets.IsEncryptedValue(value)
+}
+
+type CollectionLockedError struct {
+	Name string
+	Hint string
+}
+
+func (e *CollectionLockedError) Error() string {
+	if e.Hint == "" {
+		return fmt.Sprintf("collection %q has locked secrets", e.Name)
+	}
+	return fmt.Sprintf("collection %q has locked secrets: %s", e.Name, e.Hint)
+}
+
+func IsCollectionLocked(err error) bool {
+	var locked *CollectionLockedError
+	return errors.As(err, &locked)
 }
 
 func (s *FileStore) collectionForStorage(collection *types.Collection, dir string) (*types.Collection, error) {
@@ -68,13 +86,19 @@ func (s *FileStore) decryptCollectionForUse(collection *types.Collection, dir st
 	}
 
 	if collection.Encryption != nil && collection.Encryption.Mode == CollectionEncryptionModePassphrase {
-		return nil
+		return &CollectionLockedError{
+			Name: collection.Name,
+			Hint: fmt.Sprintf("run 'gurl collection unlock %s --passphrase ...' before using it", collection.Name),
+		}
 	}
 
 	key, err := s.readCollectionKey(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return &CollectionLockedError{
+				Name: collection.Name,
+				Hint: "missing collection.key; restore the local key or re-import a passphrase-protected export",
+			}
 		}
 		return err
 	}
@@ -85,7 +109,7 @@ func (s *FileStore) UnlockCollection(name string, passphrase string) error {
 	if passphrase == "" {
 		return fmt.Errorf("passphrase is required")
 	}
-	collection, dir, err := s.findCollectionByName(name)
+	collection, dir, err := s.findRawCollectionByName(name)
 	if err != nil {
 		return fmt.Errorf("collection not found: %s", name)
 	}
@@ -106,7 +130,7 @@ func (s *FileStore) UnlockCollection(name string, passphrase string) error {
 	if _, err := secrets.GetOrCreateKeyAt(localKeyPath); err != nil {
 		return err
 	}
-	return s.SaveCollection(collection)
+	return s.saveCollection(collection, true)
 }
 
 func (s *FileStore) getOrCreateCollectionKey(dir string) ([]byte, error) {

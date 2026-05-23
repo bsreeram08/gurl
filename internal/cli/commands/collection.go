@@ -454,10 +454,17 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 			skipped := 0
 			for _, req := range requests {
 				req.Collection = collection.Name
-				if !c.Bool("force") {
-					if existing, err := db.GetRequestByName(req.Name); err == nil && existing != nil {
+				if existing, err := db.GetRequestByName(req.Name); err == nil && existing != nil {
+					if !c.Bool("force") {
 						skipped++
 						continue
+					}
+					req.ID = existing.ID
+					if req.CreatedAt == 0 {
+						req.CreatedAt = existing.CreatedAt
+					}
+					if err := db.DeleteRequest(existing.ID); err != nil {
+						return fmt.Errorf("failed to overwrite request %q: %w", req.Name, err)
 					}
 				}
 				if err := db.SaveRequest(req); err != nil {
