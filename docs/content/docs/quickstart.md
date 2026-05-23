@@ -159,5 +159,5 @@ gurl import my-api.json
 ## Next Steps
 
 - Explore [all CLI commands](/cli/) for advanced usage
-- Learn about [authentication handlers](/docs/authentication/) for API security
-- Set up [plugins](/docs/plugins/) to extend Gurl
+- Learn about [authentication](/cli/auth/) with `gurl auth list` and `gurl auth info <type>`
+- Read about the [plugin system](/architecture/plugin-system/) for extending gurl

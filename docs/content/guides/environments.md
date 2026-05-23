@@ -32,13 +32,6 @@ Set the active environment with `gurl env switch`:
 gurl env switch staging
 ```
 
-View the current environment:
-
-```bash
-gurl env current
-# Output: staging
-```
-
 List all environments:
 
 ```bash
@@ -106,9 +99,6 @@ Secrets are encrypted at rest using AES-256-GCM. The encryption key is derived f
 | `gurl env create <name>` | Create a new environment |
 | `gurl env list` | List all environments |
 | `gurl env switch <name>` | Switch active environment |
-| `gurl env current` | Show current environment |
 | `gurl env delete <name>` | Delete an environment |
-| `gurl env export <name>` | Export environment variables |
 | `gurl env import --file <path>` | Import from .env file |
-| `gurl env set <key> <value>` | Set a variable in active env |
-| `gurl env unset <key>` | Remove a variable |
+| `gurl env set <env> KEY=VALUE` | Set a variable in an environment |
