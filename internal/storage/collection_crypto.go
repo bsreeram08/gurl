@@ -42,6 +42,17 @@ func IsCollectionLocked(err error) bool {
 }
 
 func (s *FileStore) collectionForStorage(collection *types.Collection, dir string) (*types.Collection, error) {
+	if !collectionHasSecrets(collection) {
+		return collectionForLocalKeyStorage(collection, nil)
+	}
+	key, err := s.getOrCreateCollectionKey(dir)
+	if err != nil {
+		return nil, err
+	}
+	return collectionForLocalKeyStorage(collection, key)
+}
+
+func collectionForLocalKeyStorage(collection *types.Collection, key []byte) (*types.Collection, error) {
 	stored := cloneCollectionForStorage(collection)
 	if !collectionHasSecrets(stored) {
 		stored.Encryption = nil
@@ -55,10 +66,6 @@ func (s *FileStore) collectionForStorage(collection *types.Collection, dir strin
 		}
 	}
 
-	key, err := s.getOrCreateCollectionKey(dir)
-	if err != nil {
-		return nil, err
-	}
 	if err := encryptCollectionSecrets(stored, key); err != nil {
 		return nil, err
 	}
@@ -150,6 +157,51 @@ func (s *FileStore) readCollectionKey(dir string) ([]byte, error) {
 
 func collectionKeyPath(dir string) string {
 	return filepath.Join(dir, collectionKeyFileName)
+}
+
+func collectionLocalKeyPath(id string) (string, error) {
+	if id == "" {
+		return "", fmt.Errorf("collection ID is required")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, ".local", "share", "gurl", "keys", safePathComponent(id)+".key"), nil
+}
+
+func getOrCreateCollectionLocalKey(id string) ([]byte, error) {
+	path, err := collectionLocalKeyPath(id)
+	if err != nil {
+		return nil, err
+	}
+	return secrets.GetOrCreateKeyAt(path)
+}
+
+func readCollectionLocalKey(id string) ([]byte, error) {
+	path, err := collectionLocalKeyPath(id)
+	if err != nil {
+		return nil, err
+	}
+	key, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(key) != secrets.KeySize {
+		return nil, fmt.Errorf("invalid collection key size")
+	}
+	return key, nil
+}
+
+func removeCollectionLocalKey(id string) error {
+	path, err := collectionLocalKeyPath(id)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func encryptCollectionSecrets(collection *types.Collection, key []byte) error {
