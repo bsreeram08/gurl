@@ -83,6 +83,12 @@ gurl collection run "checkout-flow" --env staging --persist
 
 CLI variables, environment inputs, and data-row values are not written back unless extraction or a script changes the same key.
 
+## File-Backed Reloads
+
+When a project uses file-backed collections, long-running collection runs watch the collection files while the run is active. Changes are debounced before reload so partially written files are not read.
+
+The active iteration always uses a stable snapshot. If request files, collection variables, or sequence order change during an iteration, the current iteration continues with the snapshot it started with. Future iterations, including future data rows in a data-driven run, reload the collection after the debounced change event. Added, removed, renamed, or reordered requests affect only those later iterations.
+
 ## Dry Run
 
 Preview a collection flow without sending requests:
