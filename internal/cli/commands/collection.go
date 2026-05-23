@@ -22,6 +22,20 @@ var collectionDeleteIsInteractive = func() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
+var collectionPassphraseIsInteractive = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+var readCollectionPassphrase = func(prompt string) (string, error) {
+	fmt.Fprint(os.Stderr, prompt)
+	value, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
+		return "", fmt.Errorf("failed to read passphrase: %w", err)
+	}
+	return string(value), nil
+}
+
 // CollectionCommand creates the collection command.
 func CollectionCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 	return &cli.Command{
@@ -344,7 +358,10 @@ func collectionUnlockCommand(db storage.DB) *cli.Command {
 			if !ok {
 				return fmt.Errorf("collection unlock requires project file storage")
 			}
-			passphrase := collectionPassphrase(c)
+			passphrase, err := collectionPassphrase(c, fmt.Sprintf("Passphrase for collection %q: ", args.Get(0)))
+			if err != nil {
+				return err
+			}
 			if err := unlocker.UnlockCollection(args.Get(0), passphrase); err != nil {
 				return err
 			}
@@ -387,7 +404,14 @@ func collectionExportCommand(db storage.DB) *cli.Command {
 				collection = types.NewCollection(name)
 			}
 
-			exportData, err := storage.BuildCollectionExport(collection, requests, collectionPassphrase(c))
+			passphrase := collectionPassphraseValue(c)
+			if passphrase == "" && collectionHasSecretVariables(collection) {
+				passphrase, err = collectionPassphrase(c, fmt.Sprintf("Passphrase for exporting collection %q: ", name))
+				if err != nil {
+					return err
+				}
+			}
+			exportData, err := storage.BuildCollectionExport(collection, requests, passphrase)
 			if err != nil {
 				return err
 			}
@@ -436,7 +460,15 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to read collection export: %w", err)
 			}
-			collection, requests, err := storage.ParseCollectionExport(data, collectionPassphrase(c))
+			passphrase := collectionPassphraseValue(c)
+			collection, requests, err := storage.ParseCollectionExport(data, passphrase)
+			if err != nil && passphrase == "" && isCollectionImportPassphraseRequired(err) && collectionPassphraseIsInteractive() {
+				passphrase, err = collectionPassphrase(c, "Passphrase for collection import: ")
+				if err != nil {
+					return err
+				}
+				collection, requests, err = storage.ParseCollectionExport(data, passphrase)
+			}
 			if err != nil {
 				return err
 			}
@@ -530,11 +562,44 @@ func saveCollectionRecord(db storage.DB, collection *types.Collection, allowLock
 	return store.SaveCollection(collection)
 }
 
-func collectionPassphrase(c *cli.Command) string {
+func collectionPassphraseValue(c *cli.Command) string {
 	if passphrase := c.String("passphrase"); passphrase != "" {
 		return passphrase
 	}
 	return os.Getenv("GURL_IMPORT_PASSPHRASE")
+}
+
+func collectionPassphrase(c *cli.Command, prompt string) (string, error) {
+	if passphrase := collectionPassphraseValue(c); passphrase != "" {
+		return passphrase, nil
+	}
+	if !collectionPassphraseIsInteractive() {
+		return "", nil
+	}
+	passphrase, err := readCollectionPassphrase(prompt)
+	if err != nil {
+		return "", err
+	}
+	if passphrase == "" {
+		return "", fmt.Errorf("passphrase cannot be empty")
+	}
+	return passphrase, nil
+}
+
+func isCollectionImportPassphraseRequired(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "passphrase is required to import collection secrets")
+}
+
+func collectionHasSecretVariables(collection *types.Collection) bool {
+	if collection == nil {
+		return false
+	}
+	for _, isSecret := range collection.SecretKeys {
+		if isSecret {
+			return true
+		}
+	}
+	return false
 }
 
 func migrateCollectionToProjectFiles(c *cli.Command, db storage.DB, name string) (int, string, error) {
