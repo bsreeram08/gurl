@@ -1,0 +1,46 @@
+{{ with .Site.Params.gurl_version }}
+<style>
+  .gurl-version-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--tertiary, #3d3d3d);
+    color: var(--secondary, #aaa);
+    vertical-align: middle;
+    margin-left: 6px;
+    letter-spacing: 0.02em;
+  }
+  .gurl-version-selector {
+    position: fixed;
+    bottom: 1.25rem;
+    right: 1.25rem;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--entry, #1e1e1e);
+    border: 1px solid var(--border, #444);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .gurl-version-selector label {
+    color: var(--secondary, #aaa);
+    white-space: nowrap;
+  }
+  .gurl-version-selector select {
+    background: transparent;
+    border: none;
+    color: var(--primary, #ddd);
+    font-size: 0.78rem;
+    cursor: pointer;
+    outline: none;
+  }
+  .gurl-version-selector select option {
+    background: var(--entry, #1e1e1e);
+  }
+</style>
+{{ end }}

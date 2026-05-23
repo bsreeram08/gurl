@@ -1,0 +1,50 @@
+{{ with .Site.Params.gurl_version }}
+<div class="gurl-version-selector" id="gurlVersionSelector" style="display:none">
+  <label for="gurlVersionSelect">Version:</label>
+  <select id="gurlVersionSelect" aria-label="Select documentation version"></select>
+</div>
+
+<script>
+(function () {
+  var current = {{ . | jsonify }};
+  var base = "https://bsreeram08.github.io/gurl/";
+
+  // Derive the path after the version prefix so we can attempt to preserve it.
+  // e.g. /gurl/v0.3.1/cli/run/ → cli/run/
+  function currentRelPath() {
+    var path = window.location.pathname;
+    // Strip the base /gurl/<version>/ prefix
+    var m = path.match(/^\/gurl\/[^/]+\/(.*)/);
+    return m ? m[1] : "";
+  }
+
+  fetch(base + "versions.json")
+    .then(function (r) { return r.ok ? r.json() : []; })
+    .then(function (versions) {
+      if (!versions || versions.length === 0) return;
+
+      var selector = document.getElementById("gurlVersionSelector");
+      var select = document.getElementById("gurlVersionSelect");
+      var relPath = currentRelPath();
+
+      // Always include "latest" as the first option.
+      var options = ["latest"].concat(versions);
+
+      options.forEach(function (v) {
+        var opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        if (v === current) opt.selected = true;
+        select.appendChild(opt);
+      });
+
+      select.addEventListener("change", function () {
+        window.location.href = base + select.value + "/" + relPath;
+      });
+
+      selector.style.display = "flex";
+    })
+    .catch(function () { /* versions.json not present yet — silently skip */ });
+}());
+</script>
+{{ end }}

@@ -1,10 +1,11 @@
 baseURL = 'https://bsreeram08.github.io/gurl/'
 languageCode = 'en-us'
-title = 'Gurl CLI'
+title = 'gurl'
 theme = 'PaperMod'
 
 [params]
-description = "curl for the AI era — secure, logged, and agent-friendly"
+gurl_version = "dev"
+description = "CLI API workbench — save, run, and manage HTTP requests from the terminal"
 author = "Sreeram"
 defaultTheme = "dark"
 ShowReadingTime = false
@@ -16,12 +17,13 @@ ShowToc = true
 TocOpen = false
 
 [params.homeInfoParams]
-Title = "Gurl"
+Title = "gurl"
 Content = """
-**curl for the AI era.**
+**CLI API workbench.** Save, run, and manage HTTP requests from the terminal.
 
-Give AI agents a secure, observable tool for HTTP — credentials stay out of context, every request is logged, collections are easily configurable.
-Works just as well for humans at the terminal.
+8 auth handlers, 5 protocol clients, JavaScript scripting, collection runner, code generation, and a plugin system.
+
+Status: early (v0.3.x). The CLI works. The TUI exists in code but is not functional yet.
 """
 
 [[params.socialIcons]]

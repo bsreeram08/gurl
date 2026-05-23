@@ -4,26 +4,20 @@ on:
   push:
     branches: [master]
     paths: [docs/**]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
+  contents: write
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 0
-          lfs: false
 
       - name: Init submodules
         run: git submodule update --init --recursive
@@ -34,28 +28,77 @@ jobs:
           hugo-version: latest
           extended: true
 
-      - name: Setup Pages
-        id: pages
-        uses: actions/configure-pages@v5
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+          else
+            echo "version=latest" >> $GITHUB_OUTPUT
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Build
+      - name: Build versioned docs (tag push)
+        if: steps.version.outputs.is_tag == 'true'
         working-directory: docs
         env:
-          BASE_URL: ${{ steps.pages.outputs.base_url }}
-        run: hugo --minify --baseURL "$BASE_URL/"
+          VERSION: ${{ steps.version.outputs.version }}
+          HUGO_PARAMS_GURL_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          hugo --minify --baseURL "https://bsreeram08.github.io/gurl/$VERSION/" -d "public/$VERSION"
+          HUGO_PARAMS_GURL_VERSION=latest hugo --minify --baseURL "https://bsreeram08.github.io/gurl/latest/" -d "public/latest"
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/public
+      - name: Build latest docs (master push)
+        if: steps.version.outputs.is_tag == 'false'
+        working-directory: docs
+        env:
+          HUGO_PARAMS_GURL_VERSION: latest
+        run: |
+          hugo --minify --baseURL "https://bsreeram08.github.io/gurl/latest/" -d "public/latest"
 
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
+      - name: Generate root redirect
+        run: |
+          cat > docs/public/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="0; url=latest/">
+            <title>gurl docs</title>
+          </head>
+          <body>
+            <a href="latest/">Redirecting to latest docs...</a>
+          </body>
+          </html>
+          EOF
+
+      - name: Update versions.json (tag push)
+        if: steps.version.outputs.is_tag == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git fetch origin gh-pages:gh-pages 2>/dev/null || true
+          EXISTING=$(git show gh-pages:versions.json 2>/dev/null || echo '[]')
+          echo "$EXISTING" | python3 -c "
+          import json, sys
+          versions = json.load(sys.stdin)
+          v = '$VERSION'
+          if v not in versions:
+              versions.insert(0, v)
+          print(json.dumps(versions, indent=2))
+          " > docs/public/versions.json
+
+      - name: Carry over versions.json (master push)
+        if: steps.version.outputs.is_tag == 'false'
+        run: |
+          git fetch origin gh-pages:gh-pages 2>/dev/null || true
+          git show gh-pages:versions.json 2>/dev/null > docs/public/versions.json || echo '[]' > docs/public/versions.json
+
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/public
+          keep_files: true

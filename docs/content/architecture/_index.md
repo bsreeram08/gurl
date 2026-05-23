@@ -40,9 +40,9 @@ The database uses goleveldb (LevelDB port) for high-performance key-value storag
 │  HTTP │ GraphQL │ gRPC │ WebSocket │ SSE             │
 ├─────────────────────────────────────────────────────┤
 │              Plugin System                           │
-│  Middleware │ Output │ Command                      │
+│  Middleware │ Output │ Command │ Auth               │
 ├─────────────────────────────────────────────────────┤
-│              TUI (bubbletea)                        │
+│         TUI (bubbletea) — not functional             │
 │  Sidebar │ Request Builder │ Response Viewer       │
 └─────────────────────────────────────────────────────┘
 ```
@@ -59,9 +59,9 @@ The database uses goleveldb (LevelDB port) for high-performance key-value storag
 
 **Protocol Handlers Layer** - Extends beyond HTTP to support GraphQL, gRPC, WebSocket, and Server-Sent Events. Each handler translates between protocol-specific formats and Gurl's internal request/response model.
 
-**Plugin System Layer** - Three plugin types: MiddlewarePlugin runs before/after requests, OutputPlugin formats responses, CommandPlugin adds new CLI commands. All plugins are discovered from `~/.config/gurl/plugins/`.
+**Plugin System Layer** - Four plugin types: MiddlewarePlugin runs before/after requests, OutputPlugin formats responses, CommandPlugin adds new CLI commands, and AuthPlugin provides custom authentication handlers (added in v0.3.0). All plugins are discovered from `~/.config/gurl/plugins/`.
 
-**TUI Layer** - Built with bubbletea for interactive terminal UI. Provides a full-screen three-pane workspace for browsing requests, editing them, and inspecting responses.
+**TUI Layer** - Built with bubbletea. The code exists but is not functional in the current release. The intended design is a full-screen three-pane workspace for browsing requests, editing them, and inspecting responses.
 
 ## Request Lifecycle
 
