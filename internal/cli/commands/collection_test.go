@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/project"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
@@ -120,6 +121,43 @@ func TestCollectionRunCommandIncludesAssertBailFlag(t *testing.T) {
 
 	if !commandHasFlag(runCmd, "assert-bail") {
 		t.Fatalf("expected collection run command to expose --assert-bail flag")
+	}
+}
+
+func TestCollectionMigrateCommandExportsDBCollectionToFiles(t *testing.T) {
+	base := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "gurl.db"))
+	if err := base.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer base.Close()
+	if err := base.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "legacy request",
+		URL:        "https://example.com",
+		Method:     "GET",
+		Collection: "legacy",
+	}); err != nil {
+		t.Fatalf("SaveRequest failed: %v", err)
+	}
+
+	proj, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	fileStore := storage.NewFileStore(proj)
+	db := storage.NewProjectDB(base, fileStore)
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+
+	if err := cmd.Run(context.Background(), []string{"collection", "migrate", "legacy"}); err != nil {
+		t.Fatalf("migrate command failed: %v", err)
+	}
+
+	req, err := fileStore.GetRequest("req-1")
+	if err != nil {
+		t.Fatalf("expected migrated request file: %v", err)
+	}
+	if req.URL != "https://example.com" || req.Collection != "legacy" {
+		t.Fatalf("unexpected migrated request: %+v", req)
 	}
 }
 
