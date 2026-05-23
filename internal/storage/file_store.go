@@ -105,7 +105,11 @@ func (s *FileStore) SaveCollection(collection *types.Collection) error {
 		return fmt.Errorf("failed to create collection directory: %w", err)
 	}
 
-	return writeJSONFile(filepath.Join(targetDir, collectionFileName), collection)
+	stored, err := s.collectionForStorage(collection, targetDir)
+	if err != nil {
+		return err
+	}
+	return writeJSONFile(filepath.Join(targetDir, collectionFileName), stored)
 }
 
 func (s *FileStore) GetCollection(id string) (*types.Collection, error) {
@@ -413,13 +417,17 @@ func (s *FileStore) scanCollections() ([]collectionRecord, error) {
 			continue
 		}
 		path := filepath.Join(s.project.CollectionsDir(), entry.Name(), collectionFileName)
+		dir := filepath.Dir(path)
 		collection, err := readCollectionFile(path)
 		if err != nil {
 			continue
 		}
+		if err := s.decryptCollectionForUse(collection, dir); err != nil {
+			continue
+		}
 		records = append(records, collectionRecord{
 			collection: collection,
-			dir:        filepath.Dir(path),
+			dir:        dir,
 		})
 	}
 	sort.SliceStable(records, func(i, j int) bool {

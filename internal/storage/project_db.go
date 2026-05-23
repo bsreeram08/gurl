@@ -340,6 +340,13 @@ func (db *ProjectDB) MigrateCollectionToFiles(name string) (int, string, error) 
 	return len(requests), path, nil
 }
 
+func (db *ProjectDB) UnlockCollection(name string, passphrase string) error {
+	if !db.hasFileStore() {
+		return fmt.Errorf("gurl project not found; run 'gurl init' or set GURL_PROJECT_DIR")
+	}
+	return db.files.UnlockCollection(name, passphrase)
+}
+
 func (db *ProjectDB) FileStore() *FileStore {
 	return db.files
 }

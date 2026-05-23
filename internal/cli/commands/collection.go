@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -29,6 +30,9 @@ func CollectionCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 			collectionSetVarCommand(db),
 			collectionUnsetVarCommand(db),
 			collectionMigrateCommand(db),
+			collectionUnlockCommand(db),
+			collectionExportCommand(db),
+			collectionImportCommand(db),
 			collectionRemoveCommand(db),
 			collectionRenameCommand(db),
 		},
@@ -274,6 +278,10 @@ type collectionFileMigrator interface {
 	MigrateCollectionToFiles(name string) (int, string, error)
 }
 
+type collectionUnlocker interface {
+	UnlockCollection(name string, passphrase string) error
+}
+
 func collectionMigrateCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
 		Name:  "migrate",
@@ -308,6 +316,180 @@ func collectionMigrateCommand(db storage.DB) *cli.Command {
 			return nil
 		},
 	}
+}
+
+func collectionUnlockCommand(db storage.DB) *cli.Command {
+	return &cli.Command{
+		Name:  "unlock",
+		Usage: "Unlock a passphrase-protected file collection",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "passphrase",
+				Usage: "Collection import passphrase",
+			},
+		},
+		Action: func(ctx context.Context, c *cli.Command) error {
+			args := c.Args()
+			if args.Len() < 1 {
+				return fmt.Errorf("collection name argument is required")
+			}
+			unlocker, ok := db.(collectionUnlocker)
+			if !ok {
+				return fmt.Errorf("collection unlock requires project file storage")
+			}
+			passphrase := collectionPassphrase(c)
+			if err := unlocker.UnlockCollection(args.Get(0), passphrase); err != nil {
+				return err
+			}
+			fmt.Printf("✓ Unlocked collection '%s'\n", args.Get(0))
+			return nil
+		},
+	}
+}
+
+func collectionExportCommand(db storage.DB) *cli.Command {
+	return &cli.Command{
+		Name:  "export",
+		Usage: "Export a collection with passphrase-encrypted secrets",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "output",
+				Aliases: []string{"o"},
+				Usage:   "Output file (default: stdout)",
+			},
+			&cli.StringFlag{
+				Name:  "passphrase",
+				Usage: "Passphrase for encrypting collection secrets",
+			},
+		},
+		Action: func(ctx context.Context, c *cli.Command) error {
+			args := c.Args()
+			if args.Len() < 1 {
+				return fmt.Errorf("collection name argument is required")
+			}
+			name := args.Get(0)
+			collection, _ := loadCollectionByName(db, name)
+			requests, err := db.ListRequests(&storage.ListOptions{Collection: name})
+			if err != nil {
+				return fmt.Errorf("failed to list collection: %w", err)
+			}
+			if collection == nil && len(requests) == 0 {
+				return fmt.Errorf("collection %q not found or empty", name)
+			}
+			if collection == nil {
+				collection = types.NewCollection(name)
+			}
+
+			exportData, err := storage.BuildCollectionExport(collection, requests, collectionPassphrase(c))
+			if err != nil {
+				return err
+			}
+			data, err := storage.MarshalCollectionExport(exportData)
+			if err != nil {
+				return fmt.Errorf("failed to marshal collection export: %w", err)
+			}
+
+			if outputPath := c.String("output"); outputPath != "" {
+				if err := validateOutputPath(outputPath); err != nil {
+					return fmt.Errorf("invalid output path: %w", err)
+				}
+				if err := os.WriteFile(outputPath, data, 0644); err != nil {
+					return fmt.Errorf("failed to write output file: %w", err)
+				}
+				fmt.Printf("✓ Exported collection '%s' to %s (%d requests)\n", name, outputPath, len(requests))
+				return nil
+			}
+			fmt.Println(string(data))
+			return nil
+		},
+	}
+}
+
+func collectionImportCommand(db storage.DB) *cli.Command {
+	return &cli.Command{
+		Name:  "import",
+		Usage: "Import a passphrase-protected collection export",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "force",
+				Aliases: []string{"f"},
+				Usage:   "Overwrite existing collection/request records",
+			},
+			&cli.StringFlag{
+				Name:  "passphrase",
+				Usage: "Passphrase for decrypting collection secrets",
+			},
+		},
+		Action: func(ctx context.Context, c *cli.Command) error {
+			path := c.Args().First()
+			if path == "" {
+				return fmt.Errorf("file path is required")
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("failed to read collection export: %w", err)
+			}
+			collection, requests, err := storage.ParseCollectionExport(data, collectionPassphrase(c))
+			if err != nil {
+				return err
+			}
+			if collection == nil {
+				return fmt.Errorf("collection export is missing collection metadata")
+			}
+
+			if store, ok := db.(storage.CollectionStore); ok {
+				if existing, err := store.GetCollectionByName(collection.Name); err == nil && existing != nil {
+					if !c.Bool("force") {
+						return fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
+					}
+					collection.ID = existing.ID
+					collection.CreatedAt = existing.CreatedAt
+				}
+			}
+			if err := saveCollectionRecord(db, collection); err != nil {
+				return err
+			}
+
+			imported := 0
+			skipped := 0
+			for _, req := range requests {
+				req.Collection = collection.Name
+				if !c.Bool("force") {
+					if existing, err := db.GetRequestByName(req.Name); err == nil && existing != nil {
+						skipped++
+						continue
+					}
+				}
+				if err := db.SaveRequest(req); err != nil {
+					return fmt.Errorf("failed to import request %q: %w", req.Name, err)
+				}
+				imported++
+			}
+
+			fmt.Printf("✓ Imported collection '%s' (%d requests, %d skipped)\n", collection.Name, imported, skipped)
+			return nil
+		},
+	}
+}
+
+func saveCollectionRecord(db storage.DB, collection *types.Collection) error {
+	store, ok := db.(storage.CollectionStore)
+	if !ok {
+		return fmt.Errorf("collection variables are not supported by this storage backend")
+	}
+	if collection.ID != "" {
+		if existing, err := store.GetCollection(collection.ID); err == nil && existing != nil {
+			return store.UpdateCollection(collection)
+		}
+	}
+	return store.SaveCollection(collection)
+}
+
+func collectionPassphrase(c *cli.Command) string {
+	if passphrase := c.String("passphrase"); passphrase != "" {
+		return passphrase
+	}
+	return os.Getenv("GURL_IMPORT_PASSPHRASE")
 }
 
 func migrateCollectionToProjectFiles(c *cli.Command, db storage.DB, name string) (int, string, error) {

@@ -161,6 +161,103 @@ func TestCollectionMigrateCommandExportsDBCollectionToFiles(t *testing.T) {
 	}
 }
 
+func TestCollectionExportImportRoundTripEncryptsSecrets(t *testing.T) {
+	sourceBase := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "source.db"))
+	if err := sourceBase.Open(); err != nil {
+		t.Fatalf("failed to open source db: %v", err)
+	}
+	defer sourceBase.Close()
+	sourceProject, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("source Init failed: %v", err)
+	}
+	sourceDB := storage.NewProjectDB(sourceBase, storage.NewFileStore(sourceProject))
+	collection := types.NewCollection("payments")
+	collection.SetSecretVariable("API_KEY", "secret-token")
+	if err := sourceDB.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	if err := sourceDB.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "list payments",
+		URL:        "https://example.com/payments",
+		Method:     "GET",
+		Collection: "payments",
+	}); err != nil {
+		t.Fatalf("SaveRequest failed: %v", err)
+	}
+
+	exportPath := filepath.Join(t.TempDir(), "payments.gurl")
+	exportCmd := CollectionCommand(sourceDB, &env.EnvStorage{})
+	if err := exportCmd.Run(context.Background(), []string{"collection", "export", "payments", "--passphrase", "team-pass", "--output", exportPath}); err != nil {
+		t.Fatalf("collection export failed: %v", err)
+	}
+	exported, err := os.ReadFile(exportPath)
+	if err != nil {
+		t.Fatalf("failed to read export: %v", err)
+	}
+	if strings.Contains(string(exported), "secret-token") {
+		t.Fatal("export should not contain plaintext secret")
+	}
+
+	targetBase := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "target.db"))
+	if err := targetBase.Open(); err != nil {
+		t.Fatalf("failed to open target db: %v", err)
+	}
+	defer targetBase.Close()
+	targetProject, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("target Init failed: %v", err)
+	}
+	targetStore := storage.NewFileStore(targetProject)
+	targetDB := storage.NewProjectDB(targetBase, targetStore)
+	importCmd := CollectionCommand(targetDB, &env.EnvStorage{})
+	if err := importCmd.Run(context.Background(), []string{"collection", "import", exportPath, "--passphrase", "team-pass"}); err != nil {
+		t.Fatalf("collection import failed: %v", err)
+	}
+
+	imported, err := targetDB.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("GetCollectionByName failed: %v", err)
+	}
+	if imported.Variables["API_KEY"] != "secret-token" {
+		t.Fatalf("expected decrypted imported secret, got %q", imported.Variables["API_KEY"])
+	}
+	collectionPath, err := targetStore.CollectionPath("payments")
+	if err != nil {
+		t.Fatalf("CollectionPath failed: %v", err)
+	}
+	rawCollection, err := os.ReadFile(filepath.Join(collectionPath, "collection.json"))
+	if err != nil {
+		t.Fatalf("failed to read imported collection: %v", err)
+	}
+	if strings.Contains(string(rawCollection), "secret-token") {
+		t.Fatal("imported collection should be re-encrypted locally")
+	}
+}
+
+func TestCollectionPassphraseUsesEnvFallback(t *testing.T) {
+	t.Setenv("GURL_IMPORT_PASSPHRASE", "env-pass")
+
+	var got string
+	cmd := &cli.Command{
+		Name: "test",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "passphrase"},
+		},
+		Action: func(ctx context.Context, c *cli.Command) error {
+			got = collectionPassphrase(c)
+			return nil
+		},
+	}
+	if err := cmd.Run(context.Background(), []string{"test"}); err != nil {
+		t.Fatalf("command failed: %v", err)
+	}
+	if got != "env-pass" {
+		t.Fatalf("expected env passphrase fallback, got %q", got)
+	}
+}
+
 func commandHasFlag(cmd *cli.Command, name string) bool {
 	for _, flag := range cmd.Flags {
 		named, ok := flag.(interface{ Names() []string })

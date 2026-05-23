@@ -100,13 +100,24 @@ func NewExecutionHistory(requestID string, response string, statusCode int, dura
 
 // Collection represents a collection of requests
 type Collection struct {
-	ID         string            `json:"id"`
-	Name       string            `json:"name"`
-	AuthConfig *AuthConfig       `json:"auth_config,omitempty"`
-	Variables  map[string]string `json:"variables,omitempty"`
-	SecretKeys map[string]bool   `json:"secret_keys,omitempty"`
-	CreatedAt  int64             `json:"created_at"`
-	UpdatedAt  int64             `json:"updated_at"`
+	ID         string                `json:"id"`
+	Name       string                `json:"name"`
+	AuthConfig *AuthConfig           `json:"auth_config,omitempty"`
+	Variables  map[string]string     `json:"variables,omitempty"`
+	SecretKeys map[string]bool       `json:"secret_keys,omitempty"`
+	Encryption *CollectionEncryption `json:"encryption,omitempty"`
+	CreatedAt  int64                 `json:"created_at"`
+	UpdatedAt  int64                 `json:"updated_at"`
+}
+
+// CollectionEncryption describes how collection secret variables are encrypted
+// when a collection is stored or shared.
+type CollectionEncryption struct {
+	Version    int    `json:"version,omitempty"`
+	Mode       string `json:"mode,omitempty"`
+	KDF        string `json:"kdf,omitempty"`
+	Salt       string `json:"salt,omitempty"`
+	Iterations int    `json:"iterations,omitempty"`
 }
 
 // NewCollection creates a collection with generated ID, initialized metadata,
