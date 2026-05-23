@@ -63,6 +63,66 @@ func TestFileStoreEncryptsCollectionSecretsAtRest(t *testing.T) {
 	}
 }
 
+func TestParseCollectionDirectoryDecryptsPassphraseSecrets(t *testing.T) {
+	dir := t.TempDir()
+	collection := types.NewCollection("payments")
+	collection.SetSecretVariable("API_KEY", "secret-token")
+	request := &types.SavedRequest{
+		ID:   "req-1",
+		Name: "list payments",
+		URL:  "https://example.com/payments",
+	}
+	exportData, err := BuildCollectionExport(collection, []*types.SavedRequest{request}, "team-pass")
+	if err != nil {
+		t.Fatalf("BuildCollectionExport failed: %v", err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, collectionFileName), exportData.Collection); err != nil {
+		t.Fatalf("failed to write collection file: %v", err)
+	}
+	if err := writeJSONFile(filepath.Join(dir, "list-payments.json"), request); err != nil {
+		t.Fatalf("failed to write request file: %v", err)
+	}
+
+	imported, requests, err := ParseCollectionDirectory(dir, "team-pass")
+	if err != nil {
+		t.Fatalf("ParseCollectionDirectory failed: %v", err)
+	}
+	if imported.Variables["API_KEY"] != "secret-token" {
+		t.Fatalf("expected decrypted secret, got %q", imported.Variables["API_KEY"])
+	}
+	if len(requests) != 1 || requests[0].Collection != "payments" {
+		t.Fatalf("expected request to be attached to collection, got %+v", requests)
+	}
+	if _, _, err := ParseCollectionDirectory(dir, "wrong-pass"); err == nil {
+		t.Fatal("expected wrong passphrase to fail")
+	}
+}
+
+func TestParseCollectionDirectoryRequiresLocalKey(t *testing.T) {
+	proj, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	store := NewFileStore(proj)
+
+	collection := types.NewCollection("payments")
+	collection.SetSecretVariable("API_KEY", "secret-token")
+	if err := store.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	collectionPath, err := store.CollectionPath("payments")
+	if err != nil {
+		t.Fatalf("CollectionPath failed: %v", err)
+	}
+	if err := os.Remove(filepath.Join(collectionPath, collectionKeyFileName)); err != nil {
+		t.Fatalf("failed to remove collection key: %v", err)
+	}
+
+	if _, _, err := ParseCollectionDirectory(collectionPath, ""); !IsCollectionLocked(err) {
+		t.Fatalf("expected locked collection error, got %v", err)
+	}
+}
+
 func TestFileStoreEncryptsPrefixedPlaintextSecrets(t *testing.T) {
 	proj, err := project.Init(t.TempDir())
 	if err != nil {

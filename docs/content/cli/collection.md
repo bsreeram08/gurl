@@ -102,10 +102,11 @@ gurl collection export [name] --passphrase "$TEAM_SECRET" --output collection.gu
 
 ### import
 
-Import a collection export and re-encrypt secrets with the local collection key.
+Import a collection export or collection directory and re-encrypt secrets with the local collection key.
 
 ```bash
 gurl collection import collection.gurl --passphrase "$TEAM_SECRET"
+gurl collection import .gurl/collections/payments
 ```
 
 For CI, set `GURL_IMPORT_PASSPHRASE` instead of passing `--passphrase`.
@@ -199,9 +200,10 @@ Deletes the "old-api" collection and all requests in it.
 ```bash
 gurl collection export "checkout-flow" --passphrase "$TEAM_SECRET" --output checkout-flow.gurl
 gurl collection import checkout-flow.gurl --passphrase "$TEAM_SECRET"
+gurl collection import .gurl/collections/checkout-flow
 ```
 
-The export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`.
+The export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`. Directory import reads `collection.json` and request JSON files directly; local-key encrypted directories require their `collection.key`.
 
 ## See also
 

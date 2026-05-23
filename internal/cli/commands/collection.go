@@ -415,7 +415,7 @@ func collectionExportCommand(db storage.DB) *cli.Command {
 func collectionImportCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
 		Name:  "import",
-		Usage: "Import a passphrase-protected collection export",
+		Usage: "Import a passphrase-protected collection export or collection directory",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "force",
@@ -432,11 +432,7 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 			if path == "" {
 				return fmt.Errorf("file path is required")
 			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return fmt.Errorf("failed to read collection export: %w", err)
-			}
-			collection, requests, err := storage.ParseCollectionExport(data, collectionPassphrase(c))
+			collection, requests, err := parseCollectionImportSource(path, collectionPassphrase(c))
 			if err != nil {
 				return err
 			}
@@ -500,6 +496,21 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 			return nil
 		},
 	}
+}
+
+func parseCollectionImportSource(path string, passphrase string) (*types.Collection, []*types.SavedRequest, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to inspect collection import source: %w", err)
+	}
+	if info.IsDir() {
+		return storage.ParseCollectionDirectory(path, passphrase)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read collection export: %w", err)
+	}
+	return storage.ParseCollectionExport(data, passphrase)
 }
 
 type rawCollectionByNameStore interface {

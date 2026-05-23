@@ -317,6 +317,81 @@ func TestCollectionImportForceReusesExistingRequestID(t *testing.T) {
 	}
 }
 
+func TestCollectionImportDirectory(t *testing.T) {
+	sourceProject, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("source Init failed: %v", err)
+	}
+	sourceStore := storage.NewFileStore(sourceProject)
+	sourceCollection := types.NewCollection("payments")
+	sourceCollection.SetVariable("BASE_URL", "https://api.example.com")
+	sourceCollection.SetSecretVariable("API_KEY", "secret-token")
+	if err := sourceStore.SaveCollection(sourceCollection); err != nil {
+		t.Fatalf("source SaveCollection failed: %v", err)
+	}
+	if err := sourceStore.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "list payments",
+		URL:        "https://{{BASE_URL}}/payments",
+		Method:     "GET",
+		Collection: "payments",
+	}); err != nil {
+		t.Fatalf("source SaveRequest failed: %v", err)
+	}
+	sourcePath, err := sourceStore.CollectionPath("payments")
+	if err != nil {
+		t.Fatalf("source CollectionPath failed: %v", err)
+	}
+
+	targetBase := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "target.db"))
+	if err := targetBase.Open(); err != nil {
+		t.Fatalf("failed to open target db: %v", err)
+	}
+	defer targetBase.Close()
+	targetProject, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("target Init failed: %v", err)
+	}
+	targetStore := storage.NewFileStore(targetProject)
+	targetDB := storage.NewProjectDB(targetBase, targetStore)
+
+	importCmd := CollectionCommand(targetDB, &env.EnvStorage{})
+	output := captureStdout(t, func() {
+		if err := importCmd.Run(context.Background(), []string{"collection", "import", sourcePath}); err != nil {
+			t.Fatalf("collection directory import failed: %v", err)
+		}
+	})
+	if !strings.Contains(output, "Imported collection 'payments' (1 requests, 0 skipped)") {
+		t.Fatalf("expected directory import summary, got %q", output)
+	}
+
+	imported, err := targetDB.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("GetCollectionByName failed: %v", err)
+	}
+	if imported.Variables["API_KEY"] != "secret-token" || !imported.IsSecret("API_KEY") {
+		t.Fatalf("expected decrypted imported secret, got %+v", imported)
+	}
+	req, err := targetDB.GetRequestByName("list payments")
+	if err != nil {
+		t.Fatalf("GetRequestByName failed: %v", err)
+	}
+	if req.Collection != "payments" || req.URL != "https://{{BASE_URL}}/payments" {
+		t.Fatalf("imported request mismatch: %+v", req)
+	}
+	targetPath, err := targetStore.CollectionPath("payments")
+	if err != nil {
+		t.Fatalf("target CollectionPath failed: %v", err)
+	}
+	rawData, err := os.ReadFile(filepath.Join(targetPath, "collection.json"))
+	if err != nil {
+		t.Fatalf("failed to read target collection: %v", err)
+	}
+	if strings.Contains(string(rawData), "secret-token") {
+		t.Fatal("directory import should re-encrypt secrets locally")
+	}
+}
+
 func TestCollectionImportForceReplacesLockedCollection(t *testing.T) {
 	sourceBase := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "source.db"))
 	if err := sourceBase.Open(); err != nil {
