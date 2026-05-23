@@ -3,8 +3,10 @@ package env
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/google/uuid"
+	"github.com/sreeram/gurl/internal/project"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/syndtr/goleveldb/leveldb"
 )
@@ -12,6 +14,7 @@ import (
 type EnvStorage struct {
 	db     *storage.LMDB
 	dbPath string
+	files  *FileEnvStore
 }
 
 func NewEnvStorage(db *storage.LMDB) *EnvStorage {
@@ -24,6 +27,39 @@ func NewEnvStorage(db *storage.LMDB) *EnvStorage {
 
 func NewEnvStorageWithPath(dbPath string) *EnvStorage {
 	return &EnvStorage{dbPath: dbPath}
+}
+
+func NewEnvStorageWithPathAndProject(dbPath string, proj *project.Project) *EnvStorage {
+	return &EnvStorage{dbPath: dbPath, files: NewFileEnvStore(proj)}
+}
+
+func (s *EnvStorage) hasFileStore() bool {
+	return s != nil && s.files != nil && s.files.Enabled()
+}
+
+func (s *EnvStorage) dbHasEnv(env *Environment) bool {
+	if env == nil || (env.ID == "" && env.Name == "") || s.dbPath == "" && (s.db == nil || s.db.DB == nil) {
+		return false
+	}
+	db, closeDB, err := s.openDB()
+	if err != nil {
+		return false
+	}
+	defer closeDB()
+
+	if env.ID != "" {
+		dbKey := fmt.Sprintf("env:%s", env.ID)
+		if _, err := db.DB.Get([]byte(dbKey), nil); err == nil {
+			return true
+		}
+	}
+	if env.Name != "" {
+		nameKey := fmt.Sprintf("idx:env:name:%s", env.Name)
+		if _, err := db.DB.Get([]byte(nameKey), nil); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *EnvStorage) openDB() (*storage.LMDB, func() error, error) {
@@ -43,6 +79,13 @@ func (s *EnvStorage) openDB() (*storage.LMDB, func() error, error) {
 }
 
 func (s *EnvStorage) SaveEnv(env *Environment) error {
+	if env == nil {
+		return fmt.Errorf("environment cannot be nil")
+	}
+	if s.hasFileStore() && (s.files.HasEnvID(env.ID) || s.files.HasEnvName(env.Name) || !s.dbHasEnv(env)) {
+		return s.files.SaveEnv(env)
+	}
+
 	db, closeDB, err := s.openDB()
 	if err != nil {
 		return err
@@ -87,6 +130,12 @@ func (s *EnvStorage) SaveEnv(env *Environment) error {
 }
 
 func (s *EnvStorage) GetEnv(id string) (*Environment, error) {
+	if s.hasFileStore() {
+		if env, err := s.files.GetEnv(id); err == nil {
+			return env, nil
+		}
+	}
+
 	db, closeDB, err := s.openDB()
 	if err != nil {
 		return nil, err
@@ -127,6 +176,10 @@ func (s *EnvStorage) getEnvWithDB(db *storage.LMDB, id string) (*Environment, er
 }
 
 func (s *EnvStorage) DeleteEnv(id string) error {
+	if s.hasFileStore() && s.files.HasEnvID(id) {
+		return s.files.DeleteEnv(id)
+	}
+
 	db, closeDB, err := s.openDB()
 	if err != nil {
 		return err
@@ -150,6 +203,38 @@ func (s *EnvStorage) DeleteEnv(id string) error {
 }
 
 func (s *EnvStorage) ListEnvs() ([]*Environment, error) {
+	if s.hasFileStore() {
+		byName := make(map[string]*Environment)
+		fileEnvs, err := s.files.ListEnvs()
+		if err != nil {
+			return nil, err
+		}
+		for _, env := range fileEnvs {
+			byName[env.Name] = env
+		}
+		if s.hasDBConfig() {
+			dbEnvs, err := s.listDBEnvs()
+			if err != nil {
+				return nil, err
+			}
+			for _, env := range dbEnvs {
+				if _, exists := byName[env.Name]; !exists {
+					byName[env.Name] = env
+				}
+			}
+		}
+		envs := make([]*Environment, 0, len(byName))
+		for _, env := range byName {
+			envs = append(envs, env)
+		}
+		sortEnvs(envs)
+		return envs, nil
+	}
+
+	return s.listDBEnvs()
+}
+
+func (s *EnvStorage) listDBEnvs() ([]*Environment, error) {
 	db, closeDB, err := s.openDB()
 	if err != nil {
 		return nil, err
@@ -177,6 +262,12 @@ func (s *EnvStorage) ListEnvs() ([]*Environment, error) {
 }
 
 func (s *EnvStorage) GetEnvByName(name string) (*Environment, error) {
+	if s.hasFileStore() {
+		if env, err := s.files.GetEnvByName(name); err == nil {
+			return env, nil
+		}
+	}
+
 	db, closeDB, err := s.openDB()
 	if err != nil {
 		return nil, err
@@ -193,6 +284,19 @@ func (s *EnvStorage) GetEnvByName(name string) (*Environment, error) {
 }
 
 func (s *EnvStorage) GetActiveEnv() (string, error) {
+	if s.hasFileStore() {
+		active, err := s.files.GetActiveEnv()
+		if err != nil {
+			return "", err
+		}
+		if active != "" {
+			return active, nil
+		}
+	}
+	if !s.hasDBConfig() {
+		return "", nil
+	}
+
 	db, closeDB, err := s.openDB()
 	if err != nil {
 		return "", err
@@ -210,6 +314,10 @@ func (s *EnvStorage) GetActiveEnv() (string, error) {
 }
 
 func (s *EnvStorage) SetActiveEnv(name string) error {
+	if s.hasFileStore() {
+		return s.files.SetActiveEnv(name)
+	}
+
 	db, closeDB, err := s.openDB()
 	if err != nil {
 		return err
@@ -226,4 +334,14 @@ func (s *EnvStorage) SetActiveEnv(name string) error {
 		return fmt.Errorf("failed to set active env: %w", err)
 	}
 	return nil
+}
+
+func sortEnvs(envs []*Environment) {
+	sort.SliceStable(envs, func(i, j int) bool {
+		return envs[i].Name < envs[j].Name
+	})
+}
+
+func (s *EnvStorage) hasDBConfig() bool {
+	return s != nil && (s.dbPath != "" || (s.db != nil && s.db.DB != nil))
 }

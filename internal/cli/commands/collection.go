@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/project"
 	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
@@ -27,6 +28,7 @@ func CollectionCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 			collectionCreateCommand(db),
 			collectionSetVarCommand(db),
 			collectionUnsetVarCommand(db),
+			collectionMigrateCommand(db),
 			collectionRemoveCommand(db),
 			collectionRenameCommand(db),
 		},
@@ -266,6 +268,81 @@ func collectionUnsetVarCommand(db storage.DB) *cli.Command {
 			return nil
 		},
 	}
+}
+
+type collectionFileMigrator interface {
+	MigrateCollectionToFiles(name string) (int, string, error)
+}
+
+func collectionMigrateCommand(db storage.DB) *cli.Command {
+	return &cli.Command{
+		Name:  "migrate",
+		Usage: "Migrate a DB-backed collection into project file storage",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "project-dir",
+				Usage: "Project root for .gurl file storage",
+			},
+		},
+		Action: func(ctx context.Context, c *cli.Command) error {
+			args := c.Args()
+			if args.Len() < 1 {
+				return fmt.Errorf("collection name argument is required")
+			}
+			name := args.Get(0)
+
+			if migrator, ok := db.(collectionFileMigrator); ok {
+				count, path, err := migrator.MigrateCollectionToFiles(name)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("✓ Migrated collection '%s' to %s (%d requests)\n", name, path, count)
+				return nil
+			}
+
+			count, path, err := migrateCollectionToProjectFiles(c, db, name)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Migrated collection '%s' to %s (%d requests)\n", name, path, count)
+			return nil
+		},
+	}
+}
+
+func migrateCollectionToProjectFiles(c *cli.Command, db storage.DB, name string) (int, string, error) {
+	proj, err := project.Require("", projectDirFlag(c))
+	if err != nil {
+		return 0, "", err
+	}
+	fileStore := storage.NewFileStore(proj)
+
+	collection, _ := loadCollectionByName(db, name)
+	requests, err := db.ListRequests(&storage.ListOptions{Collection: name})
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to list collection: %w", err)
+	}
+	if collection == nil && len(requests) == 0 {
+		return 0, "", fmt.Errorf("collection %q not found or empty", name)
+	}
+	if collection == nil {
+		collection = types.NewCollection(name)
+	}
+	if err := fileStore.SaveCollection(collection); err != nil {
+		return 0, "", err
+	}
+	for _, req := range requests {
+		copy := *req
+		copy.Collection = name
+		if err := fileStore.SaveRequest(&copy); err != nil {
+			return 0, "", err
+		}
+	}
+	path, err := fileStore.CollectionPath(name)
+	if err != nil {
+		return 0, "", err
+	}
+	return len(requests), path, nil
 }
 
 func collectionRemoveCommand(db storage.DB) *cli.Command {

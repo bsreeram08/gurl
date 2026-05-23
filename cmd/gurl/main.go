@@ -6,11 +6,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/sreeram/gurl/internal/cli/commands"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/plugins"
+	"github.com/sreeram/gurl/internal/project"
 	"github.com/sreeram/gurl/internal/protocols/graphql"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/urfave/cli/v3"
@@ -41,22 +43,39 @@ func main() {
 
 func run() error {
 	// Initialize database handles lazily so interactive commands don't hold a DB lock while idle.
-	db, err := storage.NewLazyDB()
+	baseDB, err := storage.NewLazyDB()
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
+	}
+	proj, err := project.Discover("", projectDirFromArgs(os.Args))
+	if err != nil {
+		return err
+	}
+	var db storage.DB = baseDB
+	if proj != nil {
+		db = storage.NewProjectDB(baseDB, storage.NewFileStore(proj))
 	}
 
 	// Initialize plugin registry
 	pluginDir := getPluginDir()
 	loader := plugins.NewLoader(pluginDir, nil)
 	pluginRegistry, _ = loader.LoadAll()
-	envStorage := env.NewEnvStorageWithPath(db.Path())
+	envStorage := env.NewEnvStorageWithPath(baseDB.Path())
+	if proj != nil {
+		envStorage = env.NewEnvStorageWithPathAndProject(baseDB.Path(), proj)
+	}
 
 	app := &cli.Command{
 		Name:                  "gurl",
 		Usage:                 "Smart curl saver - Your named request library",
 		Version:               version,
 		EnableShellCompletion: true,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "project-dir",
+				Usage: "Project root containing .gurl file storage",
+			},
+		},
 		Description: `gurl replaces your chaotic curl history with an intelligent, 
 named request library. Save requests with memorable names 
 and run them whenever you need.
@@ -67,6 +86,7 @@ Quick Start:
   gurl run "health check"
   gurl delete "old request"`,
 		Commands: []*cli.Command{
+			commands.InitCommand(),
 			commands.SaveCommand(db),
 			commands.RunCommand(db, envStorage),
 			commands.ListCommand(db),
@@ -97,4 +117,16 @@ Quick Start:
 	defer stop()
 
 	return app.Run(ctx, os.Args)
+}
+
+func projectDirFromArgs(args []string) string {
+	for i, arg := range args {
+		if arg == "--project-dir" && i+1 < len(args) {
+			return args[i+1]
+		}
+		if strings.HasPrefix(arg, "--project-dir=") {
+			return strings.TrimPrefix(arg, "--project-dir=")
+		}
+	}
+	return ""
 }
