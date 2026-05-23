@@ -243,6 +243,13 @@ func (db *ProjectDB) SaveCollection(collection *types.Collection) error {
 	return store.SaveCollection(collection)
 }
 
+func (db *ProjectDB) SaveCollectionAllowLocked(collection *types.Collection) error {
+	if db.hasFileStore() {
+		return db.files.SaveCollectionAllowLocked(collection)
+	}
+	return db.SaveCollection(collection)
+}
+
 func (db *ProjectDB) GetCollection(id string) (*types.Collection, error) {
 	if db.hasFileStore() {
 		if collection, err := db.files.GetCollection(id); err == nil {
@@ -271,6 +278,13 @@ func (db *ProjectDB) GetCollectionByName(name string) (*types.Collection, error)
 		return nil, fmt.Errorf("collection variables are not supported by this storage backend")
 	}
 	return store.GetCollectionByName(name)
+}
+
+func (db *ProjectDB) GetRawCollectionByName(name string) (*types.Collection, error) {
+	if db.hasFileStore() {
+		return db.files.GetRawCollectionByName(name)
+	}
+	return db.GetCollectionByName(name)
 }
 
 func (db *ProjectDB) ListCollections() ([]*types.Collection, error) {

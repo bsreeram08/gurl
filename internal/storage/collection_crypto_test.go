@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/sreeram/gurl/internal/project"
+	"github.com/sreeram/gurl/internal/secrets"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
@@ -59,6 +60,47 @@ func TestFileStoreEncryptsCollectionSecretsAtRest(t *testing.T) {
 	}
 	if loaded.Variables["BASE_URL"] != "https://api.example.com" {
 		t.Fatalf("expected non-secret variable to stay readable")
+	}
+}
+
+func TestFileStoreEncryptsPrefixedPlaintextSecrets(t *testing.T) {
+	proj, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	store := NewFileStore(proj)
+
+	foreignKey, err := secrets.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey failed: %v", err)
+	}
+	prefixedPlaintext, err := secrets.Encrypt(foreignKey, "foreign-secret")
+	if err != nil {
+		t.Fatalf("Encrypt failed: %v", err)
+	}
+	collection := types.NewCollection("prefixes")
+	collection.SetSecretVariable("TOKEN", prefixedPlaintext)
+	if err := store.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+
+	collectionPath, err := store.CollectionPath("prefixes")
+	if err != nil {
+		t.Fatalf("CollectionPath failed: %v", err)
+	}
+	rawData, err := os.ReadFile(filepath.Join(collectionPath, collectionFileName))
+	if err != nil {
+		t.Fatalf("failed to read collection file: %v", err)
+	}
+	if strings.Contains(string(rawData), prefixedPlaintext) {
+		t.Fatal("prefixed plaintext secret should be encrypted at rest")
+	}
+	loaded, err := store.GetCollectionByName("prefixes")
+	if err != nil {
+		t.Fatalf("GetCollectionByName failed: %v", err)
+	}
+	if loaded.Variables["TOKEN"] != prefixedPlaintext {
+		t.Fatalf("expected prefixed plaintext to round trip, got %q", loaded.Variables["TOKEN"])
 	}
 }
 

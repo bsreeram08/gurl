@@ -48,6 +48,10 @@ func (s *FileStore) SaveCollection(collection *types.Collection) error {
 	return s.saveCollection(collection, false)
 }
 
+func (s *FileStore) SaveCollectionAllowLocked(collection *types.Collection) error {
+	return s.saveCollection(collection, true)
+}
+
 func (s *FileStore) saveCollection(collection *types.Collection, allowLocked bool) error {
 	if !s.Enabled() {
 		return fmt.Errorf("file storage is not configured")
@@ -146,6 +150,14 @@ func (s *FileStore) GetCollectionByName(name string) (*types.Collection, error) 
 		if IsCollectionLocked(err) {
 			return nil, err
 		}
+		return nil, fmt.Errorf("collection not found: %s", name)
+	}
+	return collection, nil
+}
+
+func (s *FileStore) GetRawCollectionByName(name string) (*types.Collection, error) {
+	collection, _, err := s.findRawCollectionByName(name)
+	if err != nil {
 		return nil, fmt.Errorf("collection not found: %s", name)
 	}
 	return collection, nil

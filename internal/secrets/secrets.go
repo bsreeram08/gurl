@@ -19,6 +19,7 @@ const (
 	EncryptedPrefix = "gurlenc:v1:"
 	NonceSize       = 12
 	KeySize         = 32
+	gcmTagSize      = 16
 )
 
 func GenerateKey() ([]byte, error) {
@@ -136,14 +137,15 @@ func IsEncryptedValue(value string) bool {
 		return false
 	}
 	if len(value) >= len(EncryptedPrefix) && value[:len(EncryptedPrefix)] == EncryptedPrefix {
-		return true
+		data, err := base64.StdEncoding.DecodeString(value[len(EncryptedPrefix):])
+		return err == nil && len(data) > NonceSize+gcmTagSize
 	}
 
 	data, err := base64.StdEncoding.DecodeString(value)
 	if err != nil {
 		return false
 	}
-	return len(data) > NonceSize
+	return len(data) > NonceSize+gcmTagSize
 }
 
 func Mask(value string) string {

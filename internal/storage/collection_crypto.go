@@ -158,8 +158,13 @@ func encryptCollectionSecrets(collection *types.Collection, key []byte) error {
 			continue
 		}
 		value := collection.Variables[name]
-		if value == "" || secrets.IsEncryptedValue(value) {
+		if value == "" {
 			continue
+		}
+		if secrets.IsEncryptedValue(value) {
+			if _, err := secrets.Decrypt(key, value); err == nil {
+				continue
+			}
 		}
 		encrypted, err := secrets.Encrypt(key, value)
 		if err != nil {

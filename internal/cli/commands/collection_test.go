@@ -317,6 +317,112 @@ func TestCollectionImportForceReusesExistingRequestID(t *testing.T) {
 	}
 }
 
+func TestCollectionImportForceReplacesLockedCollection(t *testing.T) {
+	sourceBase := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "source.db"))
+	if err := sourceBase.Open(); err != nil {
+		t.Fatalf("failed to open source db: %v", err)
+	}
+	defer sourceBase.Close()
+	sourceProject, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("source Init failed: %v", err)
+	}
+	sourceDB := storage.NewProjectDB(sourceBase, storage.NewFileStore(sourceProject))
+	sourceCollection := types.NewCollection("payments")
+	sourceCollection.SetSecretVariable("API_KEY", "secret-token")
+	if err := sourceDB.SaveCollection(sourceCollection); err != nil {
+		t.Fatalf("source SaveCollection failed: %v", err)
+	}
+	if err := sourceDB.SaveRequest(&types.SavedRequest{
+		ID:         "exported-id",
+		Name:       "list payments",
+		URL:        "https://new.example.com/payments",
+		Method:     "GET",
+		Collection: "payments",
+	}); err != nil {
+		t.Fatalf("source SaveRequest failed: %v", err)
+	}
+
+	exportPath := filepath.Join(t.TempDir(), "payments.gurl")
+	exportCmd := CollectionCommand(sourceDB, &env.EnvStorage{})
+	if err := exportCmd.Run(context.Background(), []string{"collection", "export", "payments", "--output", exportPath, "--passphrase", "team-pass"}); err != nil {
+		t.Fatalf("collection export failed: %v", err)
+	}
+
+	targetBase := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "target.db"))
+	if err := targetBase.Open(); err != nil {
+		t.Fatalf("failed to open target db: %v", err)
+	}
+	defer targetBase.Close()
+	targetProject, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("target Init failed: %v", err)
+	}
+	targetStore := storage.NewFileStore(targetProject)
+	targetDB := storage.NewProjectDB(targetBase, targetStore)
+	targetCollection := types.NewCollection("payments")
+	targetCollection.SetSecretVariable("API_KEY", "old-token")
+	if err := targetDB.SaveCollection(targetCollection); err != nil {
+		t.Fatalf("target SaveCollection failed: %v", err)
+	}
+	if err := targetDB.SaveRequest(&types.SavedRequest{
+		ID:         "existing-id",
+		Name:       "list payments",
+		URL:        "https://old.example.com/payments",
+		Method:     "GET",
+		Collection: "payments",
+	}); err != nil {
+		t.Fatalf("target SaveRequest failed: %v", err)
+	}
+	collectionPath, err := targetStore.CollectionPath("payments")
+	if err != nil {
+		t.Fatalf("CollectionPath failed: %v", err)
+	}
+	if err := os.Remove(filepath.Join(collectionPath, "collection.key")); err != nil {
+		t.Fatalf("failed to remove collection key: %v", err)
+	}
+	if _, err := targetDB.GetCollectionByName("payments"); !storage.IsCollectionLocked(err) {
+		t.Fatalf("expected locked target collection, got %v", err)
+	}
+
+	importCmd := CollectionCommand(targetDB, &env.EnvStorage{})
+	err = importCmd.Run(context.Background(), []string{"collection", "import", exportPath, "--passphrase", "team-pass"})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("expected locked collection to be treated as existing without --force, got %v", err)
+	}
+	if err := importCmd.Run(context.Background(), []string{"collection", "import", exportPath, "--force", "--passphrase", "team-pass"}); err != nil {
+		t.Fatalf("collection import --force failed: %v", err)
+	}
+
+	loadedCollection, err := targetDB.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("GetCollectionByName failed: %v", err)
+	}
+	if loadedCollection.ID != targetCollection.ID {
+		t.Fatalf("expected locked collection ID to be reused, got %q", loadedCollection.ID)
+	}
+	if loadedCollection.Variables["API_KEY"] != "secret-token" {
+		t.Fatalf("expected imported secret, got %q", loadedCollection.Variables["API_KEY"])
+	}
+	loadedRequest, err := targetDB.GetRequestByName("list payments")
+	if err != nil {
+		t.Fatalf("GetRequestByName failed: %v", err)
+	}
+	if loadedRequest.ID != "existing-id" {
+		t.Fatalf("expected existing request ID to be reused, got %q", loadedRequest.ID)
+	}
+	if loadedRequest.URL != "https://new.example.com/payments" {
+		t.Fatalf("expected request to be overwritten, got %s", loadedRequest.URL)
+	}
+	rawData, err := os.ReadFile(filepath.Join(collectionPath, "collection.json"))
+	if err != nil {
+		t.Fatalf("failed to read stored collection: %v", err)
+	}
+	if strings.Contains(string(rawData), "secret-token") {
+		t.Fatal("imported secret should be re-encrypted locally")
+	}
+}
+
 func TestCollectionPassphraseUsesEnvFallback(t *testing.T) {
 	t.Setenv("GURL_IMPORT_PASSPHRASE", "env-pass")
 

@@ -437,8 +437,24 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("collection export is missing collection metadata")
 			}
 
+			allowLockedSave := false
 			if store, ok := db.(storage.CollectionStore); ok {
-				if existing, err := store.GetCollectionByName(collection.Name); err == nil && existing != nil {
+				existing, err := store.GetCollectionByName(collection.Name)
+				if storage.IsCollectionLocked(err) {
+					if !c.Bool("force") {
+						return fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
+					}
+					rawStore, ok := db.(rawCollectionByNameStore)
+					if !ok {
+						return fmt.Errorf("failed to inspect locked collection %q: %w", collection.Name, err)
+					}
+					existing, err = rawStore.GetRawCollectionByName(collection.Name)
+					if err != nil {
+						return fmt.Errorf("failed to inspect locked collection %q: %w", collection.Name, err)
+					}
+					allowLockedSave = true
+				}
+				if err == nil && existing != nil {
 					if !c.Bool("force") {
 						return fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
 					}
@@ -446,7 +462,7 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 					collection.CreatedAt = existing.CreatedAt
 				}
 			}
-			if err := saveCollectionRecord(db, collection); err != nil {
+			if err := saveCollectionRecord(db, collection, allowLockedSave); err != nil {
 				return err
 			}
 
@@ -479,7 +495,22 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 	}
 }
 
-func saveCollectionRecord(db storage.DB, collection *types.Collection) error {
+type rawCollectionByNameStore interface {
+	GetRawCollectionByName(name string) (*types.Collection, error)
+}
+
+type lockedCollectionSaver interface {
+	SaveCollectionAllowLocked(collection *types.Collection) error
+}
+
+func saveCollectionRecord(db storage.DB, collection *types.Collection, allowLocked bool) error {
+	if allowLocked {
+		saver, ok := db.(lockedCollectionSaver)
+		if !ok {
+			return fmt.Errorf("locked collection overwrite is not supported by this storage backend")
+		}
+		return saver.SaveCollectionAllowLocked(collection)
+	}
 	store, ok := db.(storage.CollectionStore)
 	if !ok {
 		return fmt.Errorf("collection variables are not supported by this storage backend")
