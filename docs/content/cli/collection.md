@@ -73,13 +73,24 @@ Common flags:
 
 ### remove
 
-Delete a collection.
+Remove a collection label while keeping its requests.
 
 ```bash
 gurl collection remove [name]
 ```
 
-Aliases: `rm`, `delete`, `del`
+Aliases: `rm`
+
+### delete
+
+Delete a collection and all requests in it. Interactive terminals ask for confirmation. Use `--force` for non-interactive scripts.
+
+```bash
+gurl collection delete [name]
+gurl collection delete [name] --force
+```
+
+Aliases: `del`
 
 ### export
 
@@ -178,10 +189,10 @@ Stops after the first assertion failure. Other request failures are reported, bu
 ### Delete a collection
 
 ```bash
-gurl collection remove "old-api"
+gurl collection delete "old-api" --force
 ```
 
-Deletes the "old-api" collection.
+Deletes the "old-api" collection and all requests in it.
 
 ### Share a collection with secrets
 

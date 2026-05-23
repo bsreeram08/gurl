@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -14,7 +15,12 @@ import (
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
+	"golang.org/x/term"
 )
+
+var collectionDeleteIsInteractive = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
 
 // CollectionCommand creates the collection command.
 func CollectionCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
@@ -34,6 +40,7 @@ func CollectionCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 			collectionExportCommand(db),
 			collectionImportCommand(db),
 			collectionRemoveCommand(db),
+			collectionDeleteCommand(db),
 			collectionRenameCommand(db),
 		},
 	}
@@ -568,8 +575,8 @@ func migrateCollectionToProjectFiles(c *cli.Command, db storage.DB, name string)
 func collectionRemoveCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
 		Name:    "remove",
-		Aliases: []string{"rm", "delete", "del"},
-		Usage:   "Remove a collection",
+		Aliases: []string{"rm"},
+		Usage:   "Remove a collection label and keep its requests",
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
 			if args.Len() < 1 {
@@ -600,6 +607,98 @@ func collectionRemoveCommand(db storage.DB) *cli.Command {
 			return nil
 		},
 	}
+}
+
+func collectionDeleteCommand(db storage.DB) *cli.Command {
+	return &cli.Command{
+		Name:    "delete",
+		Aliases: []string{"del"},
+		Usage:   "Delete a collection and all of its requests",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "force",
+				Usage: "Delete without interactive confirmation",
+			},
+		},
+		Action: func(ctx context.Context, c *cli.Command) error {
+			args := c.Args()
+			if args.Len() < 1 {
+				return fmt.Errorf("collection name argument is required")
+			}
+			name := args.Get(0)
+
+			collection, _ := loadCollectionByName(db, name)
+			requests, err := db.ListRequests(&storage.ListOptions{Collection: name})
+			if err != nil {
+				return fmt.Errorf("failed to list collection: %w", err)
+			}
+			if collection == nil && len(requests) == 0 {
+				return fmt.Errorf("collection %q not found or empty", name)
+			}
+
+			secretCount := 0
+			if collection != nil {
+				for _, isSecret := range collection.SecretKeys {
+					if isSecret {
+						secretCount++
+					}
+				}
+			}
+
+			if !c.Bool("force") {
+				confirmed, err := confirmCollectionDelete(name, len(requests), secretCount)
+				if err != nil {
+					return err
+				}
+				if !confirmed {
+					fmt.Println("Cancelled.")
+					return nil
+				}
+			}
+
+			for _, req := range requests {
+				if err := db.DeleteRequest(req.ID); err != nil {
+					return fmt.Errorf("failed to delete request %q: %w", req.Name, err)
+				}
+			}
+
+			if collection != nil {
+				store, ok := db.(storage.CollectionStore)
+				if !ok {
+					return fmt.Errorf("collection variables are not supported by this storage backend")
+				}
+				if err := store.DeleteCollection(collection.ID); err != nil {
+					return fmt.Errorf("failed to delete collection: %w", err)
+				}
+			}
+
+			fmt.Printf("✓ Deleted collection '%s' (%d requests deleted)\n", name, len(requests))
+			return nil
+		},
+	}
+}
+
+func confirmCollectionDelete(name string, requestCount int, secretCount int) (bool, error) {
+	requestLabel := pluralizeCount(requestCount, "request", "requests")
+	secretLabel := pluralizeCount(secretCount, "secret", "secrets")
+	if !collectionDeleteIsInteractive() {
+		return false, fmt.Errorf("collection %q has %s and %s; use --force to delete non-interactively", name, requestLabel, secretLabel)
+	}
+
+	fmt.Printf("Collection %q has %s and %s. Delete all? [y/N] ", name, requestLabel, secretLabel)
+	answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil && strings.TrimSpace(answer) == "" {
+		return false, fmt.Errorf("failed to read confirmation: %w", err)
+	}
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	return answer == "y" || answer == "yes", nil
+}
+
+func pluralizeCount(count int, singular string, plural string) string {
+	if count == 1 {
+		return fmt.Sprintf("%d %s", count, singular)
+	}
+	return fmt.Sprintf("%d %s", count, plural)
 }
 
 func collectionRenameCommand(db storage.DB) *cli.Command {

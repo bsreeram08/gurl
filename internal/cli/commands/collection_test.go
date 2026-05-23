@@ -581,6 +581,134 @@ func TestCollectionRemoveCommand(t *testing.T) {
 	}
 }
 
+func TestCollectionDeleteForceCascadesRequestsAndCollection(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+	collection := types.NewCollection("payments")
+	collection.SetSecretVariable("API_KEY", "secret")
+	if err := db.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	for _, req := range []*types.SavedRequest{
+		{ID: "req-1", Name: "list payments", URL: "https://example.com/payments", Collection: "payments"},
+		{ID: "req-2", Name: "get payment", URL: "https://example.com/payments/1", Collection: "payments"},
+	} {
+		if err := db.SaveRequest(req); err != nil {
+			t.Fatalf("SaveRequest failed: %v", err)
+		}
+	}
+
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	output := captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"collection", "delete", "payments", "--force"}); err != nil {
+			t.Fatalf("collection delete failed: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "Deleted collection 'payments' (2 requests deleted)") {
+		t.Fatalf("expected delete summary, got %q", output)
+	}
+	if _, err := db.GetCollectionByName("payments"); err == nil {
+		t.Fatal("expected collection record to be deleted")
+	}
+	requests, err := db.ListRequests(&storage.ListOptions{Collection: "payments"})
+	if err != nil {
+		t.Fatalf("ListRequests failed: %v", err)
+	}
+	if len(requests) != 0 {
+		t.Fatalf("expected collection requests to be deleted, got %+v", requests)
+	}
+	if _, err := db.GetRequestByName("list payments"); err == nil {
+		t.Fatal("expected request to be deleted")
+	}
+}
+
+func TestCollectionDeleteRequiresConfirmationWhenInteractive(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+	collection := types.NewCollection("payments")
+	collection.SetSecretVariable("API_KEY", "secret")
+	if err := db.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	if err := db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "list payments",
+		URL:        "https://example.com/payments",
+		Collection: "payments",
+	}); err != nil {
+		t.Fatalf("SaveRequest failed: %v", err)
+	}
+
+	oldInteractive := collectionDeleteIsInteractive
+	collectionDeleteIsInteractive = func() bool { return true }
+	defer func() { collectionDeleteIsInteractive = oldInteractive }()
+	oldStdin := os.Stdin
+	stdin, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create stdin pipe: %v", err)
+	}
+	if _, err := writer.WriteString("y\n"); err != nil {
+		t.Fatalf("failed to write confirmation: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("failed to close stdin writer: %v", err)
+	}
+	os.Stdin = stdin
+	defer func() {
+		os.Stdin = oldStdin
+		stdin.Close()
+	}()
+
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	output := captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"collection", "delete", "payments"}); err != nil {
+			t.Fatalf("collection delete failed: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "Collection \"payments\" has 1 request and 1 secret. Delete all? [y/N]") {
+		t.Fatalf("expected confirmation prompt, got %q", output)
+	}
+	if _, err := db.GetRequestByName("list payments"); err == nil {
+		t.Fatal("expected confirmed delete to remove request")
+	}
+}
+
+func TestCollectionDeleteErrorsNonInteractiveWithoutForce(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+	if err := db.SaveCollection(types.NewCollection("payments")); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	if err := db.SaveRequest(&types.SavedRequest{
+		ID:         "req-1",
+		Name:       "list payments",
+		URL:        "https://example.com/payments",
+		Collection: "payments",
+	}); err != nil {
+		t.Fatalf("SaveRequest failed: %v", err)
+	}
+
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	err := cmd.Run(context.Background(), []string{"collection", "delete", "payments"})
+	if err == nil || !strings.Contains(err.Error(), "use --force") {
+		t.Fatalf("expected non-interactive confirmation error, got %v", err)
+	}
+	if _, err := db.GetRequestByName("list payments"); err != nil {
+		t.Fatalf("request should remain after refused delete: %v", err)
+	}
+}
+
 func TestCollectionRenameCommand(t *testing.T) {
 	tests := []struct {
 		name    string
