@@ -69,8 +69,12 @@ func (s *FileEnvStore) SaveEnv(env *Environment) error {
 		env.SecretKeys = make(map[string]bool)
 	}
 
+	stored, err := envForFileStorage(env)
+	if err != nil {
+		return err
+	}
 	targetPath := filepath.Join(s.project.EnvironmentsDir(), safeEnvFileName(env.Name))
-	if err := writeEnvJSONFile(targetPath, env); err != nil {
+	if err := writeEnvJSONFile(targetPath, stored); err != nil {
 		return err
 	}
 	if oldPath != "" && oldPath != targetPath {
@@ -135,6 +139,9 @@ func (s *FileEnvStore) ListEnvs() ([]*Environment, error) {
 			continue
 		}
 		normalizeEnv(&env)
+		if err := decryptFileEnvForUse(&env); err != nil {
+			return nil, err
+		}
 		envs = append(envs, &env)
 	}
 	sort.SliceStable(envs, func(i, j int) bool {
@@ -275,6 +282,76 @@ func normalizeEnv(env *Environment) {
 	if env.SecretKeys == nil {
 		env.SecretKeys = make(map[string]bool)
 	}
+}
+
+func envForFileStorage(source *Environment) (*Environment, error) {
+	stored := cloneEnvironment(source)
+	if stored == nil || !envHasSecrets(stored) {
+		return stored, nil
+	}
+	key, err := GetOrCreateMachineKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get encryption key: %w", err)
+	}
+	for name, isSecret := range stored.SecretKeys {
+		if !isSecret {
+			continue
+		}
+		encrypted, err := EncryptSecret(key, stored.Variables[name])
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt secret %s: %w", name, err)
+		}
+		stored.Variables[name] = encrypted
+	}
+	return stored, nil
+}
+
+func decryptFileEnvForUse(env *Environment) error {
+	if env == nil || !envHasSecrets(env) {
+		return nil
+	}
+	key, err := GetOrCreateMachineKey()
+	if err != nil {
+		return fmt.Errorf("failed to get encryption key: %w", err)
+	}
+	for name, isSecret := range env.SecretKeys {
+		if isSecret && IsEncryptedValue(env.Variables[name]) {
+			decrypted, err := DecryptSecret(key, env.Variables[name])
+			if err != nil {
+				return fmt.Errorf("failed to decrypt secret %s: %w", name, err)
+			}
+			env.Variables[name] = decrypted
+		}
+	}
+	return nil
+}
+
+func envHasSecrets(env *Environment) bool {
+	if env == nil {
+		return false
+	}
+	for _, isSecret := range env.SecretKeys {
+		if isSecret {
+			return true
+		}
+	}
+	return false
+}
+
+func cloneEnvironment(source *Environment) *Environment {
+	if source == nil {
+		return nil
+	}
+	clone := *source
+	clone.Variables = make(map[string]string, len(source.Variables))
+	for key, value := range source.Variables {
+		clone.Variables[key] = value
+	}
+	clone.SecretKeys = make(map[string]bool, len(source.SecretKeys))
+	for key, value := range source.SecretKeys {
+		clone.SecretKeys[key] = value
+	}
+	return &clone
 }
 
 func readEnvJSONFile(path string, out any) error {

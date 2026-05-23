@@ -8,7 +8,7 @@ Gurl separates secret storage from general configuration. Secrets are encrypted 
 
 ## Environment Secrets (Encrypted)
 
-Environment variables marked `--secret` are encrypted before storage. This applies to API keys, OAuth tokens, passwords, and any other value you want protected.
+Environment variables marked `--secret` are encrypted before storage in both the default database and file-backed project environments under `.gurl/environments/`. This applies to API keys, OAuth tokens, passwords, and any other value you want protected.
 
 **Algorithm**: AES-256-GCM
 
