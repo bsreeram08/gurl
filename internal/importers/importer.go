@@ -33,16 +33,12 @@ func GetByExtension(ext string) Importer {
 
 // Import processes a file and returns converted requests
 func Import(path string) ([]*types.SavedRequest, error) {
-	ext := filepath.Ext(path)
+	ext := strings.ToLower(filepath.Ext(path))
 	if ext == "" {
 		return nil, fmt.Errorf("no file extension found")
 	}
 
-	// Normalize extension (remove leading dot and lowercase)
-	ext = "." + ext
-	extLower := ext
-
-	importer := GetByExtension(extLower)
+	importer := GetByExtension(ext)
 	if importer == nil {
 		return nil, fmt.Errorf("unsupported file format: %s", ext)
 	}
