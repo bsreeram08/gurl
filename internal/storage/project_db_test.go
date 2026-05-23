@@ -109,3 +109,40 @@ func TestProjectDBMigrationMakesFileCopyTakePrecedence(t *testing.T) {
 		t.Fatalf("expected DB duplicate to be hidden after migration, got %+v", requests)
 	}
 }
+
+func TestProjectDBDeleteRemovesMigratedDBShadow(t *testing.T) {
+	base := NewLMDBWithPath(filepath.Join(t.TempDir(), "gurl.db"))
+	if err := base.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer base.Close()
+
+	if err := base.SaveRequest(&types.SavedRequest{
+		ID:         "legacy-1",
+		Name:       "legacy request",
+		URL:        "https://db.example.com",
+		Method:     "GET",
+		Collection: "legacy",
+	}); err != nil {
+		t.Fatalf("base SaveRequest failed: %v", err)
+	}
+
+	proj, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	db := NewProjectDB(base, NewFileStore(proj))
+	if _, _, err := db.MigrateCollectionToFiles("legacy"); err != nil {
+		t.Fatalf("MigrateCollectionToFiles failed: %v", err)
+	}
+
+	if err := db.DeleteRequest("legacy-1"); err != nil {
+		t.Fatalf("DeleteRequest failed: %v", err)
+	}
+	if _, err := db.GetRequestByName("legacy request"); err == nil {
+		t.Fatal("expected migrated request to stay deleted instead of falling back to DB shadow")
+	}
+	if _, err := base.GetRequest("legacy-1"); err == nil {
+		t.Fatal("expected legacy DB shadow row to be removed")
+	}
+}

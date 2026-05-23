@@ -91,7 +91,13 @@ func (db *ProjectDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, err
 
 func (db *ProjectDB) DeleteRequest(id string) error {
 	if db.hasFileStore() && db.files.HasRequest(id) {
-		return db.files.DeleteRequest(id)
+		if err := db.files.DeleteRequest(id); err != nil {
+			return err
+		}
+		if _, err := db.base.GetRequest(id); err == nil {
+			return db.base.DeleteRequest(id)
+		}
+		return nil
 	}
 	return db.base.DeleteRequest(id)
 }

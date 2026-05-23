@@ -75,3 +75,35 @@ func TestEnvStorageKeepsDBAndFileEnvironmentsTogether(t *testing.T) {
 		t.Fatalf("expected DB and file envs to coexist, got %+v", envs)
 	}
 }
+
+func TestProjectEnvStorageClearActiveEnvClearsDBFallback(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "gurl.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+
+	dbStore := NewEnvStorage(db)
+	if err := dbStore.SetActiveEnv("db-env"); err != nil {
+		t.Fatalf("DB SetActiveEnv failed: %v", err)
+	}
+	dbPath := db.Path()
+	if err := db.Close(); err != nil {
+		t.Fatalf("failed to close db: %v", err)
+	}
+
+	proj, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	store := NewEnvStorageWithPathAndProject(dbPath, proj)
+	if active, err := store.GetActiveEnv(); err != nil || active != "db-env" {
+		t.Fatalf("expected DB active fallback before clear, active=%q err=%v", active, err)
+	}
+
+	if err := store.SetActiveEnv(""); err != nil {
+		t.Fatalf("project SetActiveEnv clear failed: %v", err)
+	}
+	if active, err := store.GetActiveEnv(); err != nil || active != "" {
+		t.Fatalf("expected active env to stay clear, active=%q err=%v", active, err)
+	}
+}

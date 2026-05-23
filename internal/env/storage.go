@@ -315,7 +315,15 @@ func (s *EnvStorage) GetActiveEnv() (string, error) {
 
 func (s *EnvStorage) SetActiveEnv(name string) error {
 	if s.hasFileStore() {
-		return s.files.SetActiveEnv(name)
+		if err := s.files.SetActiveEnv(name); err != nil {
+			return err
+		}
+		if name == "" && s.hasDBConfig() {
+			if err := s.clearDBActiveEnv(); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	db, closeDB, err := s.openDB()
@@ -344,4 +352,17 @@ func sortEnvs(envs []*Environment) {
 
 func (s *EnvStorage) hasDBConfig() bool {
 	return s != nil && (s.dbPath != "" || (s.db != nil && s.db.DB != nil))
+}
+
+func (s *EnvStorage) clearDBActiveEnv() error {
+	db, closeDB, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
+	if err := db.DB.Delete([]byte("cfg:activeEnv"), nil); err != nil && err != leveldb.ErrNotFound {
+		return fmt.Errorf("failed to clear active env: %w", err)
+	}
+	return nil
 }
