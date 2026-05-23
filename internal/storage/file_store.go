@@ -45,6 +45,14 @@ func (s *FileStore) Enabled() bool {
 }
 
 func (s *FileStore) SaveCollection(collection *types.Collection) error {
+	return s.saveCollection(collection, false)
+}
+
+func (s *FileStore) SaveCollectionAllowLocked(collection *types.Collection) error {
+	return s.saveCollection(collection, true)
+}
+
+func (s *FileStore) saveCollection(collection *types.Collection, allowLocked bool) error {
 	if !s.Enabled() {
 		return fmt.Errorf("file storage is not configured")
 	}
@@ -55,23 +63,36 @@ func (s *FileStore) SaveCollection(collection *types.Collection) error {
 		return fmt.Errorf("collection name cannot be empty")
 	}
 
+	findCollectionByName := s.findCollectionByName
+	findCollectionByID := s.findCollectionByID
+	if allowLocked {
+		findCollectionByName = s.findRawCollectionByName
+		findCollectionByID = s.findRawCollectionByID
+	}
+
 	now := time.Now().Unix()
 	if collection.ID == "" {
-		if existing, _, err := s.findCollectionByName(collection.Name); err == nil && existing != nil {
+		if existing, _, err := findCollectionByName(collection.Name); err == nil && existing != nil {
 			return fmt.Errorf("collection %q already exists", collection.Name)
+		} else if IsCollectionLocked(err) {
+			return err
 		}
 		collection.ID = uuid.New().String()
 	}
 
 	var existingDir string
-	if existing, dir, err := s.findCollectionByID(collection.ID); err == nil && existing != nil {
+	if existing, dir, err := findCollectionByID(collection.ID); err == nil && existing != nil {
 		existingDir = dir
 		if collection.CreatedAt == 0 {
 			collection.CreatedAt = existing.CreatedAt
 		}
+	} else if IsCollectionLocked(err) {
+		return err
 	}
-	if existing, _, err := s.findCollectionByName(collection.Name); err == nil && existing.ID != collection.ID {
+	if existing, _, err := findCollectionByName(collection.Name); err == nil && existing.ID != collection.ID {
 		return fmt.Errorf("collection %q already exists", collection.Name)
+	} else if IsCollectionLocked(err) {
+		return err
 	}
 
 	if collection.CreatedAt == 0 {
@@ -105,12 +126,19 @@ func (s *FileStore) SaveCollection(collection *types.Collection) error {
 		return fmt.Errorf("failed to create collection directory: %w", err)
 	}
 
-	return writeJSONFile(filepath.Join(targetDir, collectionFileName), collection)
+	stored, err := s.collectionForStorage(collection, targetDir)
+	if err != nil {
+		return err
+	}
+	return writeJSONFile(filepath.Join(targetDir, collectionFileName), stored)
 }
 
 func (s *FileStore) GetCollection(id string) (*types.Collection, error) {
 	collection, _, err := s.findCollectionByID(id)
 	if err != nil {
+		if IsCollectionLocked(err) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("collection not found: %s", id)
 	}
 	return collection, nil
@@ -118,6 +146,17 @@ func (s *FileStore) GetCollection(id string) (*types.Collection, error) {
 
 func (s *FileStore) GetCollectionByName(name string) (*types.Collection, error) {
 	collection, _, err := s.findCollectionByName(name)
+	if err != nil {
+		if IsCollectionLocked(err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("collection not found: %s", name)
+	}
+	return collection, nil
+}
+
+func (s *FileStore) GetRawCollectionByName(name string) (*types.Collection, error) {
+	collection, _, err := s.findRawCollectionByName(name)
 	if err != nil {
 		return nil, fmt.Errorf("collection not found: %s", name)
 	}
@@ -142,6 +181,9 @@ func (s *FileStore) ListCollections() ([]*types.Collection, error) {
 func (s *FileStore) DeleteCollection(id string) error {
 	_, dir, err := s.findCollectionByID(id)
 	if err != nil {
+		if IsCollectionLocked(err) {
+			return err
+		}
 		return fmt.Errorf("collection not found: %s", id)
 	}
 	if err := os.RemoveAll(dir); err != nil {
@@ -159,6 +201,9 @@ func (s *FileStore) UpdateCollection(collection *types.Collection) error {
 	}
 	existing, _, err := s.findCollectionByID(collection.ID)
 	if err != nil {
+		if IsCollectionLocked(err) {
+			return err
+		}
 		return fmt.Errorf("collection not found: %s", collection.ID)
 	}
 	collection.CreatedAt = existing.CreatedAt
@@ -181,6 +226,9 @@ func (s *FileStore) SaveRequest(req *types.SavedRequest) error {
 
 	_, collectionDir, err := s.findCollectionByName(req.Collection)
 	if err != nil {
+		if IsCollectionLocked(err) {
+			return err
+		}
 		collection := types.NewCollection(req.Collection)
 		if err := s.SaveCollection(collection); err != nil {
 			return err
@@ -224,22 +272,23 @@ func (s *FileStore) SaveRequest(req *types.SavedRequest) error {
 func (s *FileStore) GetRequest(id string) (*types.SavedRequest, error) {
 	req, _, err := s.findRequestByID(id)
 	if err != nil {
+		if IsCollectionLocked(err) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("request not found: %s", id)
 	}
 	return req, nil
 }
 
 func (s *FileStore) GetRequestByName(name string) (*types.SavedRequest, error) {
-	requests, err := s.ListRequests(nil)
+	req, _, err := s.findRequestByName(name)
 	if err != nil {
-		return nil, err
-	}
-	for _, req := range requests {
-		if req.Name == name {
-			return req, nil
+		if IsCollectionLocked(err) {
+			return nil, err
 		}
+		return nil, fmt.Errorf("request not found: %s", name)
 	}
-	return nil, fmt.Errorf("request not found: %s", name)
+	return req, nil
 }
 
 func (s *FileStore) ListRequests(opts *ListOptions) ([]*types.SavedRequest, error) {
@@ -250,9 +299,22 @@ func (s *FileStore) ListRequests(opts *ListOptions) ([]*types.SavedRequest, erro
 		opts = &ListOptions{}
 	}
 
-	records, err := s.scanCollections()
-	if err != nil {
-		return nil, err
+	var records []collectionRecord
+	if opts.Collection != "" {
+		collection, dir, err := s.findCollectionByName(opts.Collection)
+		if err != nil {
+			if errors.Is(err, errFileCollectionNotFound) {
+				return []*types.SavedRequest{}, nil
+			}
+			return nil, err
+		}
+		records = append(records, collectionRecord{collection: collection, dir: dir})
+	} else {
+		var err error
+		records, err = s.scanCollections()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var requests []*types.SavedRequest
@@ -284,6 +346,9 @@ func (s *FileStore) ListRequests(opts *ListOptions) ([]*types.SavedRequest, erro
 func (s *FileStore) DeleteRequest(id string) error {
 	_, path, err := s.findRequestByID(id)
 	if err != nil {
+		if IsCollectionLocked(err) {
+			return err
+		}
 		return fmt.Errorf("request not found: %s", id)
 	}
 	if err := os.Remove(path); err != nil {
@@ -300,6 +365,9 @@ func (s *FileStore) UpdateRequest(req *types.SavedRequest) error {
 		return fmt.Errorf("cannot update request without ID")
 	}
 	if _, _, err := s.findRequestByID(req.ID); err != nil {
+		if IsCollectionLocked(err) {
+			return err
+		}
 		return fmt.Errorf("request not found: %w", err)
 	}
 	return s.SaveRequest(req)
@@ -396,6 +464,14 @@ func (s *FileStore) CollectionPath(name string) (string, error) {
 }
 
 func (s *FileStore) scanCollections() ([]collectionRecord, error) {
+	return s.scanCollectionsForUse(true)
+}
+
+func (s *FileStore) scanCollectionsRaw() ([]collectionRecord, error) {
+	return s.scanCollectionsForUse(false)
+}
+
+func (s *FileStore) scanCollectionsForUse(decrypt bool) ([]collectionRecord, error) {
 	if !s.Enabled() {
 		return nil, nil
 	}
@@ -413,13 +489,19 @@ func (s *FileStore) scanCollections() ([]collectionRecord, error) {
 			continue
 		}
 		path := filepath.Join(s.project.CollectionsDir(), entry.Name(), collectionFileName)
+		dir := filepath.Dir(path)
 		collection, err := readCollectionFile(path)
 		if err != nil {
 			continue
 		}
+		if decrypt {
+			if err := s.decryptCollectionForUse(collection, dir); err != nil {
+				return nil, err
+			}
+		}
 		records = append(records, collectionRecord{
 			collection: collection,
-			dir:        filepath.Dir(path),
+			dir:        dir,
 		})
 	}
 	sort.SliceStable(records, func(i, j int) bool {
@@ -428,21 +510,8 @@ func (s *FileStore) scanCollections() ([]collectionRecord, error) {
 	return records, nil
 }
 
-func (s *FileStore) findCollectionByID(id string) (*types.Collection, string, error) {
-	records, err := s.scanCollections()
-	if err != nil {
-		return nil, "", err
-	}
-	for _, record := range records {
-		if record.collection.ID == id {
-			return record.collection, record.dir, nil
-		}
-	}
-	return nil, "", errFileCollectionNotFound
-}
-
-func (s *FileStore) findCollectionByName(name string) (*types.Collection, string, error) {
-	records, err := s.scanCollections()
+func (s *FileStore) findRawCollectionByName(name string) (*types.Collection, string, error) {
+	records, err := s.scanCollectionsRaw()
 	if err != nil {
 		return nil, "", err
 	}
@@ -454,8 +523,65 @@ func (s *FileStore) findCollectionByName(name string) (*types.Collection, string
 	return nil, "", errFileCollectionNotFound
 }
 
+func (s *FileStore) findRawCollectionByID(id string) (*types.Collection, string, error) {
+	records, err := s.scanCollectionsRaw()
+	if err != nil {
+		return nil, "", err
+	}
+	for _, record := range records {
+		if record.collection.ID == id {
+			return record.collection, record.dir, nil
+		}
+	}
+	return nil, "", errFileCollectionNotFound
+}
+
+func (s *FileStore) findCollectionByID(id string) (*types.Collection, string, error) {
+	records, err := s.scanCollectionsRaw()
+	if err != nil {
+		return nil, "", err
+	}
+	for _, record := range records {
+		if record.collection.ID == id {
+			if err := s.decryptCollectionForUse(record.collection, record.dir); err != nil {
+				return nil, "", err
+			}
+			return record.collection, record.dir, nil
+		}
+	}
+	return nil, "", errFileCollectionNotFound
+}
+
+func (s *FileStore) findCollectionByName(name string) (*types.Collection, string, error) {
+	records, err := s.scanCollectionsRaw()
+	if err != nil {
+		return nil, "", err
+	}
+	for _, record := range records {
+		if record.collection.Name == name {
+			if err := s.decryptCollectionForUse(record.collection, record.dir); err != nil {
+				return nil, "", err
+			}
+			return record.collection, record.dir, nil
+		}
+	}
+	return nil, "", errFileCollectionNotFound
+}
+
 func (s *FileStore) findRequestByID(id string) (*types.SavedRequest, string, error) {
-	records, err := s.scanCollections()
+	return s.findRequest(func(req *types.SavedRequest) bool {
+		return req.ID == id
+	})
+}
+
+func (s *FileStore) findRequestByName(name string) (*types.SavedRequest, string, error) {
+	return s.findRequest(func(req *types.SavedRequest) bool {
+		return req.Name == name
+	})
+}
+
+func (s *FileStore) findRequest(match func(*types.SavedRequest) bool) (*types.SavedRequest, string, error) {
+	records, err := s.scanCollectionsRaw()
 	if err != nil {
 		return nil, "", err
 	}
@@ -465,7 +591,13 @@ func (s *FileStore) findRequestByID(id string) (*types.SavedRequest, string, err
 			return nil, "", err
 		}
 		for _, reqRecord := range requests {
-			if reqRecord.request.ID == id {
+			if match(reqRecord.request) {
+				if err := s.decryptCollectionForUse(record.collection, record.dir); err != nil {
+					return nil, "", err
+				}
+				if reqRecord.request.Collection == "" {
+					reqRecord.request.Collection = record.collection.Name
+				}
 				return reqRecord.request, reqRecord.path, nil
 			}
 		}

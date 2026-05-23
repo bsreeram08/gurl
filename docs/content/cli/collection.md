@@ -81,6 +81,32 @@ gurl collection remove [name]
 
 Aliases: `rm`, `delete`, `del`
 
+### export
+
+Export a collection with passphrase-encrypted collection secrets.
+
+```bash
+gurl collection export [name] --passphrase "$TEAM_SECRET" --output collection.gurl
+```
+
+### import
+
+Import a collection export and re-encrypt secrets with the local collection key.
+
+```bash
+gurl collection import collection.gurl --passphrase "$TEAM_SECRET"
+```
+
+For CI, set `GURL_IMPORT_PASSPHRASE` instead of passing `--passphrase`.
+
+### unlock
+
+Unlock a passphrase-protected file-backed collection after cloning shared project files.
+
+```bash
+gurl collection unlock [name] --passphrase "$TEAM_SECRET"
+```
+
 ### rename
 
 Rename a collection.
@@ -156,6 +182,15 @@ gurl collection remove "old-api"
 ```
 
 Deletes the "old-api" collection.
+
+### Share a collection with secrets
+
+```bash
+gurl collection export "checkout-flow" --passphrase "$TEAM_SECRET" --output checkout-flow.gurl
+gurl collection import checkout-flow.gurl --passphrase "$TEAM_SECRET"
+```
+
+The export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`.
 
 ## See also
 

@@ -27,8 +27,12 @@ func (db *ProjectDB) Close() error {
 }
 
 func (db *ProjectDB) SaveRequest(req *types.SavedRequest) error {
-	if db.hasFileStore() && req != nil && req.Collection != "" && db.files.HasCollection(req.Collection) {
-		return db.files.SaveRequest(req)
+	if db.hasFileStore() && req != nil && req.Collection != "" {
+		if _, err := db.files.GetCollectionByName(req.Collection); err == nil {
+			return db.files.SaveRequest(req)
+		} else if IsCollectionLocked(err) {
+			return err
+		}
 	}
 	return db.base.SaveRequest(req)
 }
@@ -37,6 +41,8 @@ func (db *ProjectDB) GetRequest(id string) (*types.SavedRequest, error) {
 	if db.hasFileStore() {
 		if req, err := db.files.GetRequest(id); err == nil {
 			return req, nil
+		} else if IsCollectionLocked(err) {
+			return nil, err
 		}
 	}
 	return db.base.GetRequest(id)
@@ -46,6 +52,8 @@ func (db *ProjectDB) GetRequestByName(name string) (*types.SavedRequest, error) 
 	if db.hasFileStore() {
 		if req, err := db.files.GetRequestByName(name); err == nil {
 			return req, nil
+		} else if IsCollectionLocked(err) {
+			return nil, err
 		}
 	}
 	return db.base.GetRequestByName(name)
@@ -90,21 +98,25 @@ func (db *ProjectDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, err
 }
 
 func (db *ProjectDB) DeleteRequest(id string) error {
-	if db.hasFileStore() && db.files.HasRequest(id) {
-		if err := db.files.DeleteRequest(id); err != nil {
+	if db.hasFileStore() {
+		if _, err := db.files.GetRequest(id); err == nil {
+			if err := db.files.DeleteRequest(id); err != nil {
+				return err
+			}
+			if _, err := db.base.GetRequest(id); err == nil {
+				return db.base.DeleteRequest(id)
+			}
+			return nil
+		} else if IsCollectionLocked(err) {
 			return err
 		}
-		if _, err := db.base.GetRequest(id); err == nil {
-			return db.base.DeleteRequest(id)
-		}
-		return nil
 	}
 	return db.base.DeleteRequest(id)
 }
 
 func (db *ProjectDB) UpdateRequest(req *types.SavedRequest) error {
 	if db.hasFileStore() && req != nil {
-		if db.files.HasRequest(req.ID) {
+		if _, err := db.files.GetRequest(req.ID); err == nil {
 			if req.Collection == "" {
 				if err := db.files.DeleteRequest(req.ID); err != nil {
 					return err
@@ -112,9 +124,15 @@ func (db *ProjectDB) UpdateRequest(req *types.SavedRequest) error {
 				return db.base.SaveRequest(req)
 			}
 			return db.files.SaveRequest(req)
+		} else if IsCollectionLocked(err) {
+			return err
 		}
-		if req.Collection != "" && db.files.HasCollection(req.Collection) {
-			return db.files.SaveRequest(req)
+		if req.Collection != "" {
+			if _, err := db.files.GetCollectionByName(req.Collection); err == nil {
+				return db.files.SaveRequest(req)
+			} else if IsCollectionLocked(err) {
+				return err
+			}
 		}
 	}
 	return db.base.UpdateRequest(req)
@@ -194,8 +212,14 @@ func (db *ProjectDB) GetAllFolders() ([]string, error) {
 }
 
 func (db *ProjectDB) SaveCollection(collection *types.Collection) error {
-	if db.hasFileStore() && db.collectionIsFileBacked(collection) {
-		return db.files.SaveCollection(collection)
+	if db.hasFileStore() {
+		fileBacked, err := db.collectionIsFileBacked(collection)
+		if err != nil {
+			return err
+		}
+		if fileBacked {
+			return db.files.SaveCollection(collection)
+		}
 	}
 	if store, ok := db.base.(CollectionStore); ok {
 		if collection != nil && collection.ID != "" {
@@ -219,10 +243,19 @@ func (db *ProjectDB) SaveCollection(collection *types.Collection) error {
 	return store.SaveCollection(collection)
 }
 
+func (db *ProjectDB) SaveCollectionAllowLocked(collection *types.Collection) error {
+	if db.hasFileStore() {
+		return db.files.SaveCollectionAllowLocked(collection)
+	}
+	return db.SaveCollection(collection)
+}
+
 func (db *ProjectDB) GetCollection(id string) (*types.Collection, error) {
 	if db.hasFileStore() {
 		if collection, err := db.files.GetCollection(id); err == nil {
 			return collection, nil
+		} else if IsCollectionLocked(err) {
+			return nil, err
 		}
 	}
 	store, ok := db.base.(CollectionStore)
@@ -236,6 +269,8 @@ func (db *ProjectDB) GetCollectionByName(name string) (*types.Collection, error)
 	if db.hasFileStore() {
 		if collection, err := db.files.GetCollectionByName(name); err == nil {
 			return collection, nil
+		} else if IsCollectionLocked(err) {
+			return nil, err
 		}
 	}
 	store, ok := db.base.(CollectionStore)
@@ -243,6 +278,13 @@ func (db *ProjectDB) GetCollectionByName(name string) (*types.Collection, error)
 		return nil, fmt.Errorf("collection variables are not supported by this storage backend")
 	}
 	return store.GetCollectionByName(name)
+}
+
+func (db *ProjectDB) GetRawCollectionByName(name string) (*types.Collection, error) {
+	if db.hasFileStore() {
+		return db.files.GetRawCollectionByName(name)
+	}
+	return db.GetCollectionByName(name)
 }
 
 func (db *ProjectDB) ListCollections() ([]*types.Collection, error) {
@@ -281,6 +323,8 @@ func (db *ProjectDB) DeleteCollection(id string) error {
 	if db.hasFileStore() {
 		if _, err := db.files.GetCollection(id); err == nil {
 			return db.files.DeleteCollection(id)
+		} else if IsCollectionLocked(err) {
+			return err
 		}
 	}
 	store, ok := db.base.(CollectionStore)
@@ -291,8 +335,14 @@ func (db *ProjectDB) DeleteCollection(id string) error {
 }
 
 func (db *ProjectDB) UpdateCollection(collection *types.Collection) error {
-	if db.hasFileStore() && db.collectionIsFileBacked(collection) {
-		return db.files.UpdateCollection(collection)
+	if db.hasFileStore() {
+		fileBacked, err := db.collectionIsFileBacked(collection)
+		if err != nil {
+			return err
+		}
+		if fileBacked {
+			return db.files.UpdateCollection(collection)
+		}
 	}
 	store, ok := db.base.(CollectionStore)
 	if !ok {
@@ -340,6 +390,13 @@ func (db *ProjectDB) MigrateCollectionToFiles(name string) (int, string, error) 
 	return len(requests), path, nil
 }
 
+func (db *ProjectDB) UnlockCollection(name string, passphrase string) error {
+	if !db.hasFileStore() {
+		return fmt.Errorf("gurl project not found; run 'gurl init' or set GURL_PROJECT_DIR")
+	}
+	return db.files.UnlockCollection(name, passphrase)
+}
+
 func (db *ProjectDB) FileStore() *FileStore {
 	return db.files
 }
@@ -348,14 +405,25 @@ func (db *ProjectDB) hasFileStore() bool {
 	return db != nil && db.files != nil && db.files.Enabled()
 }
 
-func (db *ProjectDB) collectionIsFileBacked(collection *types.Collection) bool {
+func (db *ProjectDB) collectionIsFileBacked(collection *types.Collection) (bool, error) {
 	if collection == nil || !db.hasFileStore() {
-		return false
+		return false, nil
 	}
-	if collection.ID != "" && db.files.HasCollectionID(collection.ID) {
-		return true
+	if collection.ID != "" {
+		if _, err := db.files.GetCollection(collection.ID); err == nil {
+			return true, nil
+		} else if IsCollectionLocked(err) {
+			return false, err
+		}
 	}
-	return collection.Name != "" && db.files.HasCollection(collection.Name)
+	if collection.Name != "" {
+		if _, err := db.files.GetCollectionByName(collection.Name); err == nil {
+			return true, nil
+		} else if IsCollectionLocked(err) {
+			return false, err
+		}
+	}
+	return false, nil
 }
 
 func (s *FileStore) HasCollectionID(id string) bool {
