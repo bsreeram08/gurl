@@ -110,6 +110,14 @@ gurl collection import collection.gurl --passphrase "$TEAM_SECRET"
 
 For CI, set `GURL_IMPORT_PASSPHRASE` instead of passing `--passphrase`.
 
+Import variables from a `.env` file into a collection.
+
+```bash
+gurl collection import payments --file .env.production
+```
+
+This creates the collection if it does not exist. Imported `.env` values are stored as plain collection variables, not secrets.
+
 ### unlock
 
 Unlock a passphrase-protected file-backed collection after cloning shared project files.

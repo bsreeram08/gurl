@@ -415,7 +415,7 @@ func collectionExportCommand(db storage.DB) *cli.Command {
 func collectionImportCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
 		Name:  "import",
-		Usage: "Import a passphrase-protected collection export",
+		Usage: "Import a collection export or .env variables",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "force",
@@ -423,11 +423,19 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 				Usage:   "Overwrite existing collection/request records",
 			},
 			&cli.StringFlag{
+				Name:  "file",
+				Usage: "Path to .env file for collection variable import",
+			},
+			&cli.StringFlag{
 				Name:  "passphrase",
 				Usage: "Passphrase for decrypting collection secrets",
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
+			if filePath := c.String("file"); filePath != "" {
+				return importCollectionVariablesFromFile(db, c.Args().First(), filePath)
+			}
+
 			path := c.Args().First()
 			if path == "" {
 				return fmt.Errorf("file path is required")
@@ -500,6 +508,57 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 			return nil
 		},
 	}
+}
+
+func importCollectionVariablesFromFile(db storage.DB, name, filePath string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("collection name argument is required when using --file")
+	}
+
+	vars, err := env.ParseDotenvFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to parse .env file: %w", err)
+	}
+
+	collection, err := loadOrCreateCollectionForVariableImport(db, name)
+	if err != nil {
+		return err
+	}
+	for key, value := range vars {
+		collection.SetVariable(key, value)
+	}
+	if err := saveCollectionRecord(db, collection, false); err != nil {
+		return fmt.Errorf("failed to save collection: %w", err)
+	}
+
+	fmt.Printf("✓ Imported %d variable(s) from '%s' into collection '%s'\n", len(vars), filePath, name)
+	return nil
+}
+
+func loadOrCreateCollectionForVariableImport(db storage.DB, name string) (*types.Collection, error) {
+	store, ok := db.(storage.CollectionStore)
+	if !ok {
+		return nil, fmt.Errorf("collection variables are not supported by this storage backend")
+	}
+	collection, err := store.GetCollectionByName(name)
+	if err == nil {
+		if collection != nil {
+			return collection, nil
+		}
+		return types.NewCollection(name), nil
+	}
+	if storage.IsCollectionLocked(err) {
+		return nil, err
+	}
+	if !isCollectionNotFoundError(err) {
+		return nil, fmt.Errorf("failed to load collection %q: %w", name, err)
+	}
+	return types.NewCollection(name), nil
+}
+
+func isCollectionNotFoundError(err error) bool {
+	return err != nil && strings.HasPrefix(err.Error(), "collection not found:")
 }
 
 type rawCollectionByNameStore interface {
