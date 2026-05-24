@@ -131,6 +131,17 @@ gurl collection unlock [name] --passphrase "$TEAM_SECRET"
 
 If `--passphrase` is omitted in an interactive terminal, gurl prompts for it without echoing the value.
 
+### migrate
+
+Migrate a DB-backed collection into project file storage.
+
+```bash
+gurl collection migrate [name]
+gurl collection migrate [name] --passphrase "$TEAM_SECRET"
+```
+
+With `--passphrase`, collection secrets are written to `collection.json` with passphrase-derived encryption and no local `collection.key` is left behind. Teammates can clone the project files and run `gurl collection unlock [name] --passphrase "$TEAM_SECRET"` to cache the derived key in the OS keychain.
+
 ### rename
 
 Rename a collection.
