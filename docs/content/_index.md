@@ -6,7 +6,7 @@ layout: home
 
 gurl is a CLI API workbench. Save, organize, and execute HTTP requests from the terminal — with built-in auth handling, scripting, collection runner, and code generation.
 
-> **Status: early (v0.3.x).** The CLI works. The TUI exists in code but is not functional yet.
+> **Status: early (v0.4.x).** The CLI works. The TUI exists in code but is not functional yet.
 
 ## CLI API workbench.
 

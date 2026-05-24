@@ -23,7 +23,7 @@ Content = """
 
 8 auth handlers, 5 protocol clients, JavaScript scripting, collection runner, code generation, and a plugin system.
 
-Status: early (v0.3.x). The CLI works. The TUI exists in code but is not functional yet.
+Status: early (v0.4.x). The CLI works. The TUI exists in code but is not functional yet.
 """
 
 [[params.socialIcons]]
