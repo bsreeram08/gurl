@@ -1,5 +1,32 @@
 # Changelog
 
+## [v0.4.0] - 2026-05-24
+
+### Added
+
+- First-class collections with scoped variables and encrypted collection secrets.
+- Collection variable precedence: CLI variables override collection variables, which override environment variables.
+- `gurl collection create`, `set-var`, `unset-var`, `show`, `delete`, `migrate`, `export`, `import`, and `unlock` workflows.
+- Git-friendly project storage under `.gurl/collections/` and `.gurl/environments/`, with project discovery via parent-directory walk-up, `GURL_PROJECT_DIR`, or `--project-dir`.
+- File-backed collections as one `collection.json` plus one JSON file per request for reviewable diffs.
+- File-backed environment storage with encrypted secrets.
+- Per-collection encryption keys for DB-backed and file-backed collections.
+- Passphrase-protected collection export/import and passphrase-protected project migration.
+- OS keychain caching for passphrase-protected file-backed collections, with local-key fallback when keychain storage is unavailable.
+- Collection directory import and native top-level collection export/import.
+- `.env` import into collection variables with `gurl collection import <name> --file <path>`.
+- File watching for long-running file-backed collection runs and shell sessions.
+- README guidance for AI agents using gurl safely without exposing credentials.
+
+### Fixed
+
+- `gurl save --collection` now guards against typo-created collections and preserves real storage lookup failures.
+- `--persist` routes dirty variables back to their origin: environment variables to environments, collection variables to collections, and new variables to the active collection when present.
+- Cross-collection chains refresh collection variable context on each request step.
+- File-backed deletion removes migrated DB shadow records instead of allowing deleted requests to reappear.
+- Locked collection handling now fails with actionable errors instead of silently consuming ciphertext.
+- Encrypted-value detection now validates ciphertext payloads before skipping encryption.
+
 ## [v0.3.1] - 2026-05-23
 
 ### Fixed

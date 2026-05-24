@@ -8,15 +8,17 @@
 
 A CLI API workbench. Save requests, run them with environments, assert on responses, generate client code. All from the terminal.
 
-Not a curl wrapper. gurl persists requests, manages collections and environments, runs JavaScript hooks, and speaks HTTP, GraphQL, gRPC, WebSocket, and SSE.
+Not a curl wrapper. gurl persists requests, manages project-backed collections and environments, keeps secrets encrypted, runs JavaScript hooks, and speaks HTTP, GraphQL, gRPC, WebSocket, and SSE.
 
-> **Status: early (v0.3.x).** The CLI works. The TUI (`gurl tui`) exists in code but is not functional yet. Everything below describes the CLI interface.
+> **Status: early (v0.4.x).** The CLI works. The TUI (`gurl tui`) exists in code but is not functional yet. Everything below describes the CLI interface.
 
 ## Features
 
 - **Named requests** — save any curl command with a name, replay it forever
 - **Variable templates** — `{{token}}`, `{{BASE_URL}}`, substituted at runtime with `--var` or environments
 - **Environments** — swap base URLs, secrets, and tokens between dev/staging/prod
+- **Collections** — group requests with scoped variables and encrypted collection secrets
+- **Git-friendly projects** — commit `.gurl/collections/` and `.gurl/environments/` alongside code
 - **Import** — OpenAPI, Insomnia, Bruno, Postman, HAR
 - **Auth handlers** — Basic, Bearer, API Key, Digest, OAuth 1/2, AWS SigV4, NTLM — saved with requests, template-aware
 - **Protocols** — HTTP, GraphQL, gRPC, WebSocket, SSE
@@ -99,7 +101,87 @@ gurl run "create-order" --var token=abc123 --var customerId=42
 gurl list
 ```
 
+## For AI Agents
+
+gurl is designed to give coding agents a safe, repeatable way to inspect and exercise APIs without putting credentials in the model context.
+
+The agent should operate on names, environments, collections, and templates:
+
+```bash
+# Good: the agent sees stable names, not secrets
+gurl run "get-user" --env staging
+gurl collection run "checkout-flow" --env staging --dry-run
+gurl collection show "payments-api"
+
+# Avoid: do not paste raw tokens into prompts or commands
+gurl run "get-user" --var API_KEY=sk-live-...
+```
+
+Recommended agent workflow:
+
+1. Discover what exists with `gurl list`, `gurl env list`, and `gurl collection list`.
+2. Inspect before running with `gurl show <request>` or `gurl collection show <collection>`.
+3. Prefer named environments and collections over ad-hoc `--var` secrets.
+4. Use `--dry-run` before collection runs to see request order, variable sources, and unresolved templates.
+5. Run the smallest named request or collection that answers the task.
+6. Use `--persist` only when the task explicitly needs extracted/script variables saved back.
+
+Credential-safe setup for humans:
+
+```bash
+gurl collection create "payments-api" \
+  --var BASE_URL=https://api.example.com \
+  --secret API_KEY=sk-live-...
+
+gurl save "list-payments" '{{BASE_URL}}/payments' \
+  --collection payments-api \
+  --auth bearer \
+  --auth-param token='{{API_KEY}}'
+
+# After setup, the agent only needs:
+gurl run "list-payments"
+```
+
+Project-backed sharing for teams and agents:
+
+```bash
+gurl init
+gurl collection migrate "payments-api"
+git add .gurl
+git commit -m "add payments API collection"
+```
+
+`.gurl/.gitignore` keeps local `collection.key` files out of git. To share secrets without sharing key files:
+
+```bash
+gurl collection export "payments-api" --passphrase "$TEAM_SECRET" --output payments-api.gurl
+gurl collection import payments-api.gurl --passphrase "$TEAM_SECRET"
+```
+
+For CI or non-interactive agents, provide collection import/unlock passphrases with `GURL_IMPORT_PASSPHRASE` or `--passphrase`.
+
 ## Real Workflows
+
+### Share API collections through git
+
+```bash
+gurl init
+
+gurl collection create "payments-api" \
+  --var BASE_URL=https://api.example.com \
+  --secret API_KEY=sk-live-...
+
+gurl save "list-payments" '{{BASE_URL}}/payments' \
+  --collection payments-api \
+  --auth bearer \
+  --auth-param token='{{API_KEY}}'
+
+gurl collection migrate "payments-api"
+git add .gurl
+git commit -m "add payments API collection"
+```
+
+The collection directory contains request JSON plus `collection.json`. Secret values are encrypted at rest, and local `collection.key` files are gitignored.
 
 ### Migrate from Postman, keep your terminal
 
@@ -227,6 +309,36 @@ gurl env use dev
 ```
 
 Secrets are encrypted at rest with AES-256-GCM and never appear in logs or generated code.
+
+## Collections and Projects
+
+Collections are first-class records with their own variables and secrets. Variable precedence is:
+
+```text
+CLI --var > collection variables > environment variables
+```
+
+Collection variables can reference environment variables:
+
+```bash
+gurl env create staging --var "BASE_URL=https://staging.example.com"
+gurl collection create "users-api" --var "API_URL={{BASE_URL}}/v1"
+```
+
+Project storage lives under `.gurl/`:
+
+```text
+.gurl/
+  collections/
+    users-api/
+      collection.json
+      list-users.json
+      collection.key   # local only, gitignored
+  environments/
+    staging.json
+```
+
+Run `gurl init` once in a repo. After that, gurl walks up parent directories to find `.gurl/`, or you can set `GURL_PROJECT_DIR` / `--project-dir` for CI.
 
 ## Configuration
 
