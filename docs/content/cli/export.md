@@ -25,6 +25,7 @@ The `export` command writes one or more requests to a file. You can export indiv
 | `--collection` | `-c` | none | Export an entire collection |
 | `--all` | `-a` | `false` | Export all requests |
 | `--output` | `-o` | stdout | Output file path |
+| `--passphrase` | | none | Encrypt collection secrets when exporting a collection |
 
 ## Aliases
 
@@ -43,10 +44,10 @@ Exports the "my-request" to a file.
 ### Export a collection
 
 ```bash
-gurl export --collection "api" --output api-collection.gurl
+gurl export --collection "api" --passphrase "$TEAM_SECRET" --output api-collection.gurl
 ```
 
-Exports all requests in the "api" collection.
+Exports the "api" collection metadata, variables, and requests. Collection secrets are encrypted with the passphrase and can be imported with `gurl collection import`.
 
 ### Export all requests
 
