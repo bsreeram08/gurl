@@ -111,7 +111,10 @@ func (s *FileStore) UnlockCollection(name string, passphrase string) error {
 	}
 	collection, dir, err := s.findRawCollectionByName(name)
 	if err != nil {
-		return fmt.Errorf("collection not found: %s", name)
+		if errors.Is(err, errFileCollectionNotFound) {
+			return newCollectionNotFoundError(name)
+		}
+		return err
 	}
 	if collection.Encryption == nil || collection.Encryption.Mode != CollectionEncryptionModePassphrase {
 		return fmt.Errorf("collection %q is not passphrase-locked", name)
