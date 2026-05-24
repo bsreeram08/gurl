@@ -21,6 +21,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.0
 	github.com/urfave/cli/v3 v3.9.0
 	github.com/wI2L/jsondiff v0.7.1
+	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/net v0.54.0
 	golang.org/x/term v0.43.0
 	google.golang.org/grpc v1.81.1
@@ -39,8 +40,10 @@ require (
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
+	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/pprof v0.0.0-20260507013755-92041b743c96 // indirect
