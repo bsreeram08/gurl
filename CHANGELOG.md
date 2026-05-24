@@ -16,6 +16,7 @@
 - Collection directory import and native top-level collection export/import.
 - `.env` import into collection variables with `gurl collection import <name> --file <path>`.
 - File watching for long-running file-backed collection runs and shell sessions.
+- GitHub Container Registry packaging via `ghcr.io/bsreeram08/gurl`.
 - README guidance for AI agents using gurl safely without exposing credentials.
 
 ### Fixed

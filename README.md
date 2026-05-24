@@ -50,6 +50,30 @@ brew install gurl
 curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/install.sh | bash
 ```
 
+### GitHub Packages / Container
+
+```bash
+docker run --rm ghcr.io/bsreeram08/gurl:latest --version
+docker run --rm -v "$PWD:/work" -w /work ghcr.io/bsreeram08/gurl:latest list
+```
+
+Use a version tag for reproducible runs:
+
+```bash
+docker run --rm ghcr.io/bsreeram08/gurl:v0.4.0 --version
+```
+
+To keep gurl's local database, project files, and encrypted key material across container runs, mount the relevant host directories:
+
+```bash
+docker run --rm \
+  -v "$PWD:/work" \
+  -v "$HOME/.local/share/gurl:/home/gurl/.local/share/gurl" \
+  -v "$HOME/.config/gurl:/home/gurl/.config/gurl" \
+  -w /work \
+  ghcr.io/bsreeram08/gurl:latest list
+```
+
 ### Pre-built Binaries
 
 Download from [GitHub Releases](https://github.com/bsreeram08/gurl/releases/latest):

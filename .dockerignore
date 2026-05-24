@@ -1,0 +1,14 @@
+.git
+.github
+.agents
+.codex
+.claude-plugin
+.sisyphus
+docs/public
+tmp
+dist
+coverage.out
+*.test
+*.tar.gz
+gurl
+gurl-*
