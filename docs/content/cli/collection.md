@@ -100,6 +100,8 @@ Export a collection with passphrase-encrypted collection secrets.
 gurl collection export [name] --passphrase "$TEAM_SECRET" --output collection.gurl
 ```
 
+If `--passphrase` is omitted in an interactive terminal, gurl prompts for it without echoing the value.
+
 ### import
 
 Import a collection export and re-encrypt secrets with the local collection key.
@@ -108,15 +110,25 @@ Import a collection export and re-encrypt secrets with the local collection key.
 gurl collection import collection.gurl --passphrase "$TEAM_SECRET"
 ```
 
-For CI, set `GURL_IMPORT_PASSPHRASE` instead of passing `--passphrase`.
+If the export contains encrypted secrets and `--passphrase` is omitted in an interactive terminal, gurl prompts for it. For CI, set `GURL_IMPORT_PASSPHRASE` instead of passing `--passphrase`.
+
+Import variables from a `.env` file into a collection.
+
+```bash
+gurl collection import payments --file .env.production
+```
+
+This creates the collection if it does not exist. Imported `.env` values are stored as plain collection variables, not secrets.
 
 ### unlock
 
-Unlock a passphrase-protected file-backed collection after cloning shared project files.
+Unlock a passphrase-protected file-backed collection after cloning shared project files. The derived key is cached in the OS keychain, so later commands can use the collection without re-entering the passphrase.
 
 ```bash
 gurl collection unlock [name] --passphrase "$TEAM_SECRET"
 ```
+
+If `--passphrase` is omitted in an interactive terminal, gurl prompts for it without echoing the value.
 
 ### migrate
 
@@ -127,7 +139,7 @@ gurl collection migrate [name]
 gurl collection migrate [name] --passphrase "$TEAM_SECRET"
 ```
 
-With `--passphrase`, collection secrets are written to `collection.json` with passphrase-derived encryption and no local `collection.key` is left behind. Teammates can clone the project files and run `gurl collection unlock [name] --passphrase "$TEAM_SECRET"` to re-encrypt the secrets with their own local key.
+With `--passphrase`, collection secrets are written to `collection.json` with passphrase-derived encryption and no local `collection.key` is left behind. Teammates can clone the project files and run `gurl collection unlock [name] --passphrase "$TEAM_SECRET"` to cache the derived key in the OS keychain.
 
 ### rename
 
@@ -213,7 +225,7 @@ gurl collection import checkout-flow.gurl --passphrase "$TEAM_SECRET"
 gurl collection migrate "checkout-flow" --passphrase "$TEAM_SECRET"
 ```
 
-Export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`. Migrate can write passphrase-protected project files directly, so shared repos can omit local collection keys.
+The export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`. Migrate can write passphrase-protected project files directly, so shared repos can omit local collection keys. For passphrase-protected project files, `unlock` verifies the passphrase and caches the derived key in the OS keychain.
 
 ## See also
 

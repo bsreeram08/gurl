@@ -24,6 +24,7 @@ The `import` command converts requests from common API formats into gurl's forma
 | `--force` | `-f` | `false` | Overwrite existing requests with the same name |
 | `--format` | | none | Specify format explicitly (har, openapi, insomnia, postman, bruno) |
 | `--list` | `-l` | `false` | List available collections/requests before importing |
+| `--passphrase` | | none | Decrypt native collection exports with encrypted secrets |
 
 ## Aliases
 
@@ -63,8 +64,17 @@ gurl import --format har ./requests.har
 
 Imports all requests from a HAR file.
 
+### Import native collection export
+
+```bash
+gurl import ./payments.gurl --passphrase "$TEAM_SECRET"
+```
+
+Native collection exports preserve collection variables, secrets, and request membership.
+
 ## See also
 
 - [`gurl export`](export) - Export requests to file
+- [`gurl collection`](collection) - Manage collection variables and exports
 - [`gurl save`](save) - Save a new request
 - [`gurl detect`](detect) - Parse curl commands

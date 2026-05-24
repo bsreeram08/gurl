@@ -4,7 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/pkg/types"
 )
 
 func TestImportCommand(t *testing.T) {
@@ -39,7 +43,7 @@ func TestImportCommand(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "imports with --force flag creates temp file first",
+			name: "imports empty supported file",
 			setup: func(db *mockDB) string {
 				tmpDir := t.TempDir()
 				tmpFile := filepath.Join(tmpDir, "test.json")
@@ -47,7 +51,7 @@ func TestImportCommand(t *testing.T) {
 				return tmpFile
 			},
 			args:    []string{"--force"},
-			wantErr: true,
+			wantErr: false,
 		},
 	}
 
@@ -87,5 +91,94 @@ func TestImportListFormats(t *testing.T) {
 	err := cmd.Run(context.Background(), []string{"import", "--list"})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestImportCommandImportsNativeCollectionExport(t *testing.T) {
+	sourceCollection := types.NewCollection("payments")
+	sourceCollection.SetVariable("BASE_URL", "https://api.example.com")
+	sourceCollection.SetSecretVariable("API_KEY", "secret-token")
+	sourceRequest := &types.SavedRequest{
+		ID:         "req-1",
+		Name:       "list payments",
+		URL:        "https://{{BASE_URL}}/payments",
+		Method:     "GET",
+		Collection: "payments",
+	}
+	exportData, err := storage.BuildCollectionExport(sourceCollection, []*types.SavedRequest{sourceRequest}, "team-pass")
+	if err != nil {
+		t.Fatalf("BuildCollectionExport failed: %v", err)
+	}
+	data, err := storage.MarshalCollectionExport(exportData)
+	if err != nil {
+		t.Fatalf("MarshalCollectionExport failed: %v", err)
+	}
+	exportPath := filepath.Join(t.TempDir(), "payments.gurl")
+	if err := os.WriteFile(exportPath, data, 0644); err != nil {
+		t.Fatalf("failed to write export: %v", err)
+	}
+
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "target.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	cmd := ImportCommand(db)
+	output := captureStdout(t, func() {
+		err = cmd.Run(context.Background(), []string{"import", "--passphrase", "team-pass", exportPath})
+	})
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if !strings.Contains(output, "Imported collection 'payments' (1 requests, 0 skipped)") {
+		t.Fatalf("expected collection import summary, got %q", output)
+	}
+
+	importedCollection, err := db.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("GetCollectionByName failed: %v", err)
+	}
+	if importedCollection.Variables["API_KEY"] != "secret-token" || !importedCollection.IsSecret("API_KEY") {
+		t.Fatalf("expected decrypted collection secret, got %+v", importedCollection)
+	}
+	importedRequest, err := db.GetRequestByName("list payments")
+	if err != nil {
+		t.Fatalf("GetRequestByName failed: %v", err)
+	}
+	if importedRequest.Collection != "payments" || importedRequest.URL != "https://{{BASE_URL}}/payments" {
+		t.Fatalf("imported request mismatch: %+v", importedRequest)
+	}
+}
+
+func TestImportCommandKeepsNativeRequestExportPath(t *testing.T) {
+	exportPath := filepath.Join(t.TempDir(), "requests.gurl")
+	data := []byte(`{
+  "version": "1.0",
+  "exported_at": "2026-05-23T00:00:00Z",
+  "requests": [
+    {
+      "id": "req-1",
+      "name": "health",
+      "url": "https://example.com/health",
+      "method": "GET"
+    }
+  ]
+}`)
+	if err := os.WriteFile(exportPath, data, 0644); err != nil {
+		t.Fatalf("failed to write export: %v", err)
+	}
+
+	db := newMockDB()
+	cmd := ImportCommand(db)
+	if err := cmd.Run(context.Background(), []string{"import", exportPath}); err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	req, err := db.GetRequestByName("health")
+	if err != nil {
+		t.Fatalf("GetRequestByName failed: %v", err)
+	}
+	if req.URL != "https://example.com/health" {
+		t.Fatalf("expected native request export to import via request importer, got %+v", req)
 	}
 }

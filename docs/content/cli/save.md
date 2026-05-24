@@ -89,6 +89,8 @@ gurl save "api-users" https://api.example.com/users -c "api" -t "production" -t 
 
 Saves the request to the "api" collection with "production" and "v2" tags.
 
+The collection must already exist. In an interactive terminal, gurl asks whether to create a missing collection. In non-interactive scripts and CI, create it first with `gurl collection create`.
+
 ### Save extraction and scripts
 
 ```bash
