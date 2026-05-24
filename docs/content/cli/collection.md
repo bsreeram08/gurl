@@ -100,6 +100,8 @@ Export a collection with passphrase-encrypted collection secrets.
 gurl collection export [name] --passphrase "$TEAM_SECRET" --output collection.gurl
 ```
 
+If `--passphrase` is omitted in an interactive terminal, gurl prompts for it without echoing the value.
+
 ### import
 
 Import a collection export and re-encrypt secrets with the local collection key.
@@ -108,7 +110,7 @@ Import a collection export and re-encrypt secrets with the local collection key.
 gurl collection import collection.gurl --passphrase "$TEAM_SECRET"
 ```
 
-For CI, set `GURL_IMPORT_PASSPHRASE` instead of passing `--passphrase`.
+If the export contains encrypted secrets and `--passphrase` is omitted in an interactive terminal, gurl prompts for it. For CI, set `GURL_IMPORT_PASSPHRASE` instead of passing `--passphrase`.
 
 Import variables from a `.env` file into a collection.
 
@@ -125,6 +127,8 @@ Unlock a passphrase-protected file-backed collection after cloning shared projec
 ```bash
 gurl collection unlock [name] --passphrase "$TEAM_SECRET"
 ```
+
+If `--passphrase` is omitted in an interactive terminal, gurl prompts for it without echoing the value.
 
 ### rename
 
