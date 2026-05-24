@@ -1,23 +1,26 @@
 class Gurl < Formula
   desc "Smart curl saver and API companion for the terminal"
   homepage "https://github.com/bsreeram08/gurl"
-  version "0.3.0"
+  version "0.4.0"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/bsreeram08/gurl/releases/download/v0.3.0/gurl-darwin-arm64.tar.gz"
-      sha256 "23092df6321e6d9e672b61985c46963e5ed30ad0589e55d56439a9d7aef56511"
+      url "https://github.com/bsreeram08/gurl/releases/download/v0.4.0/gurl-darwin-arm64.tar.gz"
+      sha256 "b31dd1110e12bbba43fd617730159959624cc45572f65a6e6d512b0eac28d8d4"
+    elsif Hardware::CPU.intel?
+      url "https://github.com/bsreeram08/gurl/releases/download/v0.4.0/gurl-darwin-amd64.tar.gz"
+      sha256 "5b359155fcff6e8dec17a4a7472931d52027462d8433b2e72ffbe8894feffec2"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-      url "https://github.com/bsreeram08/gurl/releases/download/v0.3.0/gurl-linux-arm64.tar.gz"
-      sha256 "6b61bddcabe08eeedba8b5c75315fc9980879ef994f6c4901fc84c0964efe7af"
+      url "https://github.com/bsreeram08/gurl/releases/download/v0.4.0/gurl-linux-arm64.tar.gz"
+      sha256 "e96eb8afc478a0428b8cd1aa2a8161e9eb28b0a47fa4caf686f8d287454d455e"
     elsif Hardware::CPU.intel?
-      url "https://github.com/bsreeram08/gurl/releases/download/v0.3.0/gurl-linux-amd64.tar.gz"
-      sha256 "3ac9e488838e1ec733533bce2884d7f6f57374d1e0dcb3af0bc72f4aa9bae94e"
+      url "https://github.com/bsreeram08/gurl/releases/download/v0.4.0/gurl-linux-amd64.tar.gz"
+      sha256 "6805b6a4a0f7b60e30af0f3f10ab802aa4fba79eca3a9bac4649e362a77fb682"
     end
   end
 
