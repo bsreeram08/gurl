@@ -656,6 +656,10 @@ func (s *FileStore) readRequestsInDir(dir string) ([]*types.SavedRequest, error)
 }
 
 func (s *FileStore) readRequestRecordsInDir(dir string) ([]requestRecord, error) {
+	return readRequestRecordsInDir(dir)
+}
+
+func readRequestRecordsInDir(dir string) ([]requestRecord, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read collection directory: %w", err)

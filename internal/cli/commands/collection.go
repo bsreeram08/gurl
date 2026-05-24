@@ -444,7 +444,7 @@ func collectionExportCommand(db storage.DB) *cli.Command {
 func collectionImportCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
 		Name:  "import",
-		Usage: "Import a collection export or .env variables",
+		Usage: "Import a collection export, collection directory, or .env variables",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "force",
@@ -469,18 +469,14 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 			if path == "" {
 				return fmt.Errorf("file path is required")
 			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return fmt.Errorf("failed to read collection export: %w", err)
-			}
 			passphrase := collectionPassphraseValue(c)
-			collection, requests, err := storage.ParseCollectionExport(data, passphrase)
+			collection, requests, err := parseCollectionImportSource(path, passphrase)
 			if err != nil && passphrase == "" && isCollectionImportPassphraseRequired(err) && collectionPassphraseIsInteractive() {
 				passphrase, err = collectionPassphrase(c, "Passphrase for collection import: ")
 				if err != nil {
 					return err
 				}
-				collection, requests, err = storage.ParseCollectionExport(data, passphrase)
+				collection, requests, err = parseCollectionImportSource(path, passphrase)
 			}
 			if err != nil {
 				return err
@@ -505,8 +501,10 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 						return fmt.Errorf("failed to inspect locked collection %q: %w", collection.Name, err)
 					}
 					allowLockedSave = true
+				} else if err != nil && !storage.IsCollectionNotFound(err) {
+					return fmt.Errorf("failed to inspect collection %q: %w", collection.Name, err)
 				}
-				if err == nil && existing != nil {
+				if existing != nil {
 					if !c.Bool("force") {
 						return fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
 					}
@@ -545,6 +543,21 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 			return nil
 		},
 	}
+}
+
+func parseCollectionImportSource(path string, passphrase string) (*types.Collection, []*types.SavedRequest, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to inspect collection import source: %w", err)
+	}
+	if info.IsDir() {
+		return storage.ParseCollectionDirectory(path, passphrase)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read collection export: %w", err)
+	}
+	return storage.ParseCollectionExport(data, passphrase)
 }
 
 func importCollectionVariablesFromFile(db storage.DB, name, filePath string) error {
@@ -588,14 +601,10 @@ func loadOrCreateCollectionForVariableImport(db storage.DB, name string) (*types
 	if storage.IsCollectionLocked(err) {
 		return nil, err
 	}
-	if !isCollectionNotFoundError(err) {
+	if !storage.IsCollectionNotFound(err) {
 		return nil, fmt.Errorf("failed to load collection %q: %w", name, err)
 	}
 	return types.NewCollection(name), nil
-}
-
-func isCollectionNotFoundError(err error) bool {
-	return err != nil && strings.HasPrefix(err.Error(), "collection not found:")
 }
 
 type rawCollectionByNameStore interface {
