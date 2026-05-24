@@ -135,7 +135,18 @@ func (s *FileStore) UnlockCollection(name string, passphrase string) error {
 	if err := decryptCollectionSecrets(collection, key); err != nil {
 		return fmt.Errorf("failed to unlock collection %q: %w", name, err)
 	}
-	return cacheCollectionPassphraseKey(collection.ID, collection.Encryption, key)
+	if err := cacheCollectionPassphraseKey(collection.ID, collection.Encryption, key); err != nil {
+		return s.saveCollectionWithLocalKeyFallback(collection, err)
+	}
+	return nil
+}
+
+func (s *FileStore) saveCollectionWithLocalKeyFallback(collection *types.Collection, keychainErr error) error {
+	collection.Encryption = nil
+	if err := s.saveCollection(collection, true); err != nil {
+		return fmt.Errorf("failed to cache passphrase key in OS keychain (%v) and save local collection key: %w", keychainErr, err)
+	}
+	return nil
 }
 
 func collectionLockedErrorForKeychain(collection *types.Collection, err error) *CollectionLockedError {

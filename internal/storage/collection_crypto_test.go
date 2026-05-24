@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,6 +44,31 @@ func withMemoryCollectionKeyring(t *testing.T) *memoryCollectionKeyring {
 		collectionPassphraseKeyring = previous
 	})
 	return memory
+}
+
+type failingSetCollectionKeyring struct {
+	err error
+}
+
+func (k failingSetCollectionKeyring) Get(service, user string) (string, error) {
+	return "", errCachedCollectionKeyNotFound
+}
+
+func (k failingSetCollectionKeyring) Set(service, user, password string) error {
+	return k.err
+}
+
+func (k failingSetCollectionKeyring) Delete(service, user string) error {
+	return nil
+}
+
+func withFailingSetCollectionKeyring(t *testing.T, err error) {
+	t.Helper()
+	previous := collectionPassphraseKeyring
+	collectionPassphraseKeyring = failingSetCollectionKeyring{err: err}
+	t.Cleanup(func() {
+		collectionPassphraseKeyring = previous
+	})
 }
 
 func TestFileStoreEncryptsCollectionSecretsAtRest(t *testing.T) {
@@ -317,6 +343,66 @@ func TestFileStoreSavesUnlockedPassphraseCollectionWithCachedKey(t *testing.T) {
 	}
 	if rawCollection.Encryption == nil || rawCollection.Encryption.Mode != CollectionEncryptionModePassphrase {
 		t.Fatalf("expected passphrase encryption metadata after save, got %+v", rawCollection.Encryption)
+	}
+}
+
+func TestFileStoreUnlockFallsBackToLocalKeyWhenKeychainUnavailable(t *testing.T) {
+	withFailingSetCollectionKeyring(t, errors.New("secret service unavailable"))
+
+	proj, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	store := NewFileStore(proj)
+
+	collection := types.NewCollection("shared")
+	collection.SetSecretVariable("TOKEN", "shared-secret")
+	exportData, err := BuildCollectionExport(collection, nil, "team-pass")
+	if err != nil {
+		t.Fatalf("BuildCollectionExport failed: %v", err)
+	}
+
+	collectionPath, err := store.CollectionPath("shared")
+	if err != nil {
+		t.Fatalf("CollectionPath failed: %v", err)
+	}
+	if err := os.MkdirAll(collectionPath, 0755); err != nil {
+		t.Fatalf("failed to create collection dir: %v", err)
+	}
+	raw, err := json.MarshalIndent(exportData.Collection, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal passphrase collection: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(collectionPath, collectionFileName), raw, 0644); err != nil {
+		t.Fatalf("failed to write collection file: %v", err)
+	}
+
+	if err := store.UnlockCollection("shared", "team-pass"); err != nil {
+		t.Fatalf("UnlockCollection should fall back to local key: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(collectionPath, collectionKeyFileName)); err != nil {
+		t.Fatalf("expected local key fallback after keychain failure: %v", err)
+	}
+	unlocked, err := store.GetCollectionByName("shared")
+	if err != nil {
+		t.Fatalf("GetCollectionByName after fallback unlock failed: %v", err)
+	}
+	if unlocked.Variables["TOKEN"] != "shared-secret" {
+		t.Fatalf("expected decrypted fallback secret, got %q", unlocked.Variables["TOKEN"])
+	}
+	rawData, err := os.ReadFile(filepath.Join(collectionPath, collectionFileName))
+	if err != nil {
+		t.Fatalf("failed to read fallback collection file: %v", err)
+	}
+	if strings.Contains(string(rawData), "shared-secret") {
+		t.Fatal("fallback collection should remain encrypted at rest")
+	}
+	var rawCollection types.Collection
+	if err := json.Unmarshal(rawData, &rawCollection); err != nil {
+		t.Fatalf("failed to unmarshal fallback collection: %v", err)
+	}
+	if rawCollection.Encryption == nil || rawCollection.Encryption.Mode != CollectionEncryptionModeLocal {
+		t.Fatalf("expected local encryption metadata after fallback, got %+v", rawCollection.Encryption)
 	}
 }
 
