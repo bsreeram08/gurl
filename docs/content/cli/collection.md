@@ -112,7 +112,7 @@ For CI, set `GURL_IMPORT_PASSPHRASE` instead of passing `--passphrase`.
 
 ### unlock
 
-Unlock a passphrase-protected file-backed collection after cloning shared project files.
+Unlock a passphrase-protected file-backed collection after cloning shared project files. The derived key is cached in the OS keychain, so later commands can use the collection without re-entering the passphrase.
 
 ```bash
 gurl collection unlock [name] --passphrase "$TEAM_SECRET"
@@ -201,7 +201,7 @@ gurl collection export "checkout-flow" --passphrase "$TEAM_SECRET" --output chec
 gurl collection import checkout-flow.gurl --passphrase "$TEAM_SECRET"
 ```
 
-The export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`.
+The export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`. For passphrase-protected project files, `unlock` verifies the passphrase and caches the derived key in the OS keychain.
 
 ## See also
 

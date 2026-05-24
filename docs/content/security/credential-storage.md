@@ -42,9 +42,9 @@ File-backed collections store variables in `.gurl/collections/<collection>/colle
 1. Local use creates `collection.key` automatically when a collection secret is saved.
 2. A clone without `collection.key` can read non-secret collection variables and request files, but encrypted collection secrets remain locked.
 3. To share secrets, export the collection with a passphrase: `gurl collection export <name> --passphrase ... --output team.gurl`.
-4. The receiver imports or unlocks with the passphrase. Gurl decrypts the passphrase-protected values and re-encrypts them with that machine's local `collection.key`.
+4. The receiver imports with the passphrase to re-encrypt secrets with that machine's local `collection.key`, or unlocks a passphrase-protected file collection to cache the derived key in the OS keychain.
 
-Passphrase exports use PBKDF2-SHA256 with a per-export salt and AES-256-GCM for secret values. `--passphrase` is available for interactive use, and `GURL_IMPORT_PASSPHRASE` can provide the passphrase in CI.
+Passphrase exports use PBKDF2-SHA256 with a per-export salt and AES-256-GCM for secret values. `gurl collection unlock` stores the derived key in the OS keychain so later commands can decrypt passphrase-protected collections without prompting again. `--passphrase` is available for interactive use, and `GURL_IMPORT_PASSPHRASE` can provide the passphrase in CI.
 
 ## Auth Credentials in Requests
 
