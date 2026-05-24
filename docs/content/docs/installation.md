@@ -28,6 +28,36 @@ curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/instal
 
 This detects your platform, downloads the correct binary from the [latest release](https://github.com/bsreeram08/gurl/releases/latest), and installs it to `/usr/local/bin`.
 
+## Container Image
+
+```bash
+docker run --rm ghcr.io/bsreeram08/gurl:latest --version
+docker run --rm -v "$PWD:/work" -w /work ghcr.io/bsreeram08/gurl:latest list
+```
+
+Use a version tag for reproducible runs:
+
+```bash
+docker run --rm ghcr.io/bsreeram08/gurl:v0.4.0 --version
+```
+
+Public GHCR packages can be pulled without authentication. If GitHub still shows the package as private, log in first with a token that has `read:packages`:
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
+```
+
+To keep gurl's local database, project files, and encrypted key material across container runs, mount the relevant host directories:
+
+```bash
+docker run --rm \
+  -v "$PWD:/work" \
+  -v "$HOME/.local/share/gurl:/home/gurl/.local/share/gurl" \
+  -v "$HOME/.config/gurl:/home/gurl/.config/gurl" \
+  -w /work \
+  ghcr.io/bsreeram08/gurl:latest list
+```
+
 ## Pre-built Binaries
 
 Download directly from [GitHub Releases](https://github.com/bsreeram08/gurl/releases/latest):

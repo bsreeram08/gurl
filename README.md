@@ -52,6 +52,12 @@ curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/instal
 
 ### GitHub Packages / Container
 
+Public GHCR packages can be pulled without authentication. If GitHub still shows the package as private, log in first with a token that has `read:packages`:
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
+```
+
 ```bash
 docker run --rm ghcr.io/bsreeram08/gurl:latest --version
 docker run --rm -v "$PWD:/work" -w /work ghcr.io/bsreeram08/gurl:latest list
