@@ -317,6 +317,112 @@ func TestCollectionImportForceReusesExistingRequestID(t *testing.T) {
 	}
 }
 
+func TestCollectionImportDotenvCreatesCollection(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	envPath := filepath.Join(t.TempDir(), ".env.production")
+	if err := os.WriteFile(envPath, []byte(`
+# production defaults
+BASE_URL=https://api.example.com
+export TOKEN=abc123
+QUOTED="hello world"
+`), 0644); err != nil {
+		t.Fatalf("failed to write dotenv file: %v", err)
+	}
+
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	output := captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"collection", "import", "payments", "--file", envPath}); err != nil {
+			t.Fatalf("collection import --file failed: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "Imported 3 variable(s)") || !strings.Contains(output, "collection 'payments'") {
+		t.Fatalf("expected import summary, got %q", output)
+	}
+	collection, err := db.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("GetCollectionByName failed: %v", err)
+	}
+	if collection.Variables["BASE_URL"] != "https://api.example.com" {
+		t.Fatalf("BASE_URL was not imported: %+v", collection.Variables)
+	}
+	if collection.Variables["TOKEN"] != "abc123" {
+		t.Fatalf("TOKEN was not imported: %+v", collection.Variables)
+	}
+	if collection.Variables["QUOTED"] != "hello world" {
+		t.Fatalf("quoted value was not imported: %+v", collection.Variables)
+	}
+	if collection.IsSecret("TOKEN") {
+		t.Fatal("dotenv import should create plain collection variables")
+	}
+}
+
+func TestCollectionImportDotenvUpdatesExistingCollection(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	collection := types.NewCollection("payments")
+	collection.SetVariable("BASE_URL", "https://old.example.com")
+	collection.SetSecretVariable("API_KEY", "old-secret")
+	if err := db.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+
+	envPath := filepath.Join(t.TempDir(), ".env.production")
+	if err := os.WriteFile(envPath, []byte("BASE_URL=https://new.example.com\nAPI_KEY=plain-token\nTIMEOUT=30s\n"), 0644); err != nil {
+		t.Fatalf("failed to write dotenv file: %v", err)
+	}
+
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	if err := cmd.Run(context.Background(), []string{"collection", "import", "payments", "--file", envPath}); err != nil {
+		t.Fatalf("collection import --file failed: %v", err)
+	}
+
+	loaded, err := db.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("GetCollectionByName failed: %v", err)
+	}
+	if loaded.ID != collection.ID {
+		t.Fatalf("expected existing collection to be updated, got new ID %q", loaded.ID)
+	}
+	if loaded.Variables["BASE_URL"] != "https://new.example.com" || loaded.Variables["TIMEOUT"] != "30s" {
+		t.Fatalf("variables were not updated: %+v", loaded.Variables)
+	}
+	if loaded.Variables["API_KEY"] != "plain-token" {
+		t.Fatalf("API_KEY was not updated: %+v", loaded.Variables)
+	}
+	if loaded.IsSecret("API_KEY") {
+		t.Fatal("dotenv import should store imported values as plain variables")
+	}
+}
+
+func TestCollectionImportDotenvRequiresCollectionName(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	envPath := filepath.Join(t.TempDir(), ".env.production")
+	if err := os.WriteFile(envPath, []byte("BASE_URL=https://api.example.com\n"), 0644); err != nil {
+		t.Fatalf("failed to write dotenv file: %v", err)
+	}
+
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	err := cmd.Run(context.Background(), []string{"collection", "import", "--file", envPath})
+	if err == nil || !strings.Contains(err.Error(), "collection name argument is required") {
+		t.Fatalf("expected missing collection name error, got %v", err)
+	}
+}
+
 func TestCollectionImportForceReplacesLockedCollection(t *testing.T) {
 	sourceBase := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "source.db"))
 	if err := sourceBase.Open(); err != nil {
