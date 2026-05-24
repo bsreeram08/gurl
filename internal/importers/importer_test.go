@@ -1,6 +1,8 @@
 package importers
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/sreeram/gurl/pkg/types"
@@ -31,9 +33,9 @@ func TestImporterRegistry(t *testing.T) {
 // TestGetByExtension tests retrieving importers by file extension
 func TestGetByExtension(t *testing.T) {
 	tests := []struct {
-		name     string
-		ext      string
-		wantNil  bool
+		name    string
+		ext     string
+		wantNil bool
 	}{
 		{
 			name:    "yaml extension",
@@ -223,6 +225,31 @@ func TestImportWithEmptyPath(t *testing.T) {
 	_, err := Import("")
 	if err == nil {
 		t.Error("expected error for empty path")
+	}
+}
+
+func TestImportUsesNormalizedExtension(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "requests.gurl")
+	data := []byte(`{
+  "version": "1.0",
+  "requests": [
+    {
+      "id": "req-1",
+      "name": "health",
+      "url": "https://example.com/health"
+    }
+  ]
+}`)
+	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+		t.Fatalf("failed to write import file: %v", err)
+	}
+
+	requests, err := Import(tmpFile)
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+	if len(requests) != 1 || requests[0].Name != "health" {
+		t.Fatalf("expected native gurl request export, got %+v", requests)
 	}
 }
 
