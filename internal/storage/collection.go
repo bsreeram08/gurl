@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"time"
 
@@ -85,7 +86,11 @@ func (db *LMDB) saveCollectionLocked(collection *types.Collection) error {
 		collection.SecretKeys = make(map[string]bool)
 	}
 
-	data, err := json.Marshal(collection)
+	stored, err := collectionForDBStorage(collection)
+	if err != nil {
+		return err
+	}
+	data, err := json.Marshal(stored)
 	if err != nil {
 		return fmt.Errorf("failed to marshal collection: %w", err)
 	}
@@ -104,6 +109,17 @@ func (db *LMDB) GetCollection(id string) (*types.Collection, error) {
 }
 
 func (db *LMDB) getCollectionLocked(id string) (*types.Collection, error) {
+	collection, err := db.getRawCollectionLocked(id)
+	if err != nil {
+		return nil, err
+	}
+	if err := decryptDBCollectionForUse(collection); err != nil {
+		return nil, err
+	}
+	return collection, nil
+}
+
+func (db *LMDB) getRawCollectionLocked(id string) (*types.Collection, error) {
 	data, err := db.DB.Get([]byte(collectionKey(id)), nil)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
@@ -164,6 +180,9 @@ func (db *LMDB) ListCollections() ([]*types.Collection, error) {
 		if collection.SecretKeys == nil {
 			collection.SecretKeys = make(map[string]bool)
 		}
+		if err := decryptDBCollectionForUse(&collection); err != nil {
+			return nil, err
+		}
 		collections = append(collections, &collection)
 	}
 	if err := iter.Error(); err != nil {
@@ -180,7 +199,7 @@ func (db *LMDB) DeleteCollection(id string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	collection, err := db.getCollectionLocked(id)
+	collection, err := db.getRawCollectionLocked(id)
 	if err != nil {
 		return err
 	}
@@ -188,7 +207,13 @@ func (db *LMDB) DeleteCollection(id string) error {
 	batch := new(leveldb.Batch)
 	batch.Delete([]byte(collectionKey(id)))
 	batch.Delete([]byte(collectionNameIndexKey(collection.Name)))
-	return db.DB.Write(batch, nil)
+	if err := db.DB.Write(batch, nil); err != nil {
+		return err
+	}
+	if err := removeCollectionLocalKey(id); err != nil {
+		return fmt.Errorf("failed to delete collection key: %w", err)
+	}
+	return nil
 }
 
 func (db *LMDB) UpdateCollection(collection *types.Collection) error {
@@ -216,7 +241,11 @@ func (db *LMDB) UpdateCollection(collection *types.Collection) error {
 		collection.UpdatedAt = time.Now().Unix()
 	}
 
-	data, err := json.Marshal(collection)
+	stored, err := collectionForDBStorage(collection)
+	if err != nil {
+		return err
+	}
+	data, err := json.Marshal(stored)
 	if err != nil {
 		return fmt.Errorf("failed to marshal collection: %w", err)
 	}
@@ -248,6 +277,53 @@ func (db *LMDB) ensureCollectionBatch(batch *leveldb.Batch, name string) error {
 	batch.Put([]byte(collectionKey(collection.ID)), data)
 	batch.Put([]byte(collectionNameIndexKey(collection.Name)), []byte(collection.ID))
 	return nil
+}
+
+func collectionForDBStorage(collection *types.Collection) (*types.Collection, error) {
+	if !collectionHasSecrets(collection) {
+		return collectionForLocalKeyStorage(collection, nil)
+	}
+	key, err := getOrCreateCollectionLocalKey(collection.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get collection key: %w", err)
+	}
+	return collectionForLocalKeyStorage(collection, key)
+}
+
+func decryptDBCollectionForUse(collection *types.Collection) error {
+	if collection == nil || !collectionHasSecrets(collection) {
+		return nil
+	}
+
+	hasEncrypted := false
+	for key, isSecret := range collection.SecretKeys {
+		if isSecret && IsCollectionEncryptedValue(collection.Variables[key]) {
+			hasEncrypted = true
+			break
+		}
+	}
+	if !hasEncrypted {
+		return nil
+	}
+
+	if collection.Encryption != nil && collection.Encryption.Mode == CollectionEncryptionModePassphrase {
+		return &CollectionLockedError{
+			Name: collection.Name,
+			Hint: fmt.Sprintf("run 'gurl collection import ... --passphrase ...' to bind it locally"),
+		}
+	}
+
+	key, err := readCollectionLocalKey(collection.ID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &CollectionLockedError{
+				Name: collection.Name,
+				Hint: fmt.Sprintf("missing local collection key; restore ~/.local/share/gurl/keys/%s.key or re-import", safePathComponent(collection.ID)),
+			}
+		}
+		return err
+	}
+	return decryptCollectionSecrets(collection, key)
 }
 
 func collectionKey(id string) string {

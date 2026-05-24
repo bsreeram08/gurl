@@ -63,6 +63,113 @@ func TestFileStoreEncryptsCollectionSecretsAtRest(t *testing.T) {
 	}
 }
 
+func TestLMDBEncryptsCollectionSecretsAtRest(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	db := NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	collection := types.NewCollection("payments")
+	collection.SetVariable("BASE_URL", "https://api.example.com")
+	collection.SetSecretVariable("API_KEY", "secret-token")
+	if err := db.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	if collection.Variables["API_KEY"] != "secret-token" {
+		t.Fatalf("SaveCollection should not mutate caller secret, got %q", collection.Variables["API_KEY"])
+	}
+
+	rawData, err := db.DB.Get([]byte(collectionKey(collection.ID)), nil)
+	if err != nil {
+		t.Fatalf("failed to read raw collection: %v", err)
+	}
+	if strings.Contains(string(rawData), "secret-token") {
+		t.Fatal("DB collection should not contain plaintext secret")
+	}
+	var raw types.Collection
+	if err := json.Unmarshal(rawData, &raw); err != nil {
+		t.Fatalf("failed to unmarshal raw collection: %v", err)
+	}
+	if !IsCollectionEncryptedValue(raw.Variables["API_KEY"]) {
+		t.Fatalf("expected encrypted value marker, got %q", raw.Variables["API_KEY"])
+	}
+	if raw.Encryption == nil || raw.Encryption.Mode != CollectionEncryptionModeLocal {
+		t.Fatalf("expected local encryption metadata, got %+v", raw.Encryption)
+	}
+	keyPath, err := collectionLocalKeyPath(collection.ID)
+	if err != nil {
+		t.Fatalf("collectionLocalKeyPath failed: %v", err)
+	}
+	if _, err := os.Stat(keyPath); err != nil {
+		t.Fatalf("expected DB collection key file: %v", err)
+	}
+
+	loaded, err := db.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("GetCollectionByName failed: %v", err)
+	}
+	if loaded.Variables["API_KEY"] != "secret-token" {
+		t.Fatalf("expected decrypted secret, got %q", loaded.Variables["API_KEY"])
+	}
+	if loaded.Variables["BASE_URL"] != "https://api.example.com" {
+		t.Fatalf("expected non-secret variable to stay readable")
+	}
+}
+
+func TestLMDBCollectionSecretsRequireLocalKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	db := NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	collection := types.NewCollection("payments")
+	collection.SetSecretVariable("API_KEY", "secret-token")
+	if err := db.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	keyPath, err := collectionLocalKeyPath(collection.ID)
+	if err != nil {
+		t.Fatalf("collectionLocalKeyPath failed: %v", err)
+	}
+	if err := os.Remove(keyPath); err != nil {
+		t.Fatalf("failed to remove collection key: %v", err)
+	}
+
+	if _, err := db.GetCollectionByName("payments"); !IsCollectionLocked(err) {
+		t.Fatalf("expected locked collection error, got %v", err)
+	}
+}
+
+func TestLMDBDeleteCollectionRemovesLocalKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	db := NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	collection := types.NewCollection("payments")
+	collection.SetSecretVariable("API_KEY", "secret-token")
+	if err := db.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	keyPath, err := collectionLocalKeyPath(collection.ID)
+	if err != nil {
+		t.Fatalf("collectionLocalKeyPath failed: %v", err)
+	}
+
+	if err := db.DeleteCollection(collection.ID); err != nil {
+		t.Fatalf("DeleteCollection failed: %v", err)
+	}
+	if _, err := os.Stat(keyPath); !os.IsNotExist(err) {
+		t.Fatalf("expected local collection key to be removed, got %v", err)
+	}
+}
+
 func TestFileStoreEncryptsPrefixedPlaintextSecrets(t *testing.T) {
 	proj, err := project.Init(t.TempDir())
 	if err != nil {

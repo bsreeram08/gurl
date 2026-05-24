@@ -31,9 +31,11 @@ Environment variables marked `--secret` are encrypted before storage in both the
 
 ## Collection Secrets (Encrypted)
 
-File-backed collections store variables in `.gurl/collections/<collection>/collection.json`. Variables marked as collection secrets are encrypted with a per-collection AES-256-GCM key before they are written.
+Collection variables marked as secrets are encrypted with a per-collection AES-256-GCM key before they are written.
 
-**Canonical local key**: `.gurl/collections/<collection>/collection.key`
+**DB-backed collection key**: `~/.local/share/gurl/keys/<collection-id>.key`
+
+**File-backed collection key**: `.gurl/collections/<collection>/collection.key`
 
 **Git behavior**: `gurl init` writes `.gurl/.gitignore` so `collection.key` files stay local. Commit `collection.json` and request files, but do not commit local collection keys.
 
