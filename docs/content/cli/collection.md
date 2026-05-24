@@ -222,10 +222,11 @@ Deletes the "old-api" collection and all requests in it.
 ```bash
 gurl collection export "checkout-flow" --passphrase "$TEAM_SECRET" --output checkout-flow.gurl
 gurl collection import checkout-flow.gurl --passphrase "$TEAM_SECRET"
+gurl collection import .gurl/collections/checkout-flow
 gurl collection migrate "checkout-flow" --passphrase "$TEAM_SECRET"
 ```
 
-The export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`. Migrate can write passphrase-protected project files directly, so shared repos can omit local collection keys. For passphrase-protected project files, `unlock` verifies the passphrase and caches the derived key in the OS keychain.
+The export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`. Directory import reads `collection.json` and request JSON files directly; local-key encrypted directories require their `collection.key`. Migrate can write passphrase-protected project files directly, so shared repos can omit local collection keys. For passphrase-protected project files, `unlock` verifies the passphrase and caches the derived key in the OS keychain.
 
 ## See also
 
