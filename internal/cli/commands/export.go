@@ -74,7 +74,15 @@ func ExportCommand(db storage.DB) *cli.Command {
 				if err != nil {
 					return fmt.Errorf("failed to list collection: %w", err)
 				}
-				data, err := marshalCollectionExport(db, collectionName, requests, collectionPassphrase(c))
+				passphrase := collectionPassphraseValue(c)
+				data, err := marshalCollectionExport(db, collectionName, requests, passphrase)
+				if err != nil && passphrase == "" && isCollectionExportPassphraseRequired(err) && collectionPassphraseIsInteractive() {
+					passphrase, err = collectionPassphrase(c, fmt.Sprintf("Passphrase for exporting collection %q: ", collectionName))
+					if err != nil {
+						return err
+					}
+					data, err = marshalCollectionExport(db, collectionName, requests, passphrase)
+				}
 				if err != nil {
 					return err
 				}
@@ -108,7 +116,10 @@ func ExportCommand(db storage.DB) *cli.Command {
 }
 
 func marshalCollectionExport(db storage.DB, name string, requests []*types.SavedRequest, passphrase string) ([]byte, error) {
-	collection, _ := loadCollectionByName(db, name)
+	collection, err := loadCollectionByName(db, name)
+	if err != nil && !storage.IsCollectionNotFound(err) {
+		return nil, fmt.Errorf("failed to load collection %q: %w", name, err)
+	}
 	if collection == nil && len(requests) == 0 {
 		return nil, fmt.Errorf("collection %q not found or empty", name)
 	}
@@ -120,6 +131,10 @@ func marshalCollectionExport(db storage.DB, name string, requests []*types.Saved
 		return nil, err
 	}
 	return storage.MarshalCollectionExport(exportData)
+}
+
+func isCollectionExportPassphraseRequired(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "passphrase is required to export collection secrets")
 }
 
 func writeExportOutput(outputPath string, data []byte, requestCount int) error {

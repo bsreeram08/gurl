@@ -45,6 +45,9 @@ func (s *FileStore) collectionForStorage(collection *types.Collection, dir strin
 	if !collectionHasSecrets(collection) {
 		return collectionForLocalKeyStorage(collection, nil)
 	}
+	if collection.Encryption != nil && collection.Encryption.Mode == CollectionEncryptionModePassphrase {
+		return collectionForLocalKeyStorage(collection, nil)
+	}
 	key, err := s.getOrCreateCollectionKey(dir)
 	if err != nil {
 		return nil, err

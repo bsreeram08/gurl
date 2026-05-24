@@ -312,6 +312,10 @@ func collectionMigrateCommand(db storage.DB) *cli.Command {
 				Name:  "project-dir",
 				Usage: "Project root for .gurl file storage",
 			},
+			&cli.StringFlag{
+				Name:  "passphrase",
+				Usage: "Write collection secrets with passphrase-derived encryption",
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
@@ -320,7 +324,8 @@ func collectionMigrateCommand(db storage.DB) *cli.Command {
 			}
 			name := args.Get(0)
 
-			if migrator, ok := db.(collectionFileMigrator); ok {
+			passphrase := collectionPassphraseValue(c)
+			if migrator, ok := db.(collectionFileMigrator); ok && passphrase == "" && projectDirFlag(c) == "" {
 				count, path, err := migrator.MigrateCollectionToFiles(name)
 				if err != nil {
 					return err
@@ -686,6 +691,11 @@ func migrateCollectionToProjectFiles(c *cli.Command, db storage.DB, name string)
 		copy := *req
 		copy.Collection = name
 		if err := fileStore.SaveRequest(&copy); err != nil {
+			return 0, "", err
+		}
+	}
+	if passphrase := collectionPassphraseValue(c); passphrase != "" {
+		if err := fileStore.SaveCollectionPassphrase(collection, passphrase); err != nil {
 			return 0, "", err
 		}
 	}

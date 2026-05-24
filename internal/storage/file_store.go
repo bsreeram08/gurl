@@ -52,6 +52,29 @@ func (s *FileStore) SaveCollectionAllowLocked(collection *types.Collection) erro
 	return s.saveCollection(collection, true)
 }
 
+func (s *FileStore) SaveCollectionPassphrase(collection *types.Collection, passphrase string) error {
+	if err := s.SaveCollection(collection); err != nil {
+		return err
+	}
+	dir, err := s.CollectionPath(collection.Name)
+	if err != nil {
+		return err
+	}
+	stored, err := encryptCollectionForPassphrase(collection, passphrase)
+	if err != nil {
+		return err
+	}
+	if err := writeJSONFile(filepath.Join(dir, collectionFileName), stored); err != nil {
+		return err
+	}
+	if collectionHasSecrets(stored) {
+		if err := os.Remove(collectionKeyPath(dir)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove local collection key: %w", err)
+		}
+	}
+	return nil
+}
+
 func (s *FileStore) saveCollection(collection *types.Collection, allowLocked bool) error {
 	if !s.Enabled() {
 		return fmt.Errorf("file storage is not configured")
