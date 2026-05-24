@@ -139,7 +139,10 @@ func (s *FileStore) GetCollection(id string) (*types.Collection, error) {
 		if IsCollectionLocked(err) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("collection not found: %s", id)
+		if errors.Is(err, errFileCollectionNotFound) {
+			return nil, newCollectionNotFoundError(id)
+		}
+		return nil, err
 	}
 	return collection, nil
 }
@@ -150,7 +153,10 @@ func (s *FileStore) GetCollectionByName(name string) (*types.Collection, error) 
 		if IsCollectionLocked(err) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("collection not found: %s", name)
+		if errors.Is(err, errFileCollectionNotFound) {
+			return nil, newCollectionNotFoundError(name)
+		}
+		return nil, err
 	}
 	return collection, nil
 }
@@ -158,7 +164,10 @@ func (s *FileStore) GetCollectionByName(name string) (*types.Collection, error) 
 func (s *FileStore) GetRawCollectionByName(name string) (*types.Collection, error) {
 	collection, _, err := s.findRawCollectionByName(name)
 	if err != nil {
-		return nil, fmt.Errorf("collection not found: %s", name)
+		if errors.Is(err, errFileCollectionNotFound) {
+			return nil, newCollectionNotFoundError(name)
+		}
+		return nil, err
 	}
 	return collection, nil
 }
@@ -184,7 +193,10 @@ func (s *FileStore) DeleteCollection(id string) error {
 		if IsCollectionLocked(err) {
 			return err
 		}
-		return fmt.Errorf("collection not found: %s", id)
+		if errors.Is(err, errFileCollectionNotFound) {
+			return newCollectionNotFoundError(id)
+		}
+		return err
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("failed to delete collection: %w", err)
@@ -204,7 +216,10 @@ func (s *FileStore) UpdateCollection(collection *types.Collection) error {
 		if IsCollectionLocked(err) {
 			return err
 		}
-		return fmt.Errorf("collection not found: %s", collection.ID)
+		if errors.Is(err, errFileCollectionNotFound) {
+			return newCollectionNotFoundError(collection.ID)
+		}
+		return err
 	}
 	collection.CreatedAt = existing.CreatedAt
 	if collection.UpdatedAt == 0 || collection.UpdatedAt == existing.UpdatedAt {

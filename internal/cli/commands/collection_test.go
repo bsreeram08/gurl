@@ -392,6 +392,112 @@ func TestCollectionImportDirectory(t *testing.T) {
 	}
 }
 
+func TestCollectionImportDotenvCreatesCollection(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	envPath := filepath.Join(t.TempDir(), ".env.production")
+	if err := os.WriteFile(envPath, []byte(`
+# production defaults
+BASE_URL=https://api.example.com
+export TOKEN=abc123
+QUOTED="hello world"
+`), 0644); err != nil {
+		t.Fatalf("failed to write dotenv file: %v", err)
+	}
+
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	output := captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"collection", "import", "payments", "--file", envPath}); err != nil {
+			t.Fatalf("collection import --file failed: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "Imported 3 variable(s)") || !strings.Contains(output, "collection 'payments'") {
+		t.Fatalf("expected import summary, got %q", output)
+	}
+	collection, err := db.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("GetCollectionByName failed: %v", err)
+	}
+	if collection.Variables["BASE_URL"] != "https://api.example.com" {
+		t.Fatalf("BASE_URL was not imported: %+v", collection.Variables)
+	}
+	if collection.Variables["TOKEN"] != "abc123" {
+		t.Fatalf("TOKEN was not imported: %+v", collection.Variables)
+	}
+	if collection.Variables["QUOTED"] != "hello world" {
+		t.Fatalf("quoted value was not imported: %+v", collection.Variables)
+	}
+	if collection.IsSecret("TOKEN") {
+		t.Fatal("dotenv import should create plain collection variables")
+	}
+}
+
+func TestCollectionImportDotenvUpdatesExistingCollection(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	collection := types.NewCollection("payments")
+	collection.SetVariable("BASE_URL", "https://old.example.com")
+	collection.SetSecretVariable("API_KEY", "old-secret")
+	if err := db.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+
+	envPath := filepath.Join(t.TempDir(), ".env.production")
+	if err := os.WriteFile(envPath, []byte("BASE_URL=https://new.example.com\nAPI_KEY=plain-token\nTIMEOUT=30s\n"), 0644); err != nil {
+		t.Fatalf("failed to write dotenv file: %v", err)
+	}
+
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	if err := cmd.Run(context.Background(), []string{"collection", "import", "payments", "--file", envPath}); err != nil {
+		t.Fatalf("collection import --file failed: %v", err)
+	}
+
+	loaded, err := db.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("GetCollectionByName failed: %v", err)
+	}
+	if loaded.ID != collection.ID {
+		t.Fatalf("expected existing collection to be updated, got new ID %q", loaded.ID)
+	}
+	if loaded.Variables["BASE_URL"] != "https://new.example.com" || loaded.Variables["TIMEOUT"] != "30s" {
+		t.Fatalf("variables were not updated: %+v", loaded.Variables)
+	}
+	if loaded.Variables["API_KEY"] != "plain-token" {
+		t.Fatalf("API_KEY was not updated: %+v", loaded.Variables)
+	}
+	if loaded.IsSecret("API_KEY") {
+		t.Fatal("dotenv import should store imported values as plain variables")
+	}
+}
+
+func TestCollectionImportDotenvRequiresCollectionName(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	envPath := filepath.Join(t.TempDir(), ".env.production")
+	if err := os.WriteFile(envPath, []byte("BASE_URL=https://api.example.com\n"), 0644); err != nil {
+		t.Fatalf("failed to write dotenv file: %v", err)
+	}
+
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	err := cmd.Run(context.Background(), []string{"collection", "import", "--file", envPath})
+	if err == nil || !strings.Contains(err.Error(), "collection name argument is required") {
+		t.Fatalf("expected missing collection name error, got %v", err)
+	}
+}
+
 func TestCollectionImportForceReplacesLockedCollection(t *testing.T) {
 	sourceBase := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "source.db"))
 	if err := sourceBase.Open(); err != nil {
@@ -508,8 +614,9 @@ func TestCollectionPassphraseUsesEnvFallback(t *testing.T) {
 			&cli.StringFlag{Name: "passphrase"},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
-			got = collectionPassphrase(c)
-			return nil
+			var err error
+			got, err = collectionPassphrase(c, "Passphrase: ")
+			return err
 		},
 	}
 	if err := cmd.Run(context.Background(), []string{"test"}); err != nil {
@@ -518,6 +625,179 @@ func TestCollectionPassphraseUsesEnvFallback(t *testing.T) {
 	if got != "env-pass" {
 		t.Fatalf("expected env passphrase fallback, got %q", got)
 	}
+}
+
+func TestCollectionPassphrasePromptsWhenInteractive(t *testing.T) {
+	t.Setenv("GURL_IMPORT_PASSPHRASE", "")
+
+	oldInteractive := collectionPassphraseIsInteractive
+	collectionPassphraseIsInteractive = func() bool { return true }
+	defer func() { collectionPassphraseIsInteractive = oldInteractive }()
+
+	oldRead := readCollectionPassphrase
+	var gotPrompt string
+	readCollectionPassphrase = func(prompt string) (string, error) {
+		gotPrompt = prompt
+		return "typed-pass", nil
+	}
+	defer func() { readCollectionPassphrase = oldRead }()
+
+	var got string
+	cmd := &cli.Command{
+		Name: "test",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "passphrase"},
+		},
+		Action: func(ctx context.Context, c *cli.Command) error {
+			var err error
+			got, err = collectionPassphrase(c, "Passphrase: ")
+			return err
+		},
+	}
+	if err := cmd.Run(context.Background(), []string{"test"}); err != nil {
+		t.Fatalf("command failed: %v", err)
+	}
+	if got != "typed-pass" {
+		t.Fatalf("expected prompted passphrase, got %q", got)
+	}
+	if gotPrompt != "Passphrase: " {
+		t.Fatalf("expected prompt to be passed through, got %q", gotPrompt)
+	}
+}
+
+func TestCollectionImportPromptsForPassphrase(t *testing.T) {
+	t.Setenv("GURL_IMPORT_PASSPHRASE", "")
+
+	sourceCollection := types.NewCollection("payments")
+	sourceCollection.SetSecretVariable("API_KEY", "secret-token")
+	exportData, err := storage.BuildCollectionExport(sourceCollection, nil, "team-pass")
+	if err != nil {
+		t.Fatalf("BuildCollectionExport failed: %v", err)
+	}
+	data, err := storage.MarshalCollectionExport(exportData)
+	if err != nil {
+		t.Fatalf("MarshalCollectionExport failed: %v", err)
+	}
+	exportPath := filepath.Join(t.TempDir(), "payments.gurl")
+	if err := os.WriteFile(exportPath, data, 0644); err != nil {
+		t.Fatalf("failed to write export: %v", err)
+	}
+
+	oldInteractive := collectionPassphraseIsInteractive
+	collectionPassphraseIsInteractive = func() bool { return true }
+	defer func() { collectionPassphraseIsInteractive = oldInteractive }()
+
+	oldRead := readCollectionPassphrase
+	var gotPrompt string
+	readCollectionPassphrase = func(prompt string) (string, error) {
+		gotPrompt = prompt
+		return "team-pass", nil
+	}
+	defer func() { readCollectionPassphrase = oldRead }()
+
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	if err := cmd.Run(context.Background(), []string{"collection", "import", exportPath}); err != nil {
+		t.Fatalf("collection import failed: %v", err)
+	}
+	if gotPrompt != "Passphrase for collection import: " {
+		t.Fatalf("expected import passphrase prompt, got %q", gotPrompt)
+	}
+	imported, err := db.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("GetCollectionByName failed: %v", err)
+	}
+	if imported.Variables["API_KEY"] != "secret-token" {
+		t.Fatalf("expected decrypted imported secret, got %q", imported.Variables["API_KEY"])
+	}
+}
+
+func TestCollectionExportPromptsForPassphrase(t *testing.T) {
+	t.Setenv("GURL_IMPORT_PASSPHRASE", "")
+
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+	collection := types.NewCollection("payments")
+	collection.SetSecretVariable("API_KEY", "secret-token")
+	if err := db.SaveCollection(collection); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+
+	oldInteractive := collectionPassphraseIsInteractive
+	collectionPassphraseIsInteractive = func() bool { return true }
+	defer func() { collectionPassphraseIsInteractive = oldInteractive }()
+
+	oldRead := readCollectionPassphrase
+	var gotPrompt string
+	readCollectionPassphrase = func(prompt string) (string, error) {
+		gotPrompt = prompt
+		return "team-pass", nil
+	}
+	defer func() { readCollectionPassphrase = oldRead }()
+
+	exportPath := filepath.Join(t.TempDir(), "payments.gurl")
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	if err := cmd.Run(context.Background(), []string{"collection", "export", "payments", "--output", exportPath}); err != nil {
+		t.Fatalf("collection export failed: %v", err)
+	}
+	if gotPrompt != `Passphrase for exporting collection "payments": ` {
+		t.Fatalf("expected export passphrase prompt, got %q", gotPrompt)
+	}
+	exported, err := os.ReadFile(exportPath)
+	if err != nil {
+		t.Fatalf("failed to read export: %v", err)
+	}
+	if _, _, err := storage.ParseCollectionExport(exported, "team-pass"); err != nil {
+		t.Fatalf("export should decrypt with prompted passphrase: %v", err)
+	}
+}
+
+func TestCollectionUnlockPromptsForPassphrase(t *testing.T) {
+	t.Setenv("GURL_IMPORT_PASSPHRASE", "")
+
+	oldInteractive := collectionPassphraseIsInteractive
+	collectionPassphraseIsInteractive = func() bool { return true }
+	defer func() { collectionPassphraseIsInteractive = oldInteractive }()
+
+	oldRead := readCollectionPassphrase
+	var gotPrompt string
+	readCollectionPassphrase = func(prompt string) (string, error) {
+		gotPrompt = prompt
+		return "team-pass", nil
+	}
+	defer func() { readCollectionPassphrase = oldRead }()
+
+	db := &promptUnlockDB{mockDB: newMockDB()}
+	cmd := CollectionCommand(db, &env.EnvStorage{})
+	if err := cmd.Run(context.Background(), []string{"collection", "unlock", "payments"}); err != nil {
+		t.Fatalf("collection unlock failed: %v", err)
+	}
+	if gotPrompt != `Passphrase for collection "payments": ` {
+		t.Fatalf("expected unlock passphrase prompt, got %q", gotPrompt)
+	}
+	if db.name != "payments" || db.passphrase != "team-pass" {
+		t.Fatalf("unlock received name/passphrase %q/%q", db.name, db.passphrase)
+	}
+}
+
+type promptUnlockDB struct {
+	*mockDB
+	name       string
+	passphrase string
+}
+
+func (db *promptUnlockDB) UnlockCollection(name string, passphrase string) error {
+	db.name = name
+	db.passphrase = passphrase
+	return nil
 }
 
 func commandHasFlag(cmd *cli.Command, name string) bool {

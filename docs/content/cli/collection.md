@@ -100,6 +100,8 @@ Export a collection with passphrase-encrypted collection secrets.
 gurl collection export [name] --passphrase "$TEAM_SECRET" --output collection.gurl
 ```
 
+If `--passphrase` is omitted in an interactive terminal, gurl prompts for it without echoing the value.
+
 ### import
 
 Import a collection export or collection directory and re-encrypt secrets with the local collection key.
@@ -109,15 +111,25 @@ gurl collection import collection.gurl --passphrase "$TEAM_SECRET"
 gurl collection import .gurl/collections/payments
 ```
 
-For CI, set `GURL_IMPORT_PASSPHRASE` instead of passing `--passphrase`.
+If the export contains encrypted secrets and `--passphrase` is omitted in an interactive terminal, gurl prompts for it. For CI, set `GURL_IMPORT_PASSPHRASE` instead of passing `--passphrase`.
+
+Import variables from a `.env` file into a collection.
+
+```bash
+gurl collection import payments --file .env.production
+```
+
+This creates the collection if it does not exist. Imported `.env` values are stored as plain collection variables, not secrets.
 
 ### unlock
 
-Unlock a passphrase-protected file-backed collection after cloning shared project files.
+Unlock a passphrase-protected file-backed collection after cloning shared project files. The derived key is cached in the OS keychain, so later commands can use the collection without re-entering the passphrase.
 
 ```bash
 gurl collection unlock [name] --passphrase "$TEAM_SECRET"
 ```
+
+If `--passphrase` is omitted in an interactive terminal, gurl prompts for it without echoing the value.
 
 ### rename
 
@@ -203,7 +215,7 @@ gurl collection import checkout-flow.gurl --passphrase "$TEAM_SECRET"
 gurl collection import .gurl/collections/checkout-flow
 ```
 
-The export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`. Directory import reads `collection.json` and request JSON files directly; local-key encrypted directories require their `collection.key`.
+The export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`. Directory import reads `collection.json` and request JSON files directly; local-key encrypted directories require their `collection.key`. For passphrase-protected project files, `unlock` verifies the passphrase and caches the derived key in the OS keychain.
 
 ## See also
 

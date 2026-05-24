@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -12,7 +13,12 @@ import (
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
+	"golang.org/x/term"
 )
+
+var saveCollectionIsInteractive = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
 
 // SaveCommand creates the save command
 func SaveCommand(db storage.DB) *cli.Command {
@@ -132,7 +138,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.CreatedAt = time.Now().Unix()
 				req.UpdatedAt = time.Now().Unix()
 
-				if err := db.SaveRequest(&req); err != nil {
+				if err := saveRequestWithCollectionGuard(db, &req); err != nil {
 					return fmt.Errorf("failed to save request: %w", err)
 				}
 
@@ -183,7 +189,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.OutputFormat = format
 				applyFlowMetadata(req, extracts, c.String("pre-script"), c.String("post-script"))
 
-				if err := db.SaveRequest(req); err != nil {
+				if err := saveRequestWithCollectionGuard(db, req); err != nil {
 					return fmt.Errorf("failed to save request: %w", err)
 				}
 
@@ -227,7 +233,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.CreatedAt = time.Now().Unix()
 				req.UpdatedAt = time.Now().Unix()
 
-				if err := db.SaveRequest(&req); err != nil {
+				if err := saveRequestWithCollectionGuard(db, &req); err != nil {
 					return fmt.Errorf("failed to save request: %w", err)
 				}
 
@@ -255,7 +261,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 			}
 			applyFlowMetadata(req, extracts, c.String("pre-script"), c.String("post-script"))
 
-			if err := db.SaveRequest(req); err != nil {
+			if err := saveRequestWithCollectionGuard(db, req); err != nil {
 				return fmt.Errorf("failed to save request: %w", err)
 			}
 
@@ -263,6 +269,50 @@ func SaveCommand(db storage.DB) *cli.Command {
 			return nil
 		},
 	}
+}
+
+func saveRequestWithCollectionGuard(db storage.DB, req *types.SavedRequest) error {
+	if req == nil || strings.TrimSpace(req.Collection) == "" {
+		return db.SaveRequest(req)
+	}
+
+	store, ok := db.(storage.CollectionStore)
+	if !ok {
+		return db.SaveRequest(req)
+	}
+
+	if _, err := store.GetCollectionByName(req.Collection); err == nil {
+		return db.SaveRequest(req)
+	} else if storage.IsCollectionLocked(err) {
+		return db.SaveRequest(req)
+	} else if !storage.IsCollectionNotFound(err) {
+		return err
+	}
+
+	if err := confirmCreateCollection(store, req.Collection); err != nil {
+		return err
+	}
+	return db.SaveRequest(req)
+}
+
+func confirmCreateCollection(store storage.CollectionStore, name string) error {
+	if !saveCollectionIsInteractive() {
+		return fmt.Errorf("collection %q does not exist; create it first with 'gurl collection create %s'", name, name)
+	}
+
+	fmt.Printf("Collection %q does not exist. Create it? [y/N] ", name)
+	answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil && strings.TrimSpace(answer) == "" {
+		return fmt.Errorf("failed to read confirmation: %w", err)
+	}
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	if answer != "y" && answer != "yes" {
+		return fmt.Errorf("collection %q does not exist", name)
+	}
+	if err := store.SaveCollection(types.NewCollection(name)); err != nil {
+		return fmt.Errorf("failed to create collection %q: %w", name, err)
+	}
+	return nil
 }
 
 func applyFlowMetadata(req *types.SavedRequest, extracts []types.Extract, preScript, postScript string) {

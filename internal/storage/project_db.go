@@ -32,6 +32,8 @@ func (db *ProjectDB) SaveRequest(req *types.SavedRequest) error {
 			return db.files.SaveRequest(req)
 		} else if IsCollectionLocked(err) {
 			return err
+		} else if !IsCollectionNotFound(err) {
+			return err
 		}
 	}
 	return db.base.SaveRequest(req)
@@ -256,6 +258,8 @@ func (db *ProjectDB) GetCollection(id string) (*types.Collection, error) {
 			return collection, nil
 		} else if IsCollectionLocked(err) {
 			return nil, err
+		} else if !IsCollectionNotFound(err) {
+			return nil, err
 		}
 	}
 	store, ok := db.base.(CollectionStore)
@@ -270,6 +274,8 @@ func (db *ProjectDB) GetCollectionByName(name string) (*types.Collection, error)
 		if collection, err := db.files.GetCollectionByName(name); err == nil {
 			return collection, nil
 		} else if IsCollectionLocked(err) {
+			return nil, err
+		} else if !IsCollectionNotFound(err) {
 			return nil, err
 		}
 	}
@@ -324,6 +330,8 @@ func (db *ProjectDB) DeleteCollection(id string) error {
 		if _, err := db.files.GetCollection(id); err == nil {
 			return db.files.DeleteCollection(id)
 		} else if IsCollectionLocked(err) {
+			return err
+		} else if !IsCollectionNotFound(err) {
 			return err
 		}
 	}

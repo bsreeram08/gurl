@@ -42,23 +42,36 @@ func IsCollectionLocked(err error) bool {
 }
 
 func (s *FileStore) collectionForStorage(collection *types.Collection, dir string) (*types.Collection, error) {
+	if !collectionHasSecrets(collection) {
+		return collectionForLocalKeyStorage(collection, nil)
+	}
+	if collection.Encryption != nil && collection.Encryption.Mode == CollectionEncryptionModePassphrase {
+		return collectionForLocalKeyStorage(collection, nil)
+	}
+	key, err := s.getOrCreateCollectionKey(dir)
+	if err != nil {
+		return nil, err
+	}
+	return collectionForLocalKeyStorage(collection, key)
+}
+
+func collectionForLocalKeyStorage(collection *types.Collection, key []byte) (*types.Collection, error) {
 	stored := cloneCollectionForStorage(collection)
 	if !collectionHasSecrets(stored) {
 		stored.Encryption = nil
 		return stored, nil
 	}
 	if stored.Encryption != nil && stored.Encryption.Mode == CollectionEncryptionModePassphrase {
-		for name, isSecret := range stored.SecretKeys {
-			if isSecret && secrets.IsEncryptedValue(stored.Variables[name]) {
-				return nil, fmt.Errorf("collection %q is passphrase-locked; run collection unlock first", stored.Name)
-			}
+		key, err := cachedCollectionPassphraseKey(stored.ID, stored.Encryption)
+		if err != nil {
+			return nil, collectionLockedErrorForKeychain(stored, err)
 		}
+		if err := encryptCollectionSecrets(stored, key); err != nil {
+			return nil, err
+		}
+		return stored, nil
 	}
 
-	key, err := s.getOrCreateCollectionKey(dir)
-	if err != nil {
-		return nil, err
-	}
 	if err := encryptCollectionSecrets(stored, key); err != nil {
 		return nil, err
 	}
@@ -86,10 +99,18 @@ func (s *FileStore) decryptCollectionForUse(collection *types.Collection, dir st
 	}
 
 	if collection.Encryption != nil && collection.Encryption.Mode == CollectionEncryptionModePassphrase {
-		return &CollectionLockedError{
-			Name: collection.Name,
-			Hint: fmt.Sprintf("run 'gurl collection unlock %s --passphrase ...' before using it", collection.Name),
+		key, err := cachedCollectionPassphraseKey(collection.ID, collection.Encryption)
+		if err != nil {
+			return collectionLockedErrorForKeychain(collection, err)
 		}
+		if err := decryptCollectionSecrets(collection, key); err != nil {
+			_ = deleteCachedCollectionPassphraseKey(collection.ID, collection.Encryption)
+			return &CollectionLockedError{
+				Name: collection.Name,
+				Hint: fmt.Sprintf("cached passphrase key failed; run 'gurl collection unlock %s --passphrase ...' again", collection.Name),
+			}
+		}
+		return nil
 	}
 
 	key, err := s.readCollectionKey(dir)
@@ -109,9 +130,12 @@ func (s *FileStore) UnlockCollection(name string, passphrase string) error {
 	if passphrase == "" {
 		return fmt.Errorf("passphrase is required")
 	}
-	collection, dir, err := s.findRawCollectionByName(name)
+	collection, _, err := s.findRawCollectionByName(name)
 	if err != nil {
-		return fmt.Errorf("collection not found: %s", name)
+		if errors.Is(err, errFileCollectionNotFound) {
+			return newCollectionNotFoundError(name)
+		}
+		return err
 	}
 	if collection.Encryption == nil || collection.Encryption.Mode != CollectionEncryptionModePassphrase {
 		return fmt.Errorf("collection %q is not passphrase-locked", name)
@@ -124,13 +148,29 @@ func (s *FileStore) UnlockCollection(name string, passphrase string) error {
 	if err := decryptCollectionSecrets(collection, key); err != nil {
 		return fmt.Errorf("failed to unlock collection %q: %w", name, err)
 	}
-	collection.Encryption = nil
-
-	localKeyPath := collectionKeyPath(dir)
-	if _, err := secrets.GetOrCreateKeyAt(localKeyPath); err != nil {
-		return err
+	if err := cacheCollectionPassphraseKey(collection.ID, collection.Encryption, key); err != nil {
+		return s.saveCollectionWithLocalKeyFallback(collection, err)
 	}
-	return s.saveCollection(collection, true)
+	return nil
+}
+
+func (s *FileStore) saveCollectionWithLocalKeyFallback(collection *types.Collection, keychainErr error) error {
+	collection.Encryption = nil
+	if err := s.saveCollection(collection, true); err != nil {
+		return fmt.Errorf("failed to cache passphrase key in OS keychain (%v) and save local collection key: %w", keychainErr, err)
+	}
+	return nil
+}
+
+func collectionLockedErrorForKeychain(collection *types.Collection, err error) *CollectionLockedError {
+	hint := fmt.Sprintf("run 'gurl collection unlock %s --passphrase ...' before using it", collection.Name)
+	if err != nil && !errors.Is(err, errCachedCollectionKeyNotFound) {
+		hint = fmt.Sprintf("%s (keychain unavailable: %v)", hint, err)
+	}
+	return &CollectionLockedError{
+		Name: collection.Name,
+		Hint: hint,
+	}
 }
 
 func (s *FileStore) getOrCreateCollectionKey(dir string) ([]byte, error) {
@@ -150,6 +190,51 @@ func (s *FileStore) readCollectionKey(dir string) ([]byte, error) {
 
 func collectionKeyPath(dir string) string {
 	return filepath.Join(dir, collectionKeyFileName)
+}
+
+func collectionLocalKeyPath(id string) (string, error) {
+	if id == "" {
+		return "", fmt.Errorf("collection ID is required")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, ".local", "share", "gurl", "keys", safePathComponent(id)+".key"), nil
+}
+
+func getOrCreateCollectionLocalKey(id string) ([]byte, error) {
+	path, err := collectionLocalKeyPath(id)
+	if err != nil {
+		return nil, err
+	}
+	return secrets.GetOrCreateKeyAt(path)
+}
+
+func readCollectionLocalKey(id string) ([]byte, error) {
+	path, err := collectionLocalKeyPath(id)
+	if err != nil {
+		return nil, err
+	}
+	key, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(key) != secrets.KeySize {
+		return nil, fmt.Errorf("invalid collection key size")
+	}
+	return key, nil
+}
+
+func removeCollectionLocalKey(id string) error {
+	path, err := collectionLocalKeyPath(id)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func encryptCollectionSecrets(collection *types.Collection, key []byte) error {
