@@ -238,8 +238,18 @@ func TestCollectionMigrateCommandCanPassphraseProtectFiles(t *testing.T) {
 	if unlocked.Variables["API_KEY"] != "secret-token" {
 		t.Fatalf("expected decrypted secret after unlock, got %q", unlocked.Variables["API_KEY"])
 	}
-	if _, err := os.Stat(filepath.Join(collectionPath, "collection.key")); err != nil {
-		t.Fatalf("expected local collection key after unlock: %v", err)
+	// UnlockCollection caches the derived key in the OS keychain and only writes a
+	// local collection.key when the keychain is unavailable. Assert what both paths
+	// guarantee -- the collection stays readable without the passphrase -- instead of
+	// the fallback's on-disk artifact, which never appears on a machine with a
+	// working keychain.
+	reopened := storage.NewFileStore(proj)
+	reopenedCollection, err := reopened.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("expected unlocked collection to stay readable: %v", err)
+	}
+	if reopenedCollection.Variables["API_KEY"] != "secret-token" {
+		t.Fatalf("expected decrypted secret from a fresh store, got %q", reopenedCollection.Variables["API_KEY"])
 	}
 	req, err := fileStore.GetRequest("req-1")
 	if err != nil {
