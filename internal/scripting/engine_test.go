@@ -443,3 +443,20 @@ func TestJS_BlockedFunction(t *testing.T) {
 		t.Errorf("Expected 'Function is not allowed' error, got: %v", err)
 	}
 }
+
+func TestJS_BlockedFunctionPrototypeConstructor(t *testing.T) {
+	eng := newTestEngine(t)
+	scripts := []string{
+		`(function(){}).constructor("return 1+1")()`,
+		`Function.prototype.constructor("return 1+1")()`,
+	}
+	for _, script := range scripts {
+		_, err := eng.Execute(script)
+		if err == nil {
+			t.Fatalf("expected constructor bypass %q to be blocked", script)
+		}
+		if !strings.Contains(err.Error(), "Function is not allowed") {
+			t.Errorf("script %q: got %v", script, err)
+		}
+	}
+}

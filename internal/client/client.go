@@ -107,33 +107,29 @@ func NewClientWithTLS(cfg TLSConfig) (*Client, error) {
 	if cfg.CertFile != "" && cfg.KeyFile != "" {
 		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARNING: Failed to load client certificate: %v\n", err)
-		} else {
-			tlsConfig.Certificates = []tls.Certificate{cert}
+			return nil, fmt.Errorf("failed to load client certificate: %w", err)
 		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
 
 	if cfg.CAFile != "" {
 		caCert, err := os.ReadFile(cfg.CAFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARNING: Failed to read CA file: %v\n", err)
-		} else {
-			caCertPool := x509.NewCertPool()
-			if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
-				fmt.Fprintf(os.Stderr, "WARNING: Failed to parse CA certificate\n")
-			} else {
-				tlsConfig.RootCAs = caCertPool
-			}
+			return nil, fmt.Errorf("failed to read CA file: %w", err)
 		}
+		caCertPool := x509.NewCertPool()
+		if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+			return nil, fmt.Errorf("failed to parse CA certificate")
+		}
+		tlsConfig.RootCAs = caCertPool
 	}
 
 	if cfg.MinTLSVersion != "" {
 		version, err := parseTLSVersion(cfg.MinTLSVersion)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARNING: Invalid TLS version '%s': %v\n", cfg.MinTLSVersion, err)
-		} else {
-			tlsConfig.MinVersion = version
+			return nil, fmt.Errorf("invalid TLS version %q: %w", cfg.MinTLSVersion, err)
 		}
+		tlsConfig.MinVersion = version
 	}
 
 	return &Client{
@@ -202,10 +198,11 @@ func (c *Client) ExecuteWithContext(ctx context.Context, req Request) (Response,
 	httpClient := &http.Client{
 		Transport: c.transport,
 		Timeout:   effectiveTimeout,
+		Jar:       c.Jar,
 	}
 
 	if req.ProxyURL != "" || len(req.NoProxy) > 0 {
-		httpClient = c.buildClientWithProxy(req)
+		httpClient = c.buildClientWithProxy(req, effectiveTimeout)
 	}
 
 	if maxRedirects < 0 {

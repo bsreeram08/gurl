@@ -551,10 +551,12 @@ func TestNewClientWithTLS_CertFileNotFound(t *testing.T) {
 		KeyFile:  "/nonexistent/key.pem",
 	}
 
-	client, _ := NewClientWithTLS(cfg)
-	// Should return client but with error logged (non-fatal for now)
-	if client == nil {
-		t.Fatal("expected non-nil client even with missing cert")
+	client, err := NewClientWithTLS(cfg)
+	if err == nil {
+		t.Fatal("expected error for missing client certificate")
+	}
+	if client != nil {
+		t.Fatal("expected nil client when certificate load fails")
 	}
 }
 
@@ -571,11 +573,11 @@ func TestNewClientWithTLS_KeyFileNotFound(t *testing.T) {
 	}
 
 	client, err := NewClientWithTLS(cfg)
-	if err != nil {
-		t.Fatalf("NewClientWithTLS failed: %v", err)
+	if err == nil {
+		t.Fatal("expected error for missing key file")
 	}
-	if client == nil {
-		t.Fatal("expected non-nil client even with missing key")
+	if client != nil {
+		t.Fatal("expected nil client when key load fails")
 	}
 }
 
@@ -593,11 +595,11 @@ func TestNewClientWithTLS_CAFileNotFound(t *testing.T) {
 	}
 
 	client, err := NewClientWithTLS(cfg)
-	if err != nil {
-		t.Fatalf("NewClientWithTLS failed: %v", err)
+	if err == nil {
+		t.Fatal("expected error for missing CA file")
 	}
-	if client == nil {
-		t.Fatal("expected non-nil client even with missing CA")
+	if client != nil {
+		t.Fatal("expected nil client when CA load fails")
 	}
 }
 

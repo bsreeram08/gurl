@@ -95,23 +95,14 @@ func GRPCCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("target (host:port) is required")
 			}
 
-			// Build TLS config if needed
-			var tlsCfg *TLSConfig
-			if c.Bool("insecure") || c.String("cacert") != "" || c.String("cert") != "" {
-				tlsCfg = &TLSConfig{
-					Insecure:   c.Bool("insecure"),
-					CAFile:     c.String("cacert"),
-					CertFile:   c.String("cert"),
-					KeyFile:    c.String("key"),
-					ServerName: c.String("server-name"),
-				}
+			tlsCfg := TLSConfig{
+				Insecure:   c.Bool("insecure"),
+				CAFile:     c.String("cacert"),
+				CertFile:   c.String("cert"),
+				KeyFile:    c.String("key"),
+				ServerName: c.String("server-name"),
 			}
-
-			// Create client
-			client := NewClient()
-			if tlsCfg != nil {
-				client = NewClientWithTLS(*tlsCfg)
-			}
+			client := NewClientWithTLS(tlsCfg)
 
 			// Handle --list flag
 			if c.Bool("list") {
@@ -219,7 +210,7 @@ func GRPCCommand(db storage.DB) *cli.Command {
 				fmt.Fprintf(os.Stderr, "Metadata sent: %s\n", strings.Join(metadataPairs, ", "))
 			}
 
-			return nil
+			return err
 		},
 	}
 }

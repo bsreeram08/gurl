@@ -52,14 +52,14 @@ func ShowCommand(db storage.DB) *cli.Command {
 				}
 				fmt.Println(string(data))
 			case "curl":
-				curlParts := []string{"curl", "-X", req.Method}
+				curlParts := []string{"curl", "-X", shellEscape(req.Method)}
 				for _, h := range req.Headers {
 					curlParts = append(curlParts, "-H", fmt.Sprintf("%s: %s", shellEscape(h.Key), shellEscape(h.Value)))
 				}
 				if req.Body != "" {
 					curlParts = append(curlParts, "-d", shellEscape(req.Body))
 				}
-				curlParts = append(curlParts, req.URL)
+				curlParts = append(curlParts, shellEscape(req.URL))
 				fmt.Println(strings.Join(curlParts, " \\\n  "))
 			default:
 				// Pretty print

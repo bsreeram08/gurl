@@ -18,34 +18,34 @@ func (g *CurlGenerator) Language() string {
 	return "curl"
 }
 
-const curlTemplate = `curl -X {{ .Method }}{{ range .Headers }} -H {{ .Key | escapeCurl }}: {{ .Value | escapeCurl }}{{ end }}{{ if .HasBody }}{{ if .IsBinaryBody }}# Binary body omitted{{ else if .IsMultipartBody }} -F 'data=@file'{{ else }} -d {{ .Body | escapeCurl }}{{ end }}{{ end }}{{ if .HasCert }} --cert {{ .Cert }}{{ end }}{{ if .HasKey }} --key {{ .Key }}{{ end }}{{ if .HasCacert }} --cacert {{ .Cacert }}{{ end }}{{ if .Insecure }} -k{{ end }}{{ if .HasCookie }} --cookie {{ .Cookie }}{{ end }}{{ if .HasCookieJar }} --cookie-jar {{ .CookieJar }}{{ end }} {{ .URL | escapeCurl }}{{ if .HasAssertions }}{{ if .HasStatusAssertion }}\n# Expected status: {{ .ExpectedStatus }}{{ end }}{{ end }}`
+const curlTemplate = `curl -X {{ .Method | escapeCurl }}{{ range .Headers }} -H {{ .Key | escapeCurl }}: {{ .Value | escapeCurl }}{{ end }}{{ if .HasBody }}{{ if .IsBinaryBody }}# Binary body omitted{{ else if .IsMultipartBody }} -F 'data=@file'{{ else }} -d {{ .Body | escapeCurl }}{{ end }}{{ end }}{{ if .HasCert }} --cert {{ .Cert | escapeCurl }}{{ end }}{{ if .HasKey }} --key {{ .Key | escapeCurl }}{{ end }}{{ if .HasCacert }} --cacert {{ .Cacert | escapeCurl }}{{ end }}{{ if .Insecure }} -k{{ end }}{{ if .HasCookie }} --cookie {{ .Cookie | escapeCurl }}{{ end }}{{ if .HasCookieJar }} --cookie-jar {{ .CookieJar | escapeCurl }}{{ end }} {{ .URL | escapeCurl }}{{ if .HasAssertions }}{{ if .HasStatusAssertion }}\n# Expected status: {{ .ExpectedStatus }}{{ end }}{{ end }}`
 
 // CurlCodeGenData holds template data for curl generation
 type CurlCodeGenData struct {
-	URL               string
-	Method            string
-	Headers           []types.Header
-	Body              string
-	HasBody           bool
-	HasAuth           bool
-	AuthType          string
-	AuthValue         string
-	HasCert           bool
-	Cert              string
-	HasKey            bool
-	Key               string
-	HasCacert         bool
-	Cacert            string
-	Insecure          bool
-	HasCookie         bool
-	Cookie            string
-	HasCookieJar      bool
-	CookieJar         string
-	IsBinaryBody      bool
-	IsMultipartBody   bool
-	HasAssertions     bool
+	URL                string
+	Method             string
+	Headers            []types.Header
+	Body               string
+	HasBody            bool
+	HasAuth            bool
+	AuthType           string
+	AuthValue          string
+	HasCert            bool
+	Cert               string
+	HasKey             bool
+	Key                string
+	HasCacert          bool
+	Cacert             string
+	Insecure           bool
+	HasCookie          bool
+	Cookie             string
+	HasCookieJar       bool
+	CookieJar          string
+	IsBinaryBody       bool
+	IsMultipartBody    bool
+	HasAssertions      bool
 	HasStatusAssertion bool
-	ExpectedStatus    string
+	ExpectedStatus     string
 }
 
 // Generate creates curl command from a SavedRequest
@@ -167,7 +167,7 @@ func filterAuthHeaders(headers []types.Header) []types.Header {
 }
 
 func escapeCurlString(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\'`) + "'"
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // BuildCurlCommand builds a curl command array for safe execution using exec.Command

@@ -3,8 +3,10 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -14,6 +16,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
@@ -147,8 +150,7 @@ func (c *Client) dial(ctx context.Context, target string) (*grpc.ClientConn, err
 		}
 		opts = append(opts, grpc.WithTransportCredentials(creds))
 	} else {
-		// Default to insecure
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
 
 	return grpc.NewClient(target, opts...)
@@ -179,8 +181,15 @@ func buildTLSCredentials(cfg *TLSConfig) (credentials.TransportCredentials, erro
 	}
 
 	if cfg.CAFile != "" {
-		// Load CA certificate for server verification
-		// This would require reading the CA file and setting RootCAs
+		caCert, err := os.ReadFile(cfg.CAFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CA file: %w", err)
+		}
+		pool := x509.NewCertPool()
+		if ok := pool.AppendCertsFromPEM(caCert); !ok {
+			return nil, fmt.Errorf("failed to parse CA certificate")
+		}
+		tlsConfig.RootCAs = pool
 	}
 
 	return credentials.NewTLS(tlsConfig), nil
@@ -268,8 +277,11 @@ func (c *Client) executeCall(ctx context.Context, target, method string, data []
 		return nil, fmt.Errorf("service descriptor source not found for %s (ensure SetDescriptorSource is properly configured)", serviceName)
 	}
 
-	// Use dynamicpb for message creation if we have a file descriptor
-	inputMsg := dynamicpb.NewMessage(nil)
+	md, ok := desc.(protoreflect.MessageDescriptor)
+	if !ok {
+		return nil, fmt.Errorf("dynamic gRPC unary call requires a protobuf message descriptor")
+	}
+	inputMsg := dynamicpb.NewMessage(md)
 
 	// Use conn.Invoke for unary calls
 	var outputMsg proto.Message

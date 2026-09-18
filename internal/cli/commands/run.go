@@ -30,6 +30,13 @@ func init() {
 	builtins.RegisterBuiltins(outputPluginRegistry)
 }
 
+// SetPluginRegistry replaces the process-wide plugin registry after .so discovery.
+func SetPluginRegistry(r *plugins.Registry) {
+	if r != nil {
+		outputPluginRegistry = r
+	}
+}
+
 func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 	return &cli.Command{
 		Name:    "run",
@@ -52,20 +59,14 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 				Usage:   "Output format (auto|json|table)",
 				Value:   "auto",
 			},
-			&cli.BoolFlag{
-				Name:    "cache",
-				Aliases: []string{"c"},
-				Usage:   "Use cached response if fresh",
-			},
 			&cli.StringFlag{
 				Name:    "output",
 				Aliases: []string{"o"},
 				Usage:   "Output file path (use - for stdout)",
 			},
 			&cli.BoolFlag{
-				Name:    "force",
-				Aliases: []string{"f"},
-				Usage:   "Force overwrite existing file",
+				Name:  "force",
+				Usage: "Force overwrite existing file",
 			},
 			&cli.StringFlag{
 				Name:  "timeout",

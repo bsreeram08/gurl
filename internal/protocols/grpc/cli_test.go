@@ -134,8 +134,8 @@ func TestGRPCCommandUnaryCallErrorPath(t *testing.T) {
 	w.Close()
 	os.Stderr = oldStderr
 
-	if err != nil {
-		t.Errorf("action should return nil (errors written to stderr), got: %v", err)
+	if err == nil {
+		t.Fatal("expected gRPC call error to be returned")
 	}
 }
 
@@ -154,8 +154,8 @@ func TestGRPCCommandServerStreamingCallErrorPath(t *testing.T) {
 	w.Close()
 	os.Stderr = oldStderr
 
-	if err != nil {
-		t.Errorf("action should return nil, got: %v", err)
+	if err == nil {
+		t.Fatal("expected gRPC call error to be returned")
 	}
 }
 
@@ -174,8 +174,8 @@ func TestGRPCCommandClientStreamingCallErrorPath(t *testing.T) {
 	w.Close()
 	os.Stderr = oldStderr
 
-	if err != nil {
-		t.Errorf("action should return nil, got: %v", err)
+	if err == nil {
+		t.Fatal("expected gRPC call error to be returned")
 	}
 }
 
@@ -194,8 +194,8 @@ func TestGRPCCommandBidirectionalCallErrorPath(t *testing.T) {
 	w.Close()
 	os.Stderr = oldStderr
 
-	if err != nil {
-		t.Errorf("action should return nil, got: %v", err)
+	if err == nil {
+		t.Fatal("expected gRPC call error to be returned")
 	}
 }
 
@@ -218,8 +218,8 @@ func TestGRPCCommandWithDataFileFlag(t *testing.T) {
 	w.Close()
 	os.Stderr = oldStderr
 
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected gRPC call error to be returned")
 	}
 }
 
@@ -254,8 +254,8 @@ func TestGRPCCommandWithInsecureFlag(t *testing.T) {
 	w.Close()
 	os.Stderr = oldStderr
 
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected gRPC call error to be returned")
 	}
 }
 
@@ -275,8 +275,8 @@ func TestGRPCCommandWithCertFlag(t *testing.T) {
 	w.Close()
 	os.Stderr = oldStderr
 
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected gRPC call error to be returned")
 	}
 }
 
@@ -298,8 +298,8 @@ func TestGRPCCommandWithMetadataFlag(t *testing.T) {
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
 
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected gRPC call error to be returned")
 	}
 	if !strings.Contains(buf.String(), "Metadata sent:") {
 		t.Errorf("expected metadata info in stderr, got: %v", buf.String())
@@ -321,8 +321,8 @@ func TestGRPCCommandWithCACertFlag(t *testing.T) {
 	w.Close()
 	os.Stderr = oldStderr
 
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected gRPC call error to be returned")
 	}
 }
 

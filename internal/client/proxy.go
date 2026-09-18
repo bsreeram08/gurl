@@ -1,9 +1,12 @@
 package client
 
 import (
+	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"golang.org/x/net/proxy"
 )
@@ -73,14 +76,18 @@ func (c *Client) applyProxyConfig() {
 			}
 		}
 		dialer, err := proxy.SOCKS5(
-			c.proxyConfig.socks5ProxyURL.Scheme,
+			"tcp",
 			c.proxyConfig.socks5ProxyURL.Host,
 			auth,
 			proxy.Direct,
 		)
-		if err == nil {
-			c.transport.Dial = dialer.Dial
+		if err != nil {
+			c.transport.Dial = func(network, addr string) (net.Conn, error) {
+				return nil, fmt.Errorf("socks5 proxy: %w", err)
+			}
+			return
 		}
+		c.transport.Dial = dialer.Dial
 		return
 	}
 
@@ -147,7 +154,7 @@ func shouldUseProxy(req *http.Request, noProxy []string) bool {
 	return true
 }
 
-func (c *Client) buildClientWithProxy(req Request) *http.Client {
+func (c *Client) buildClientWithProxy(req Request, timeout time.Duration) *http.Client {
 	transport := &http.Transport{
 		TLSClientConfig:   c.transport.TLSClientConfig,
 		DialContext:       c.transport.DialContext,
@@ -166,8 +173,12 @@ func (c *Client) buildClientWithProxy(req Request) *http.Client {
 						Password: password,
 					}
 				}
-				dialer, err := proxy.SOCKS5("socks5", proxyURL.Host, auth, proxy.Direct)
-				if err == nil {
+				dialer, err := proxy.SOCKS5("tcp", proxyURL.Host, auth, proxy.Direct)
+				if err != nil {
+					transport.Dial = func(network, addr string) (net.Conn, error) {
+						return nil, fmt.Errorf("socks5 proxy: %w", err)
+					}
+				} else {
 					transport.Dial = dialer.Dial
 				}
 			} else {
@@ -196,8 +207,12 @@ func (c *Client) buildClientWithProxy(req Request) *http.Client {
 		}
 	}
 
+	if timeout <= 0 {
+		timeout = c.timeout
+	}
 	return &http.Client{
 		Transport: transport,
-		Timeout:   c.timeout,
+		Timeout:   timeout,
+		Jar:       c.Jar,
 	}
 }

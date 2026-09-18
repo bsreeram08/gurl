@@ -11,6 +11,7 @@ import (
 func TestRunSupportsShellCompletion(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("GURL_DB_PATH", filepath.Join(t.TempDir(), "gurl.db"))
+	t.Setenv("GURL_COOKIE_DB_PATH", filepath.Join(t.TempDir(), "gurl-cookies.db"))
 	t.Setenv("GURL_PLUGIN_DIR", t.TempDir())
 
 	for _, shell := range []string{"bash", "zsh", "fish"} {

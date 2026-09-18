@@ -40,7 +40,7 @@ async function makeRequest() {
     // Multipart body not fully supported - consider using FormData
     const body = {{ .Body | escapeJS }};
 {{- else if .IsJSONBody }}
-    const body = JSON.stringify({{ .Body }});
+    const body = {{ .Body | escapeJS }};
 {{- else }}
     const body = {{ .Body | escapeJS }};
 {{- end }}
@@ -89,20 +89,20 @@ makeRequest();
 
 // JavaScriptCodeGenData holds template data for JavaScript generation
 type JavaScriptCodeGenData struct {
-	URL                 string
-	Method              string
-	Headers             []types.Header
-	Body                string
-	HasHeaders          bool
-	HasBody             bool
-	HasAuth             bool
-	AuthType            string
-	IsJSONBody          bool
-	IsBinaryBody        bool
-	IsMultipartBody     bool
-	HasAssertions       bool
-	HasStatusAssertion  bool
-	ExpectedStatus      int
+	URL                string
+	Method             string
+	Headers            []types.Header
+	Body               string
+	HasHeaders         bool
+	HasBody            bool
+	HasAuth            bool
+	AuthType           string
+	IsJSONBody         bool
+	IsBinaryBody       bool
+	IsMultipartBody    bool
+	HasAssertions      bool
+	HasStatusAssertion bool
+	ExpectedStatus     int
 }
 
 // Generate creates JavaScript fetch code from a SavedRequest
