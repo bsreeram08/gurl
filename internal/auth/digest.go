@@ -102,7 +102,7 @@ func (h *DigestHandler) Apply(req *client.Request, params map[string]string) err
 	ncStr := fmt.Sprintf("%08x", nc)
 	cnonce := generateCnonce()
 
-	if algorithm == "SHA-256" {
+	if strings.HasPrefix(algorithm, "SHA-256") {
 		ha1Input := fmt.Sprintf("%s:%s:%s", username, realm, password)
 		ha1 = sha256Hash(ha1Input)
 

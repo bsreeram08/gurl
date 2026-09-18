@@ -3,7 +3,7 @@ LDFLAGS := -X main.version=$(VERSION) -X 'github.com/sreeram/gurl/internal/cli/c
 BINARY := gurl
 CMD := ./cmd/gurl
 
-.PHONY: build install clean test
+.PHONY: build install clean test test-race
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
@@ -15,4 +15,7 @@ clean:
 	rm -f $(BINARY)
 
 test:
-	go test ./...
+	go test -count=1 -timeout 5m ./...
+
+test-race:
+	go test -race -count=1 -timeout 10m ./...

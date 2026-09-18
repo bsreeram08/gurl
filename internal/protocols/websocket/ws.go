@@ -278,6 +278,8 @@ func (c *Client) Ping() error {
 	conn := c.conn
 	c.mu.RUnlock()
 
+	c.ioMu.Lock()
+	defer c.ioMu.Unlock()
 	return conn.WriteMessage(websocket.PingMessage, nil)
 }
 
@@ -371,6 +373,8 @@ func (c *Client) NextReader() (MessageType, []byte, error) {
 	conn := c.conn
 	c.mu.RUnlock()
 
+	c.ioMu.Lock()
+	defer c.ioMu.Unlock()
 	msgType, data, err := conn.ReadMessage()
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to read message: %w", err)

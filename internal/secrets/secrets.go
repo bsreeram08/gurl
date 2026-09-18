@@ -50,6 +50,7 @@ func GetOrCreateKeyAt(keyPath string) ([]byte, error) {
 
 	data, err := os.ReadFile(keyPath)
 	if err == nil && len(data) == KeySize {
+		_ = os.Chmod(keyPath, 0600)
 		return data, nil
 	}
 

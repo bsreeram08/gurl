@@ -41,7 +41,11 @@ jobs:
           cache: false
 
       - name: Download modules
-        run: go mod download || true
+        run: go mod download
+
+      - name: Test
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'amd64'
+        run: go test ./...
 
       - name: Build
         env:
@@ -56,7 +60,7 @@ jobs:
             *) os_name="${{ matrix.os }}" ;;
           esac
           name="gurl-${os_name}-${{ matrix.arch }}${ext}"
-          go build -ldflags="-s -w -X main.version=${VERSION} -X github.com/sreeram/gurl/internal/cli/commands.CurrentVersion=${VERSION}" -o "$name" ./cmd/gurl
+          CGO_ENABLED=0 GOOS="$os_name" GOARCH="${{ matrix.arch }}" go build -ldflags="-s -w -X main.version=${VERSION} -X github.com/sreeram/gurl/internal/cli/commands.CurrentVersion=${VERSION}" -o "$name" ./cmd/gurl
 
       - name: Checksum
         run: |

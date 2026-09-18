@@ -84,9 +84,9 @@ jobs:
 
           # --- Tests ---
           # GURL_TLS_INSECURE_OK must be set for TLS verification disable tests
-          if ! GURL_TLS_INSECURE_OK=true go test ./... 2>&1; then
+          if ! go test ./... 2>&1; then
             ISSUES_FOUND=true
-            TEST_OUTPUT=$(GURL_TLS_INSECURE_OK=true go test ./... 2>&1)
+            TEST_OUTPUT=$(go test ./... 2>&1)
             REVIEW_OUTPUT+="❌ **Tests Failed:**\n\`\`\`\n$TEST_OUTPUT\n\`\`\`\n\n"
           fi
 
@@ -100,6 +100,11 @@ jobs:
           echo "review<<EOF" >> $GITHUB_OUTPUT
           printf '%s' "$REVIEW_OUTPUT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
+          if $ISSUES_FOUND; then
+            echo "$REVIEW_OUTPUT"
+            exit 1
+          fi
           
       - name: Post Review Comment
         if: always()

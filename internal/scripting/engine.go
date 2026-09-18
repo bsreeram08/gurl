@@ -155,9 +155,10 @@ func (e *Engine) Execute(script string) (*Result, error) {
 		vm.Interrupt("timeout exceeded")
 		select {
 		case <-done:
+			e.putRuntime(vm)
 		case <-time.After(5 * time.Second):
+			e.vm = nil
 		}
-		e.putRuntime(vm)
 		return &Result{Error: ctx.Err()}, ctx.Err()
 	}
 }

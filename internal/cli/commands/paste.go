@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/urfave/cli/v3"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/urfave/cli/v3"
 )
 
 // PasteCommand creates the paste command
@@ -29,7 +29,7 @@ func PasteCommand(db storage.DB) *cli.Command {
 			}
 
 			// Build curl command using array form to prevent shell injection
-			curlCmd := []string{"curl", "-X", req.Method}
+			curlCmd := []string{"curl", "-X", shellEscape(req.Method)}
 
 			for _, header := range req.Headers {
 				curlCmd = append(curlCmd, "-H", fmt.Sprintf("%s: %s", shellEscape(header.Key), shellEscape(header.Value)))
@@ -39,7 +39,7 @@ func PasteCommand(db storage.DB) *cli.Command {
 				curlCmd = append(curlCmd, "-d", shellEscape(req.Body))
 			}
 
-			curlCmd = append(curlCmd, req.URL)
+			curlCmd = append(curlCmd, shellEscape(req.URL))
 
 			// Join for display (safe - no shell execution)
 			displayCmd := strings.Join(curlCmd, " ")

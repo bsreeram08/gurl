@@ -60,12 +60,18 @@ func init() {
 // registerSandboxRestricted sets up sandbox restrictions on a new runtime
 // Called once per runtime when created, not on each reuse
 func registerSandboxRestricted(vm *goja.Runtime) {
-	// Combine all sandbox restrictions into a single RunString call for efficiency
-	_, _ = vm.RunString(`
+	if err := applySandbox(vm); err != nil {
+		panic("sandbox setup failed: " + err.Error())
+	}
+}
+
+func applySandbox(vm *goja.Runtime) error {
+	if _, err := vm.RunString(`
 		(function() {
 			var originalRequire = typeof require !== 'undefined' ? require : null;
+			var g = (typeof globalThis !== 'undefined') ? globalThis : this;
 
-			global.require = function(module) {
+			g.require = function(module) {
 				var blocked = ` + blockedArrayJS + `;
 				if (blocked.indexOf(module) !== -1) {
 					throw new Error('Access to module "' + module + '" is not allowed');
@@ -77,25 +83,36 @@ func registerSandboxRestricted(vm *goja.Runtime) {
 			};
 
 			if (typeof window !== 'undefined') {
-				window.require = global.require;
+				window.require = g.require;
 			}
 		})();
-	`)
+	`); err != nil {
+		return err
+	}
 
 	vm.Set("eval", func(call goja.FunctionCall) goja.Value {
 		panic(vm.NewTypeError("eval is not allowed in sandbox"))
 	})
 
-	_, _ = vm.RunString(`
+	if _, err := vm.RunString(`
 		(function() {
-			var origFunction = Function;
 			var blocked = function() {
 				throw new Error("Function is not allowed in sandbox");
 			};
+			Function.prototype.constructor = blocked;
+			try {
+				Object.getPrototypeOf(async function () {}).constructor = blocked;
+			} catch (e) {}
+			try {
+				Object.getPrototypeOf(function* () {}).constructor = blocked;
+			} catch (e) {}
 			Function = blocked;
-			global.Function = blocked;
+			var g = (typeof globalThis !== 'undefined') ? globalThis : this;
+			g.Function = blocked;
 		})();
-	`)
+	`); err != nil {
+		return err
+	}
 
 	cryptoObj := vm.NewObject()
 	cryptoObj.Set("createHash", func(call goja.FunctionCall) goja.Value {
@@ -115,4 +132,5 @@ func registerSandboxRestricted(vm *goja.Runtime) {
 		panic(vm.NewTypeError("Buffer.from is not available in the scripting sandbox"))
 	})
 	vm.Set("Buffer", bufferObj)
+	return nil
 }

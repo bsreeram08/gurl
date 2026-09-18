@@ -196,9 +196,16 @@ func updateGurl() error {
 	// On Unix, we need to remove the old binary first
 	// On Windows, we might need to close handles first
 	backupPath := selfPath + ".old"
-	os.Rename(selfPath, backupPath)
-	os.Rename(tmpBin, selfPath)
-	os.Chmod(selfPath, 0755)
+	if err := os.Rename(selfPath, backupPath); err != nil {
+		return fmt.Errorf("failed to backup current binary: %w", err)
+	}
+	if err := os.Rename(tmpBin, selfPath); err != nil {
+		_ = os.Rename(backupPath, selfPath)
+		return fmt.Errorf("failed to install new binary: %w", err)
+	}
+	if err := os.Chmod(selfPath, 0755); err != nil {
+		return fmt.Errorf("failed to set binary permissions: %w", err)
+	}
 
 	// Try to remove backup (may fail on Windows if file is in use)
 	os.Remove(backupPath)

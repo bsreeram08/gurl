@@ -21,10 +21,10 @@ type Event struct {
 type Option func(*options)
 
 type options struct {
-	headers         map[string]string
-	eventTypes      []string
-	lastEventID     string
-	timeout         time.Duration
+	headers          map[string]string
+	eventTypes       []string
+	lastEventID      string
+	timeout          time.Duration
 	maxScanTokenSize int // 0 means use default 1MB limit
 }
 
@@ -70,16 +70,12 @@ type Client struct {
 
 func NewClient() *Client {
 	return &Client{
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		httpClient: &http.Client{},
 	}
 }
 
 func (c *Client) Connect(ctx context.Context, url string, opts ...Option) (<-chan Event, <-chan error, error) {
-	o := &options{
-		timeout: 30 * time.Second,
-	}
+	o := &options{}
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -88,8 +84,17 @@ func (c *Client) Connect(ctx context.Context, url string, opts ...Option) (<-cha
 		c.httpClient = &http.Client{}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	reqCtx := ctx
+	var cancel context.CancelFunc
+	if o.timeout > 0 {
+		reqCtx, cancel = context.WithTimeout(ctx, o.timeout)
+	}
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
 	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
 		return nil, nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
@@ -105,13 +110,31 @@ func (c *Client) Connect(ctx context.Context, url string, opts ...Option) (<-cha
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
 		return nil, nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		if cancel != nil {
+			cancel()
+		}
+		return nil, nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 
 	eventChan := make(chan Event, 100)
 	errorChan := make(chan error, 1)
 
-	go c.readEvents(resp.Body, eventChan, errorChan, o.eventTypes, o.lastEventID, o.maxScanTokenSize)
+	go func() {
+		defer func() {
+			if cancel != nil {
+				cancel()
+			}
+		}()
+		c.readEvents(resp.Body, eventChan, errorChan, o.eventTypes, o.lastEventID, o.maxScanTokenSize)
+	}()
 
 	return eventChan, errorChan, nil
 }
@@ -175,6 +198,10 @@ func (c *Client) readEvents(body io.ReadCloser, eventChan chan<- Event, errorCha
 			field = strings.TrimSpace(line[:idx])
 			value = strings.TrimSpace(line[idx+1:])
 		} else {
+			continue
+		}
+
+		if field == "" {
 			continue
 		}
 

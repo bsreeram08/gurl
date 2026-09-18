@@ -10,10 +10,16 @@ import (
 	"syscall"
 
 	"github.com/sreeram/gurl/internal/cli/commands"
+	"github.com/sreeram/gurl/internal/client"
+	"github.com/sreeram/gurl/internal/cookies"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/plugins"
+	"github.com/sreeram/gurl/internal/plugins/builtins"
 	"github.com/sreeram/gurl/internal/project"
 	"github.com/sreeram/gurl/internal/protocols/graphql"
+	"github.com/sreeram/gurl/internal/protocols/grpc"
+	"github.com/sreeram/gurl/internal/protocols/sse"
+	"github.com/sreeram/gurl/internal/protocols/websocket"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/urfave/cli/v3"
 )
@@ -22,6 +28,14 @@ var version = "dev"
 
 // Global plugin registry - initialized at startup
 var pluginRegistry *plugins.Registry
+
+type cookieJarHolder struct {
+	jar *cookies.CookieJar
+}
+
+func (h cookieJarHolder) GetCookieJar() *cookies.CookieJar {
+	return h.jar
+}
 
 func getPluginDir() string {
 	if dir := os.Getenv("GURL_PLUGIN_DIR"); dir != "" {
@@ -56,10 +70,26 @@ func run() error {
 		db = storage.NewProjectDB(baseDB, storage.NewFileStore(proj))
 	}
 
-	// Initialize plugin registry
 	pluginDir := getPluginDir()
 	loader := plugins.NewLoader(pluginDir, nil)
-	pluginRegistry, _ = loader.LoadAll()
+	pluginRegistry, err = loader.LoadAll()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: plugin discovery failed: %v\n", err)
+		pluginRegistry = plugins.NewRegistry()
+	}
+	builtins.RegisterBuiltins(pluginRegistry)
+	commands.SetPluginRegistry(pluginRegistry)
+
+	cookieProvider := commands.CookieJarProvider(cookieJarHolder{})
+	if cookieDB, cookieErr := cookies.NewLMDBCookieDB(); cookieErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: cookie store unavailable: %v\n", cookieErr)
+	} else if jar, jarErr := cookies.NewCookieJar(cookieDB); jarErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: cookie jar unavailable: %v\n", jarErr)
+	} else {
+		client.SetDefaultCookieJar(jar)
+		cookieProvider = cookieJarHolder{jar: jar}
+	}
+
 	envStorage := env.NewEnvStorageWithPath(baseDB.Path())
 	if proj != nil {
 		envStorage = env.NewEnvStorageWithPathAndProject(baseDB.Path(), proj)
@@ -109,6 +139,10 @@ Quick Start:
 			commands.ShellCommand(db, envStorage),
 			commands.CodegenCommand(db),
 			graphql.GraphQLCommand(db),
+			grpc.GRPCCommand(db),
+			websocket.WSCommand(db),
+			sse.SSECommand(db),
+			commands.CookiesCommand(cookieProvider),
 		},
 	}
 
