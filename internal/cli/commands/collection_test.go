@@ -123,6 +123,9 @@ func TestCollectionRunCommandIncludesAssertBailFlag(t *testing.T) {
 	if !commandHasFlag(runCmd, "assert-bail") {
 		t.Fatalf("expected collection run command to expose --assert-bail flag")
 	}
+	if !commandHasFlag(runCmd, "verbose") {
+		t.Fatalf("expected collection run command to expose --verbose flag")
+	}
 }
 
 func TestCollectionMigrateCommandExportsDBCollectionToFiles(t *testing.T) {

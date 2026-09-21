@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -29,6 +30,11 @@ type RunConfig struct {
 	Delay          time.Duration
 	Vars           map[string]string
 	DataFile       string
+	// Verbose prints each request/response exchange to VerboseOut as the
+	// collection runs. Display only: nothing extra is stored or reported.
+	Verbose bool
+	// VerboseOut receives the verbose output. Defaults to os.Stdout.
+	VerboseOut io.Writer
 }
 
 var collectionRunWatchOptions = storage.CollectionWatchOptions{}
@@ -396,7 +402,9 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		}
 		visited[req.Name] = true
 
-		reqResult := r.runRequest(ctx, req, runningVars, runningOrigins, defaultPersistOrigin, extractedVars, config.DryRun, plannedVarSources)
+		execution := r.runRequest(ctx, req, runningVars, runningOrigins, defaultPersistOrigin, extractedVars, config.DryRun, plannedVarSources)
+		reqResult := execution.Result
+		printVerboseExchange(config, execution, req.Name)
 		nextIndex := i + 1
 		stop := false
 		if reqResult.NextRequestOverride != "" {
@@ -475,8 +483,22 @@ func appendBailSkippedResults(result *RunResult, requests []*types.SavedRequest,
 	}
 }
 
-func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string, origins map[string]VarOrigin, defaultPersistOrigin VarOrigin, extractedVars map[string]string, dryRun bool, plannedVarSources map[string]string) *RequestResult {
-	return r.runRequestLifecycle(ctx, req, vars, origins, defaultPersistOrigin, extractedVars, dryRun, plannedVarSources).Result
+func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string, origins map[string]VarOrigin, defaultPersistOrigin VarOrigin, extractedVars map[string]string, dryRun bool, plannedVarSources map[string]string) *SingleRequestExecution {
+	return r.runRequestLifecycle(ctx, req, vars, origins, defaultPersistOrigin, extractedVars, dryRun, plannedVarSources)
+}
+
+// printVerboseExchange writes one request/response pair when --verbose is set.
+// A dry run has nothing on the wire to show.
+func printVerboseExchange(config RunConfig, execution *SingleRequestExecution, name string) {
+	if !config.Verbose || config.DryRun {
+		return
+	}
+	out := config.VerboseOut
+	if out == nil {
+		out = os.Stdout
+	}
+	fmt.Fprintf(out, "\n─── %s ───\n", name)
+	fmt.Fprint(out, FormatVerboseExchange(execution.Request, execution.Response))
 }
 
 func (r *Runner) RunSavedRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string) *SingleRequestExecution {

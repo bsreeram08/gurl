@@ -43,6 +43,11 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 				Name:  "dry-run",
 				Usage: "Preview collection execution without sending requests",
 			},
+			&cli.BoolFlag{
+				// No short alias: -v is already --var on this command.
+				Name:  "verbose",
+				Usage: "Print request and response headers and bodies for each request",
+			},
 			&cli.IntFlag{
 				Name:    "iterations",
 				Aliases: []string{"n"},
@@ -121,6 +126,7 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 				Delay:          c.Duration("delay"),
 				Vars:           vars,
 				DataFile:       c.String("data"),
+				Verbose:        c.Bool("verbose"),
 			}
 
 			ciMode := c.Bool("ci")
