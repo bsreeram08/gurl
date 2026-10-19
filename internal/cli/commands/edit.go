@@ -83,7 +83,7 @@ func EditCommand(db storage.DB) *cli.Command {
 			},
 			&cli.StringSliceFlag{
 				Name:  "extract",
-				Usage: "Add or replace extraction rule (format: VAR_NAME=METHOD:EXPRESSION)",
+				Usage: "Add or replace an extraction rule. " + extractRuleUsage,
 			},
 			&cli.StringSliceFlag{
 				Name:  "remove-extract",

@@ -12,7 +12,7 @@ import (
 func DiffCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
 		Name:    "diff",
-		Aliases: []string{"d"},
+		Aliases: nil,
 		Usage:   "Compare responses for a request",
 		Flags: []cli.Flag{
 			&cli.IntFlag{

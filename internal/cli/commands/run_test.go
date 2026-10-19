@@ -221,7 +221,7 @@ func TestRunCommandPersistWritesSingleRequestDirtyVars(t *testing.T) {
 	}
 
 	cmd := RunCommand(db, envStorage)
-	output := captureStdout(t, func() {
+	output := captureStdoutAndStderr(t, func() {
 		if err := cmd.Run(context.Background(), []string{"run", "create order", "--env", "beta", "--var", "cliOnly=123", "--persist"}); err != nil {
 			t.Fatalf("run command failed: %v", err)
 		}
@@ -328,7 +328,7 @@ func TestRunCommandChainRefreshesCollectionContextPerStep(t *testing.T) {
 	}
 
 	cmd := RunCommand(db, newRunTestEnvStorage(t))
-	output := captureStdout(t, func() {
+	output := captureStdoutAndStderr(t, func() {
 		if err := cmd.Run(context.Background(), []string{"run", "first", "--chain", "--persist"}); err != nil {
 			t.Fatalf("run command failed: %v", err)
 		}
@@ -383,7 +383,7 @@ func TestRunCommandWithoutPersistLeavesEnvUnchanged(t *testing.T) {
 	}
 
 	cmd := RunCommand(db, envStorage)
-	output := captureStdout(t, func() {
+	output := captureStdoutAndStderr(t, func() {
 		if err := cmd.Run(context.Background(), []string{"run", "create order no persist", "--env", "beta"}); err != nil {
 			t.Fatalf("run command failed: %v", err)
 		}
@@ -434,7 +434,7 @@ func TestRunCommandDataDrivenPersistOnlyWritesDirtyVars(t *testing.T) {
 	}
 
 	cmd := RunCommand(db, envStorage)
-	output := captureStdout(t, func() {
+	output := captureStdoutAndStderr(t, func() {
 		if err := cmd.Run(context.Background(), []string{"run", "data persist", "--env", "beta", "--data", dataPath, "--persist"}); err != nil {
 			t.Fatalf("run command failed: %v", err)
 		}
@@ -600,4 +600,93 @@ func varsFromArgs(args []string) map[string]string {
 		}
 	}
 	return vars
+}
+
+func TestRunCommandFailFlagAndPersistHint(t *testing.T) {
+	db := newMockDB()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = w.Write([]byte(`{"data":{"orderId":"ord_9"}}`))
+	}))
+	defer server.Close()
+
+	db.requests["req-fail"] = &types.SavedRequest{
+		ID:       "req-fail",
+		Name:     "declined",
+		URL:      server.URL,
+		Method:   "POST",
+		Extracts: []types.Extract{{Name: "orderId", Source: "jsonpath:$.data.orderId"}},
+	}
+	db.names["declined"] = "req-fail"
+	envStorage := newRunTestEnvStorage(t)
+
+	var runErr error
+	output := captureStdoutAndStderr(t, func() {
+		runErr = RunCommand(db, envStorage).Run(context.Background(), []string{"run", "declined"})
+	})
+	if runErr != nil {
+		t.Fatalf("without --fail a 402 should not error, got %v", runErr)
+	}
+	if !strings.Contains(output, "note: orderId not saved; add --persist") {
+		t.Fatalf("expected unpersisted hint, got:\n%s", output)
+	}
+
+	output = captureStdoutAndStderr(t, func() {
+		runErr = RunCommand(db, envStorage).Run(context.Background(), []string{"run", "declined", "--fail"})
+	})
+	if runErr == nil || !strings.Contains(runErr.Error(), "HTTP 402") {
+		t.Fatalf("expected HTTP 402 error with --fail, got %v", runErr)
+	}
+	if !strings.Contains(output, `"ord_9"`) {
+		t.Fatalf("expected body still printed with --fail, got:\n%s", output)
+	}
+}
+
+func TestRunCommandDryRunPreviewsWithoutSendingAndMasksSecrets(t *testing.T) {
+	db := newMockDB()
+	hits := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ }))
+	defer server.Close()
+
+	db.requests["req-dry"] = &types.SavedRequest{
+		ID:      "req-dry",
+		Name:    "charge",
+		URL:     "{{baseUrl}}/charges?k={{API_KEY}}",
+		Method:  "POST",
+		Headers: []types.Header{{Key: "X-Api-Key", Value: "{{API_KEY}}"}},
+		Body:    `{"amount":"{{amount:num}}"}`,
+	}
+	db.names["charge"] = "req-dry"
+
+	envStorage := newRunTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("baseUrl", server.URL)
+	beta.SetSecretVariable("API_KEY", "sk_live_dry")
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatal(err)
+	}
+
+	var runErr error
+	output := captureStdoutAndStderr(t, func() {
+		runErr = RunCommand(db, envStorage).Run(context.Background(), []string{"run", "charge", "--env", "beta", "--var", "amount=5", "--dry-run"})
+	})
+	if runErr != nil {
+		t.Fatalf("dry run failed: %v\n%s", runErr, output)
+	}
+	if hits != 0 {
+		t.Fatalf("dry run sent %d requests", hits)
+	}
+	if strings.Contains(output, "sk_live_dry") {
+		t.Fatalf("dry run leaked secret:\n%s", output)
+	}
+	if !strings.Contains(output, "POST "+server.URL+"/charges?k=*****") || !strings.Contains(output, `{"amount":5}`) {
+		t.Fatalf("unexpected dry run output:\n%s", output)
+	}
+
+	output = captureStdoutAndStderr(t, func() {
+		runErr = RunCommand(db, envStorage).Run(context.Background(), []string{"run", "charge", "--env", "beta", "--dry-run"})
+	})
+	if runErr == nil || !strings.Contains(runErr.Error(), "amount") {
+		t.Fatalf("expected unresolved amount error, got %v\n%s", runErr, output)
+	}
 }

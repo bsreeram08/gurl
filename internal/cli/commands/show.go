@@ -27,6 +27,14 @@ func ShowCommand(db storage.DB) *cli.Command {
 				Usage:   "Output format (pretty|json|curl)",
 				Value:   "pretty",
 			},
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "Output as JSON (same as --format json)",
+			},
+			&cli.BoolFlag{
+				Name:  "reveal",
+				Usage: "Show secret header and auth values instead of masking them",
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
@@ -39,8 +47,14 @@ func ShowCommand(db storage.DB) *cli.Command {
 			if err != nil {
 				return fmt.Errorf("request not found: %s", name)
 			}
+			if !c.Bool("reveal") {
+				req = maskRequestSecrets(req)
+			}
 
 			format := c.String("format")
+			if c.Bool("json") {
+				format = "json"
+			}
 			if format != "pretty" && format != "json" && format != "curl" {
 				return fmt.Errorf("invalid format '%s': must be one of pretty, json, curl", format)
 			}

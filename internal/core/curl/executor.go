@@ -51,18 +51,18 @@ func BuildClientRequest(request *types.SavedRequest, vars map[string]string) (cl
 }
 
 func BuildClientRequestWithAuth(request *types.SavedRequest, vars map[string]string, registry *auth.Registry) (client.Request, error) {
-	url, err := template.Substitute(request.URL, vars)
+	url, err := substituteWithDynamic(request.URL, vars)
 	if err != nil {
 		return client.Request{}, fmt.Errorf("failed to substitute URL variables: %w", err)
 	}
 
 	headers := make([]client.Header, 0, len(request.Headers))
 	for _, h := range request.Headers {
-		key, err := template.Substitute(h.Key, vars)
+		key, err := substituteWithDynamic(h.Key, vars)
 		if err != nil {
 			return client.Request{}, fmt.Errorf("failed to substitute header key: %w", err)
 		}
-		value, err := template.Substitute(h.Value, vars)
+		value, err := substituteWithDynamic(h.Value, vars)
 		if err != nil {
 			return client.Request{}, fmt.Errorf("failed to substitute header value: %w", err)
 		}
@@ -71,7 +71,7 @@ func BuildClientRequestWithAuth(request *types.SavedRequest, vars map[string]str
 
 	var body string
 	if request.Body != "" {
-		body, err = template.Substitute(request.Body, vars)
+		body, err = substituteWithDynamic(request.Body, vars)
 		if err != nil {
 			return client.Request{}, fmt.Errorf("failed to substitute body: %w", err)
 		}
@@ -94,6 +94,16 @@ func BuildClientRequestWithAuth(request *types.SavedRequest, vars map[string]str
 	}
 
 	return clientReq, nil
+}
+
+// substituteWithDynamic resolves {{$uuid}}-style dynamic functions, then
+// {{var}} placeholders.
+func substituteWithDynamic(text string, vars map[string]string) (string, error) {
+	resolved, err := template.ResolveDynamic(text)
+	if err != nil {
+		return "", err
+	}
+	return template.Substitute(resolved, vars)
 }
 
 func BuildCurlCommand(request *types.SavedRequest, vars map[string]string) ([]string, error) {

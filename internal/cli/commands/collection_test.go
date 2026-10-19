@@ -940,6 +940,18 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+// captureStdoutAndStderr captures both streams into one buffer, for commands
+// that print the response body to stdout and status lines to stderr.
+func captureStdoutAndStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	oldErr := os.Stderr
+	defer func() { os.Stderr = oldErr }()
+	return captureStdout(t, func() {
+		os.Stderr = os.Stdout
+		fn()
+	})
+}
+
 func TestCollectionAddCommand(t *testing.T) {
 	db := newMockDB()
 	cmd := CollectionCommand(db, &env.EnvStorage{})

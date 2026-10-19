@@ -13,6 +13,8 @@ import (
 
 	"github.com/sreeram/gurl/internal/assertions"
 	"github.com/sreeram/gurl/internal/client"
+	"github.com/sreeram/gurl/internal/core/curl"
+	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/formatter"
 	"github.com/sreeram/gurl/internal/plugins"
@@ -90,6 +92,10 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 				Aliases: []string{"a"},
 				Usage:   "Assertion to evaluate (e.g., status=200, body contains success)",
 			},
+			&cli.BoolFlag{
+				Name:  "fail",
+				Usage: "Exit non-zero when the response status is not 2xx (body is still printed)",
+			},
 			&cli.StringFlag{
 				Name:    "data",
 				Aliases: []string{"d"},
@@ -118,9 +124,6 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 			if c.Bool("persist") && c.Bool("dry-run") {
 				return cli.Exit("--persist and --dry-run cannot be used together", 2)
 			}
-			if c.Bool("dry-run") {
-				return cli.Exit("--dry-run is not implemented yet", 2)
-			}
 
 			enableChain := c.Bool("chain")
 			dataFile := c.String("data")
@@ -140,16 +143,14 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 			envVars := make(map[string]string)
 
 			if requestedEnv != "" {
-				if env, err := envStorage.GetEnvByName(requestedEnv); err == nil {
-					for k, v := range env.Variables {
-						envVars[k] = v
-					}
+				e, err := envStorage.GetEnvByName(requestedEnv)
+				if err != nil || e == nil {
+					return fmt.Errorf("environment '%s' not found", requestedEnv)
 				}
+				envVars = e.ResolvedVariables()
 			} else if activeEnvName, err := envStorage.GetActiveEnv(); err == nil && activeEnvName != "" {
-				if env, err := envStorage.GetEnvByName(activeEnvName); err == nil {
-					for k, v := range env.Variables {
-						envVars[k] = v
-					}
+				if e, err := envStorage.GetEnvByName(activeEnvName); err == nil && e != nil {
+					envVars = e.ResolvedVariables()
 				}
 			}
 
@@ -158,6 +159,13 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 				if idx := strings.Index(pair, "="); idx != -1 {
 					cliVars[pair[:idx]] = pair[idx+1:]
 				}
+			}
+
+			if c.Bool("dry-run") {
+				if dataFile != "" || enableChain {
+					return cli.Exit("--dry-run cannot be combined with --data or --chain", 2)
+				}
+				return executeDryRun(ctx, db, envStorage, name, envVars, cliVars, secretValues(envStorage, requestedEnv), os.Stdout)
 			}
 
 			if dataFile != "" {
@@ -232,13 +240,16 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 	currentCollectionName := ""
 	chainStarted := false
 	finish := func(err error) error {
+		if !c.Bool("persist") {
+			warnUnpersisted(os.Stderr, dirtyForPersist)
+		}
 		if c.Bool("persist") && chainStarted {
 			collectionStore, _ := db.(storage.CollectionStore)
 			persisted, persistErr := runner.PersistDirtyVariablesWithCollectionTargets(envStorage, collectionStore, persistEnvName, currentCollectionName, dirtyForPersist, dirtyOriginsForPersist, dirtyCollectionTargets)
 			if persistErr != nil {
 				return persistErr
 			}
-			runner.PrintPersistSummaries(os.Stdout, persisted)
+			runner.PrintPersistSummaries(os.Stderr, persisted)
 		}
 		return err
 	}
@@ -343,6 +354,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 		if err := printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
 			return finish(err)
 		}
+		chainAssertionErr = mergeAssertionErrors(chainAssertionErr, httpFailure(c, resp.StatusCode))
 		nextReq := execution.Result.NextRequestOverride
 		if nextReq == "" {
 			return finish(chainAssertionErr)
@@ -377,10 +389,12 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.En
 		if persistErr != nil {
 			return persistErr
 		}
-		runner.PrintPersistSummaries(os.Stdout, persisted)
+		runner.PrintPersistSummaries(os.Stderr, persisted)
 		if execution.Result.Error != "" && len(execution.Result.DirtyVars) > 0 {
-			fmt.Fprintf(os.Stdout, "Run aborted after persisting %d variables.\n", len(execution.Result.DirtyVars))
+			fmt.Fprintf(os.Stderr, "Run aborted after persisting %d variables.\n", len(execution.Result.DirtyVars))
 		}
+	} else {
+		warnUnpersisted(os.Stderr, execution.Result.DirtyVars)
 	}
 	if execution.Result.Error != "" {
 		return fmt.Errorf("%s", execution.Result.Error)
@@ -441,15 +455,111 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.En
 		if err := client.SaveToFile(&resp, outputPath, force); err != nil {
 			return fmt.Errorf("failed to save output: %w", err)
 		}
-		fmt.Printf("Response saved to %s\n", outputPath)
-		return assertionErr
+		fmt.Fprintf(os.Stderr, "Response saved to %s\n", outputPath)
+		return mergeAssertionErrors(assertionErr, httpFailure(c, resp.StatusCode))
 	}
 
 	format := c.String("format")
 	if err := printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
 		return err
 	}
-	return assertionErr
+	return mergeAssertionErrors(assertionErr, httpFailure(c, resp.StatusCode))
+}
+
+// httpFailure returns an error for non-2xx statuses when --fail is set.
+func httpFailure(c *cli.Command, status int) error {
+	if !c.Bool("fail") || (status >= 200 && status < 300) {
+		return nil
+	}
+	return fmt.Errorf("HTTP %d", status)
+}
+
+// warnUnpersisted tells the user that extracted/script variables are dropped
+// at exit unless --persist is passed, so multi-step flows don't reuse stale ids.
+func warnUnpersisted(out io.Writer, dirty map[string]string) {
+	if len(dirty) == 0 {
+		return
+	}
+	fmt.Fprintf(out, "note: %s not saved; add --persist to use them in later runs\n", strings.Join(sortedStringKeys(dirty), ", "))
+}
+
+// executeDryRun prints the request as it would be sent and fails when any
+// template variable is unresolved. Secret values are masked in the output.
+func executeDryRun(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, envVars map[string]string, cliVars map[string]string, secrets []string, out io.Writer) error {
+	req, err := db.GetRequestByName(name)
+	if err != nil {
+		return fmt.Errorf("request not found: %s", name)
+	}
+	vars, origins, defaultPersistOrigin := requestVarsAndOrigins(db, req, envVars, cliVars, nil)
+	for key, value := range vars {
+		if isSensitiveName(key) && value != "" {
+			secrets = append(secrets, value)
+		}
+	}
+	mask := func(s string) string {
+		for _, secret := range secrets {
+			if secret != "" {
+				s = strings.ReplaceAll(s, secret, secretMask)
+			}
+		}
+		return s
+	}
+
+	execution := runner.NewRunner(db, envStorage).PlanSavedRequestWithOrigins(ctx, req, vars, origins, defaultPersistOrigin)
+	result := execution.Result
+	if result.Error != "" {
+		return fmt.Errorf("%s", result.Error)
+	}
+	if result.Skipped {
+		fmt.Fprintf(out, "Skipped: %s\n", result.SkipReason)
+		return nil
+	}
+
+	fmt.Fprintf(out, "%s %s\n", result.PlannedMethod, mask(result.PlannedURL))
+	for _, h := range req.Headers {
+		value := template.ResolveKnown(h.Value, vars)
+		if isSensitiveName(h.Key) && shouldMaskValue(h.Value) {
+			value = secretMask
+		}
+		fmt.Fprintf(out, "%s: %s\n", h.Key, mask(value))
+	}
+	if req.Body != "" {
+		fmt.Fprintf(out, "\n%s\n", mask(template.ResolveKnown(req.Body, vars)))
+	}
+	for _, extract := range result.PlannedExtracts {
+		fmt.Fprintf(out, "extract: %s <- %s\n", extract.Name, extract.Source)
+	}
+	if len(result.DryRunWarnings) > 0 {
+		return fmt.Errorf("dry run found %s", strings.Join(result.DryRunWarnings, ", "))
+	}
+	// Catches what the plan can't see: leftover placeholders inside values and bad typed values.
+	if _, err := curl.BuildClientRequest(req, vars); err != nil {
+		return fmt.Errorf("dry run: %w", err)
+	}
+	return nil
+}
+
+// secretValues returns the values of variables marked secret in the selected
+// (or active) environment, so previews can mask them.
+func secretValues(envStorage *env.EnvStorage, envName string) []string {
+	if envName == "" {
+		envName, _ = envStorage.GetActiveEnv()
+	}
+	if envName == "" {
+		return nil
+	}
+	e, err := envStorage.GetEnvByName(envName)
+	if err != nil || e == nil {
+		return nil
+	}
+	resolved := e.ResolvedVariables()
+	var values []string
+	for key := range e.SecretKeys {
+		if v := resolved[key]; v != "" {
+			values = append(values, v)
+		}
+	}
+	return values
 }
 
 func runnerAssertionFailureMessage(result *runner.RequestResult) string {
@@ -588,7 +698,7 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvSt
 		if persistErr != nil {
 			return persistErr
 		}
-		runner.PrintPersistSummaries(os.Stdout, persisted)
+		runner.PrintPersistSummaries(os.Stderr, persisted)
 	}
 
 	return nil

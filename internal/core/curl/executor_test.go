@@ -255,3 +255,24 @@ func TestParseStatusCodeFromResponse(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildClientRequestResolvesDynamicFunctions(t *testing.T) {
+	req := &types.SavedRequest{
+		URL:     "https://api.example.com/orders/{{$uuid}}",
+		Headers: []types.Header{{Key: "Idempotency-Key", Value: "{{$randomString(12)}}"}},
+		Body:    `{"ts":"{{$timestamp}}","ref":"{{ref}}"}`,
+	}
+	got, err := BuildClientRequest(req, map[string]string{"ref": "r1"})
+	if err != nil {
+		t.Fatalf("BuildClientRequest: %v", err)
+	}
+	if strings.Contains(got.URL, "{{") || strings.Contains(got.Body, "{{") || strings.Contains(got.Headers[0].Value, "{{") {
+		t.Fatalf("dynamic placeholders left unresolved: %+v", got)
+	}
+	if !strings.Contains(got.Body, `"ref":"r1"`) {
+		t.Fatalf("expected ref substituted, got %s", got.Body)
+	}
+	if _, err := BuildClientRequest(&types.SavedRequest{URL: "https://x/{{$nope}}"}, nil); err == nil {
+		t.Fatal("expected unknown dynamic function to error")
+	}
+}

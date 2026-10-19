@@ -1042,7 +1042,7 @@ func (s *shellSession) collectEnvVars() map[string]string {
 		return vars
 	}
 
-	for k, v := range envObj.Variables {
+	for k, v := range envObj.ResolvedVariables() {
 		vars[k] = v
 	}
 	return vars

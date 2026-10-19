@@ -90,3 +90,23 @@ func TestExtractor_MissingJSONPathReturnsEmptyValue(t *testing.T) {
 		t.Fatalf("expected missing extract to be present with empty value, got %#v", got)
 	}
 }
+
+func TestExtractJSONPathArrayIndexAndLargeNumbers(t *testing.T) {
+	body := []byte(`{"data":{"items":[{"id":"a"},{"id":"b"}],"amount":1000000,"ref":12345678901234567}}`)
+	rules := []types.Extract{
+		{Name: "second", Source: "jsonpath:$.data.items[1].id"},
+		{Name: "amount", Source: "jsonpath:$.data.amount"},
+		{Name: "ref", Source: "jsonpath:$.data.ref"},
+		{Name: "outOfRange", Source: "jsonpath:$.data.items[5].id"},
+	}
+	got, err := NewExtractor().Extract(body, nil, rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"second": "b", "amount": "1000000", "ref": "12345678901234567", "outOfRange": ""}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s = %q, want %q", k, got[k], v)
+		}
+	}
+}

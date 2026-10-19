@@ -25,7 +25,7 @@ func ListCommand(db storage.DB) *cli.Command {
 			&cli.StringFlag{
 				Name:    "pattern",
 				Aliases: []string{"p"},
-				Usage:   "Filter by name pattern",
+				Usage:   "Filter by substring of name, URL or header value",
 			},
 			&cli.StringFlag{
 				Name:    "collection",
@@ -41,6 +41,15 @@ func ListCommand(db storage.DB) *cli.Command {
 				Name:    "json",
 				Aliases: []string{"j"},
 				Usage:   "JSON output",
+			},
+			&cli.BoolFlag{
+				Name:  "reveal",
+				Usage: "Show literal secret header values in --json output",
+			},
+			&cli.BoolFlag{
+				Name:    "wide",
+				Aliases: []string{"w"},
+				Usage:   "Never truncate names (default when stdout is not a terminal)",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -80,7 +89,14 @@ func ListCommand(db storage.DB) *cli.Command {
 			}
 
 			if c.Bool("json") {
-				data, err := json.MarshalIndent(requests, "", "  ")
+				out := requests
+				if !c.Bool("reveal") {
+					out = make([]*types.SavedRequest, len(requests))
+					for i, req := range requests {
+						out[i] = maskRequestSecrets(req)
+					}
+				}
+				data, err := json.MarshalIndent(out, "", "  ")
 				if err != nil {
 					return fmt.Errorf("failed to marshal JSON: %w", err)
 				}
@@ -100,7 +116,7 @@ func ListCommand(db storage.DB) *cli.Command {
 			sort.Strings(folders)
 
 			folderTree := buildFolderTree(folders)
-			displayTree(folderTree, requests)
+			displayTree(folderTree, requests, c.Bool("wide") || !term.IsTerminal(int(os.Stdout.Fd())))
 
 			fmt.Printf("\n  %d requests\n", len(requests))
 
@@ -153,13 +169,25 @@ func truncate(s string, max int) string {
 	return s[:max-3] + "..."
 }
 
-func displayTree(tree map[string]*folderNode, requests []*types.SavedRequest) {
+func displayTree(tree map[string]*folderNode, requests []*types.SavedRequest, wide bool) {
 	width := termWidth()
 	// Row layout: "│  " (3) + name + "  " (2) + collection (12) + "  " (2) + tags (10) + "  " (2) + date (16) = 47 fixed
 	fixedCols := 47
 	nameWidth := width - fixedCols
 	if nameWidth < 20 {
 		nameWidth = 20
+	}
+	if wide {
+		for _, req := range requests {
+			need := len(req.Name)
+			if req.Folder != "" {
+				need += 2 * (strings.Count(req.Folder, "/") + 1)
+			}
+			if need > nameWidth {
+				nameWidth = need
+			}
+		}
+		width = nameWidth + fixedCols
 	}
 
 	border := strings.Repeat("─", width-2)
