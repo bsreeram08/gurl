@@ -105,3 +105,25 @@ func TestShowCommandMasksSecrets(t *testing.T) {
 		})
 	}
 }
+
+func TestMaskRequestSecretsCoversURLBodyAndVars(t *testing.T) {
+	req := &types.SavedRequest{
+		URL:        "https://api.example.com/x?api_key=sk_live_q&page=2&token={{TOKEN}}",
+		Headers:    []types.Header{{Key: "X-Api-Key", Value: "sk_live_h"}},
+		Body:       `{"key":"sk_live_h"}`,
+		Variables:  []types.Var{{Name: "secret", Example: "sk_live_v"}, {Name: "id", Example: "42"}},
+		PathParams: []types.Var{{Name: "token", Example: "sk_live_p"}},
+	}
+	got := maskRequestSecrets(req)
+	for _, s := range []string{got.URL, got.Body, got.Variables[0].Example, got.PathParams[0].Example} {
+		if strings.Contains(s, "sk_live") {
+			t.Fatalf("secret leaked: %q", s)
+		}
+	}
+	if !strings.Contains(got.URL, "page=2") || !strings.Contains(got.URL, "token={{TOKEN}}") || got.Variables[1].Example != "42" {
+		t.Fatalf("non-secret data changed: %+v", got)
+	}
+	if !strings.Contains(req.URL, "sk_live_q") {
+		t.Fatal("original request was modified")
+	}
+}
