@@ -717,3 +717,29 @@ func TestRunCommandDryRunPreviewsWithoutSendingAndMasksSecrets(t *testing.T) {
 		t.Fatalf("expected unresolved amount error, got %v\n%s", runErr, output)
 	}
 }
+
+func TestRunCommandDryRunMasksOverriddenSecretReachedThroughAlias(t *testing.T) {
+	db := newMockDB()
+	db.requests["req-alias"] = &types.SavedRequest{
+		ID:      "req-alias",
+		Name:    "alias",
+		URL:     "https://api.example.com/x",
+		Headers: []types.Header{{Key: "X-Client", Value: "{{CLIENT}}"}},
+	}
+	db.names["alias"] = "req-alias"
+
+	envStorage := newRunTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetSecretVariable("SA_KEY", "sk_live_alias")
+	beta.SetVariable("CLIENT", "{{SA_KEY}}")
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatal(err)
+	}
+
+	output := captureStdoutAndStderr(t, func() {
+		_ = RunCommand(db, envStorage).Run(context.Background(), []string{"run", "alias", "--env", "beta", "--var", "SA_KEY=other", "--dry-run"})
+	})
+	if strings.Contains(output, "sk_live_alias") {
+		t.Fatalf("overridden secret leaked through alias:\n%s", output)
+	}
+}

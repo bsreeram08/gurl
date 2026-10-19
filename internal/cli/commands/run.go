@@ -464,6 +464,18 @@ func executeDryRun(ctx context.Context, db storage.DB, envStorage *env.EnvStorag
 			secrets = append(secrets, v.Value)
 		}
 	}
+	// A secret overridden by a higher scope can still reach the request
+	// through an alias, so mask every secret-marked value, winning or not.
+	for key := range scopes.EnvSecrets {
+		if value := scopes.Env[key]; value != "" {
+			secrets = append(secrets, value)
+		}
+	}
+	for key := range scopes.CollectionSecrets {
+		if value := scopes.Collection[key]; value != "" {
+			secrets = append(secrets, value)
+		}
+	}
 	for key, value := range result.DirtyVars {
 		if (vars[key].Secret || isSensitiveName(key)) && value != "" {
 			secrets = append(secrets, value)
