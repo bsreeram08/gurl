@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/storage"
@@ -36,6 +37,15 @@ func PersistDirtyVariablesWithCollectionTargets(envStorage *env.EnvStorage, coll
 	}
 	if len(vars) == 0 {
 		return summary, nil
+	}
+
+	for _, key := range sortedStringKeys(vars) {
+		// Persisted values come from responses and scripts. Environment aliases
+		// and collection variables expand {{...}} from stored values, so a
+		// response value like "{{API_KEY}}" could pull a secret into a later request.
+		if strings.Contains(vars[key], "{{") {
+			return nil, fmt.Errorf("refusing to persist %q: value contains \"{{\"", key)
+		}
 	}
 
 	collectionVars := make(map[string]map[string]string)
@@ -187,4 +197,13 @@ func cloneCollection(source *types.Collection) *types.Collection {
 		clone.SecretKeys[key] = value
 	}
 	return &clone
+}
+
+func sortedStringKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }

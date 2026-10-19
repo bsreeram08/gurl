@@ -824,7 +824,7 @@ func requestMatchesOptions(req *types.SavedRequest, opts *ListOptions) bool {
 	if opts.Tag != "" && !stringSliceContains(req.Tags, opts.Tag) {
 		return false
 	}
-	if opts.Pattern != "" && !strings.Contains(req.Name, opts.Pattern) && !strings.Contains(req.URL, opts.Pattern) {
+	if opts.Pattern != "" && !matchesPattern(req, opts.Pattern) {
 		return false
 	}
 	return true

@@ -1,5 +1,37 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `gurl exec --env NAME -- <cmd>` runs a command with the environment's variables injected, without printing them.
+- `gurl extract` tests `VAR=METHOD:EXPR` rules against a sample response from stdin or `--file`.
+- `--json` on `env list`, `env show` and `show`; `--reveal` on `env show`, `show`, `list`, `codegen` and `paste`.
+- `env set`/`env create` read a value from stdin with `KEY=-` (no-echo prompt on a terminal).
+- Typed placeholders `{{name:num}}`, `{{name:bool}}`, `{{name:raw}}`; the quoted form `"{{amount:num}}"` keeps stored JSON bodies valid.
+- Environment aliases: a value like `{{SA_KEY}}` resolves against the same environment.
+- `run --fail` exits non-zero on non-2xx responses.
+- `list --wide`, and full names whenever stdout is not a terminal.
+- JSONPath extraction supports array indexes (`$.items[0].id`).
+- `run --dry-run` for a single request: prints the resolved request with secrets masked and fails on unresolved variables.
+- `list --pattern` also matches header values, so requests can be found by merchant ID or similar.
+
+### Changed
+
+- `show`, `list --json`, `codegen` and `paste` mask literal credential headers and auth params by default.
+- `run` prints persist summaries and "Response saved" to stderr, and notes extracted variables dropped without `--persist`.
+- A variable whose value still contains a `{{placeholder}}` now fails the request instead of sending it literally.
+- `run --env` with an unknown environment now errors instead of running without variables.
+- The ambiguous `d` alias is removed from `delete`, `diff` and `detect`.
+- `env set <env> KEY -` is rejected in favour of `KEY=-`, because flags after a lone `-` are silently dropped by the parser.
+
+### Fixed
+
+- JSONPath extraction keeps large numbers exact (`1000000` instead of `1e+06`).
+- Dynamic functions such as `{{$uuid}}` are resolved when sending, instead of failing as missing variables.
+- `codegen -l curl` quotes each header as one argument (`-H 'Content-Type: application/json'`).
+- Typed-placeholder errors no longer echo the offending value.
+
 ## [v0.4.0] - 2026-05-24
 
 ### Added

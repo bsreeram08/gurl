@@ -12,7 +12,7 @@ import (
 func DeleteCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
 		Name:    "delete",
-		Aliases: []string{"rm", "del", "d"},
+		Aliases: []string{"rm", "del"},
 		Usage:   "Remove a saved request",
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()

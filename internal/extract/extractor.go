@@ -1,9 +1,11 @@
 package extract
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/sreeram/gurl/pkg/types"
@@ -64,19 +66,32 @@ func (e *Extractor) extractJSONPath(body []byte, path string) (string, error) {
 	}
 
 	var data interface{}
-	if err := json.Unmarshal(body, &data); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber() // keep large ids and amounts exact instead of 1e+06
+	if err := dec.Decode(&data); err != nil {
 		return "", fmt.Errorf("invalid JSON: %w", err)
 	}
 
-	// Simple JSONPath implementation using gjson-like logic or manual traversal
-	// For a production version we'd use github.com/tidwall/gjson
-	// This is a minimal implementation for review
-	path = strings.TrimPrefix(path, "$.")
-	parts := strings.Split(path, ".")
+	// Minimal JSONPath: dotted keys with optional [n] array indexes,
+	// e.g. $.data.items[0].id
+	path = strings.TrimPrefix(strings.TrimPrefix(path, "$"), ".")
+	path = strings.ReplaceAll(path, "[", ".[")
 
 	current := data
-	for _, part := range parts {
+	for _, part := range strings.Split(path, ".") {
 		if part == "" {
+			continue
+		}
+		if strings.HasPrefix(part, "[") && strings.HasSuffix(part, "]") {
+			idx, err := strconv.Atoi(part[1 : len(part)-1])
+			arr, ok := current.([]interface{})
+			if err != nil || !ok {
+				return "", fmt.Errorf("cannot index %s", part)
+			}
+			if idx < 0 || idx >= len(arr) {
+				return "", nil
+			}
+			current = arr[idx]
 			continue
 		}
 		m, ok := current.(map[string]interface{})
@@ -92,8 +107,8 @@ func (e *Extractor) extractJSONPath(body []byte, path string) (string, error) {
 	switch v := current.(type) {
 	case string:
 		return v, nil
-	case float64:
-		return fmt.Sprintf("%v", v), nil
+	case json.Number:
+		return v.String(), nil
 	case bool:
 		return fmt.Sprintf("%v", v), nil
 	default:

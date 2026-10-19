@@ -77,7 +77,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 			},
 			&cli.StringSliceFlag{
 				Name:  "extract",
-				Usage: "Add extraction rule (format: VAR_NAME=METHOD:EXPRESSION)",
+				Usage: extractRuleUsage,
 			},
 			&cli.StringFlag{
 				Name:    "pre-script",

@@ -29,6 +29,10 @@ func CodegenCommand(db storage.DB) *cli.Command {
 				Aliases: []string{"c"},
 				Usage:   "Copy output to clipboard instead of printing to stdout",
 			},
+			&cli.BoolFlag{
+				Name:  "reveal",
+				Usage: "Include secret header and auth values instead of masking them (Authorization always becomes a placeholder)",
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
@@ -40,6 +44,9 @@ func CodegenCommand(db storage.DB) *cli.Command {
 			req, err := db.GetRequestByName(name)
 			if err != nil {
 				return fmt.Errorf("request not found: %s", name)
+			}
+			if !c.Bool("reveal") {
+				req = maskRequestSecrets(req)
 			}
 
 			lang := c.String("lang")

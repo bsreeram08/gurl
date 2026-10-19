@@ -13,6 +13,7 @@ import (
 	"github.com/sreeram/gurl/internal/auth"
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/core/curl"
+	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/extract"
 	"github.com/sreeram/gurl/internal/scripting"
@@ -279,7 +280,7 @@ func (r *Runner) loadRunEnvVars(config RunConfig) map[string]string {
 		fmt.Fprintf(os.Stderr, "warning: environment %q not found: %v\n", config.Environment, err)
 		return envVars
 	}
-	for k, v := range env.Variables {
+	for k, v := range env.ResolvedVariables() {
 		envVars[k] = v
 	}
 	return envVars
@@ -514,6 +515,12 @@ func (r *Runner) RunSavedRequestWithOrigins(ctx context.Context, req *types.Save
 	return r.runRequestLifecycle(ctx, req, runningVars, runningOrigins, defaultPersistOrigin, extractedVars, false, nil)
 }
 
+// PlanSavedRequestWithOrigins runs pre-request scripts and plans the request
+// without sending it, reporting unresolved template variables as warnings.
+func (r *Runner) PlanSavedRequestWithOrigins(ctx context.Context, req *types.SavedRequest, vars map[string]string, origins map[string]VarOrigin, defaultPersistOrigin VarOrigin) *SingleRequestExecution {
+	return r.runRequestLifecycle(ctx, req, copyStringMap(vars), copyOriginMap(origins), defaultPersistOrigin, make(map[string]string), true, nil)
+}
+
 func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedRequest, vars map[string]string, origins map[string]VarOrigin, defaultPersistOrigin VarOrigin, extractedVars map[string]string, dryRun bool, plannedVarSources map[string]string) *SingleRequestExecution {
 	start := time.Now()
 	result := &RequestResult{
@@ -706,9 +713,10 @@ func planDryRunRequest(req *types.SavedRequest, vars map[string]string, plannedV
 	usedVars = append(usedVars, extractTemplateVars(req.Body)...)
 
 	warningsByVar := make(map[string]bool)
-	for _, name := range usedVars {
-		if _, ok := vars[name]; ok {
-			continue
+	for _, placeholder := range usedVars {
+		name := template.BaseName(placeholder)
+		if _, ok := vars[name]; ok || strings.HasPrefix(name, "$") {
+			continue // dynamic {{$...}} functions resolve at send time
 		}
 		if source := plannedVarSources[name]; source != "" {
 			plan.varSources[name] = source
@@ -732,16 +740,7 @@ func planDryRunRequest(req *types.SavedRequest, vars map[string]string, plannedV
 }
 
 func resolveDryRunTemplate(value string, vars map[string]string) string {
-	resolved := value
-	keys := make([]string, 0, len(vars))
-	for key := range vars {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		resolved = strings.ReplaceAll(resolved, "{{"+key+"}}", vars[key])
-	}
-	return resolved
+	return template.ResolveKnown(value, vars)
 }
 
 func requestIndexByName(requests []*types.SavedRequest) map[string]int {

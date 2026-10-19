@@ -385,17 +385,8 @@ func (db *LMDB) ListRequests(opts *ListOptions) ([]*types.SavedRequest, error) {
 		seen[req.Name] = true
 
 		// Apply pattern filter
-		if opts.Pattern != "" {
-			match := false
-			for _, pattern := range []string{req.Name, req.URL} {
-				if strings.Contains(pattern, opts.Pattern) {
-					match = true
-					break
-				}
-			}
-			if !match {
-				continue
-			}
+		if opts.Pattern != "" && !matchesPattern(req, opts.Pattern) {
+			continue
 		}
 
 		results = append(results, req)
@@ -950,3 +941,17 @@ func stringSet(values []string) map[string]bool {
 
 var JSONMarshal = json.Marshal
 var JSONUnmarshal = json.Unmarshal
+
+// matchesPattern reports whether pattern is a substring of the request's name,
+// URL, or any header value (e.g. a merchant ID).
+func matchesPattern(req *types.SavedRequest, pattern string) bool {
+	if strings.Contains(req.Name, pattern) || strings.Contains(req.URL, pattern) {
+		return true
+	}
+	for _, h := range req.Headers {
+		if strings.Contains(h.Value, pattern) {
+			return true
+		}
+	}
+	return false
+}

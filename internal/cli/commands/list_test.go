@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/sreeram/gurl/pkg/types"
@@ -165,5 +166,34 @@ func TestListCommand(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestListCommandJSONMasksLiteralSecrets(t *testing.T) {
+	db := newMockDB()
+	db.requests["id1"] = &types.SavedRequest{
+		ID:      "id1",
+		Name:    "charge",
+		URL:     "https://api.example.com",
+		Headers: []types.Header{{Key: "Authorization", Value: "Bearer sk_live_123"}, {Key: "X-Key", Value: "{{API_KEY}}"}},
+	}
+	db.names["charge"] = "id1"
+
+	output := captureStdout(t, func() {
+		if err := ListCommand(db).Run(context.Background(), []string{"list", "--json"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if strings.Contains(output, "sk_live_123") || !strings.Contains(output, "{{API_KEY}}") {
+		t.Fatalf("expected literal secret masked and template kept, got:\n%s", output)
+	}
+
+	output = captureStdout(t, func() {
+		if err := ListCommand(db).Run(context.Background(), []string{"list", "--json", "--reveal"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, "sk_live_123") {
+		t.Fatalf("expected --reveal to show secret, got:\n%s", output)
 	}
 }

@@ -321,15 +321,20 @@ gurl codegen "create-order" --lang curl
 | `import` | Import from OpenAPI/Insomnia/Bruno/Postman/HAR |
 | `paste` | Copy request as curl command to clipboard |
 | `codegen` | Generate code (curl, Go, Python, JavaScript) |
+| `exec` | Run a command with an environment's variables injected |
+| `extract` | Test extraction rules against a sample response |
 | `tui` | Launch interactive TUI (not functional yet) |
 | `update` | Self-update to latest release |
 
 ## Environments
 
 ```bash
-# Create environments
-gurl env create dev --var "BASE_URL=https://dev.api.com" --secret "API_KEY=sk-dev-123"
-gurl env create prod --var "BASE_URL=https://api.com" --secret "API_KEY=sk-prod-456"
+# Create environments (KEY=- reads the value from stdin, prompting without echo on a terminal)
+gurl env create dev --var "BASE_URL=https://dev.api.com" --var API_KEY=- --secret API_KEY
+gurl env create prod --var "BASE_URL=https://api.com" --var API_KEY=- --secret API_KEY
+
+# Alias keys so one request set works across envs that name credentials differently
+gurl env set nets-beta 'API_KEY={{SA_KEY}}'
 
 # Run with an environment
 gurl run "create-order" --env prod
@@ -338,7 +343,39 @@ gurl run "create-order" --env prod
 gurl env use dev
 ```
 
-Secrets are encrypted at rest with AES-256-GCM and never appear in logs or generated code.
+Secrets are encrypted at rest with AES-256-GCM. `env show`, `show`, `list --json`, `codegen` and `paste` mask secret values and literal credential headers unless you pass `--reveal`.
+
+### Scripting
+
+```bash
+# Hand an environment to another tool without printing it
+gurl exec --env prod -- node e2e.mjs        # vars arrive as process.env.API_KEY, etc.
+
+# Machine-readable output
+gurl list --json
+gurl env list --json
+gurl env show prod --json                   # secrets masked
+gurl show "create-order" --json
+
+# Exit non-zero on non-2xx (body still printed); status lines go to stderr
+gurl run "create-order" --env prod --fail | jq .
+
+# Preview a request without sending it (secrets masked; fails on unresolved variables)
+gurl run "create-order" --env prod --dry-run
+
+# Find requests by name, URL or header value (e.g. a merchant ID)
+gurl list --pattern M-4242
+
+# Test extraction rules on a sample response without sending a request
+gurl extract 'orderId=jsonpath:$.data.items[0].id' < sample.json
+```
+
+### Templates
+
+- An unresolved `{{var}}` fails the run instead of being sent, including when a variable's value is itself a leftover placeholder such as `{{orderId}}`.
+- Dynamic functions work in `run`: `{{$uuid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt(1,100)}}`, `{{$randomString(12)}}`, `{{$randomEmail}}`.
+- Typed placeholders keep saved bodies valid JSON: `{"amount":"{{amount:num}}"}` sends `{"amount":5}`. Types are `num`, `bool` and `raw`.
+- Extracted and script variables only carry into later runs with `--persist`; `run` prints a note when it drops them.
 
 ## Collections and Projects
 

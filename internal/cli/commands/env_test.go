@@ -2,10 +2,12 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/urfave/cli/v3"
 )
 
 type mockEnvDB struct {
@@ -507,5 +509,136 @@ func TestEnvUnset(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestEnvShowJSON(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantSecret bool
+	}{
+		{name: "masks secrets by default", args: []string{"env", "show", "--json", "prod"}},
+		{name: "table masks secrets", args: []string{"env", "show", "prod"}},
+		{name: "reveal shows secrets", args: []string{"env", "show", "--json", "--reveal", "prod"}, wantSecret: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := newMockEnvDB()
+			e := env.NewEnvironment("prod", "")
+			e.SetVariable("BASE_URL", "https://api.example.com")
+			e.SetSecretVariable("API_KEY", "sk_live_123")
+			db.SaveEnv(e)
+
+			var runErr error
+			out := captureStdout(t, func() {
+				runErr = EnvCommand(db).Run(context.Background(), tt.args)
+			})
+			if runErr != nil {
+				t.Fatalf("unexpected error: %v", runErr)
+			}
+			if got := strings.Contains(out, "sk_live_123"); got != tt.wantSecret {
+				t.Errorf("secret present = %v, want %v; output:\n%s", got, tt.wantSecret, out)
+			}
+			if !strings.Contains(out, "https://api.example.com") {
+				t.Errorf("non-secret value missing; output:\n%s", out)
+			}
+			if !strings.Contains(tt.args[2], "--json") {
+				return
+			}
+			var got struct {
+				Name      string            `json:"name"`
+				ID        string            `json:"id"`
+				Variables map[string]string `json:"variables"`
+				Secrets   []string          `json:"secrets"`
+			}
+			if err := json.Unmarshal([]byte(out), &got); err != nil {
+				t.Fatalf("invalid JSON: %v\n%s", err, out)
+			}
+			if got.Name != "prod" || got.ID == "" || len(got.Secrets) != 1 || got.Secrets[0] != "API_KEY" {
+				t.Errorf("unexpected JSON: %+v", got)
+			}
+			if !tt.wantSecret && got.Variables["API_KEY"] != "*****" {
+				t.Errorf("API_KEY = %q, want masked", got.Variables["API_KEY"])
+			}
+		})
+	}
+}
+
+func TestEnvListJSON(t *testing.T) {
+	db := newMockEnvDB()
+	helperCreateTestEnv(db, "dev", map[string]string{"A": "1", "B": "2"})
+	db.SetActiveEnv("dev")
+
+	var runErr error
+	out := captureStdout(t, func() {
+		runErr = EnvCommand(db).Run(context.Background(), []string{"env", "list", "--json"})
+	})
+	if runErr != nil {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+	var got []struct {
+		Name      string `json:"name"`
+		Active    bool   `json:"active"`
+		Variables int    `json:"variables"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if len(got) != 1 || got[0].Name != "dev" || !got[0].Active || got[0].Variables != 2 {
+		t.Errorf("unexpected JSON: %+v", got)
+	}
+}
+
+func TestEnvSetFromStdin(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		stdin   string
+		key     string
+		want    string
+		wantErr bool
+	}{
+		{name: "KEY=- positional", args: []string{"set", "dev", "API_KEY=-"}, stdin: "sk_live_123\n", key: "API_KEY", want: "sk_live_123"},
+		{name: "--var KEY=-", args: []string{"set", "dev", "--var", "API_KEY=-", "--var", "X=1"}, stdin: "abc", key: "API_KEY", want: "abc"},
+		{name: "trims only one newline", args: []string{"set", "dev", "K=-"}, stdin: "v\n\n", key: "K", want: "v\n"},
+		{name: "create with --var KEY=-", args: []string{"create", "new", "--var", "K=-"}, stdin: "s\n", key: "K", want: "s"},
+		{name: "two stdin keys rejected", args: []string{"set", "dev", "A=-", "B=-"}, stdin: "x", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := newMockEnvDB()
+			helperCreateTestEnv(db, "dev", nil)
+
+			cmd := EnvCommand(db)
+			cmd.Reader = strings.NewReader(tt.stdin)
+			err := cmd.Run(context.Background(), append([]string{"env"}, tt.args...))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error but got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			e, _ := db.GetEnvByName(tt.args[1])
+			if got, _ := e.GetVariable(tt.key); got != tt.want {
+				t.Errorf("%s = %q, want %q", tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseEnvSetArgsRejectsLoneDashValue(t *testing.T) {
+	cmd := &cli.Command{Name: "set", Action: func(ctx context.Context, c *cli.Command) error {
+		_, err := parseEnvSetArgs(c.Args())
+		if err == nil || !strings.Contains(err.Error(), "API_KEY=-") {
+			t.Fatalf("expected KEY=- hint, got %v", err)
+		}
+		return nil
+	}}
+	if err := cmd.Run(context.Background(), []string{"set", "dev", "API_KEY", "-"}); err != nil {
+		t.Fatal(err)
 	}
 }

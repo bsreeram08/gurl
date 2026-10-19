@@ -20,7 +20,7 @@ import (
 func DetectCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
 		Name:    "detect",
-		Aliases: []string{"parse", "d"},
+		Aliases: []string{"parse"},
 		Usage:   "Parse curl from stdin or file",
 		Flags: []cli.Flag{
 			&cli.StringFlag{

@@ -390,7 +390,7 @@ func TestRunCommand_ChainPersistWritesDirtyVarsBeforeAssertionFailure(t *testing
 	}
 
 	cmd := RunCommand(db, envStorage)
-	output := captureStdout(t, func() {
+	output := captureStdoutAndStderr(t, func() {
 		err := cmd.Run(context.Background(), []string{"run", "first", "--chain", "--persist", "--env", "beta", "--var", "chainId=cli_seed"})
 		if err == nil || !strings.Contains(err.Error(), "assertion failed") {
 			t.Fatalf("expected assertion failure after chain persistence, got %v", err)
@@ -469,7 +469,7 @@ func TestRunCommand_ChainPersistWritesDirtyVarsBeforeLaterTimeoutError(t *testin
 	}
 
 	cmd := RunCommand(db, envStorage)
-	output := captureStdout(t, func() {
+	output := captureStdoutAndStderr(t, func() {
 		err := cmd.Run(context.Background(), []string{"run", "first", "--chain", "--persist", "--env", "beta"})
 		if err == nil || !strings.Contains(err.Error(), "invalid timeout format") {
 			t.Fatalf("expected invalid timeout after first chain step, got %v", err)
@@ -583,7 +583,7 @@ func TestRunCommand_RequestChainingPRDFlowPersistsExtractedIDs(t *testing.T) {
 	}
 
 	cmd := CollectionCommand(db, envStorage)
-	output := captureStdout(t, func() {
+	output := captureStdoutAndStderr(t, func() {
 		if err := cmd.Run(context.Background(), []string{"collection", "run", "checkout-prd", "--env", "beta", "--var", "customerId=cust_999", "--var", "orderId=ord_cli_seed", "--persist"}); err != nil {
 			t.Fatalf("collection run failed: %v", err)
 		}
@@ -696,7 +696,7 @@ func TestRunCommand_DryRunWarnsForUnresolvedTemplatesAtCLIIntegration(t *testing
 	}
 
 	cmd := CollectionCommand(db, envStorage)
-	output := captureStdout(t, func() {
+	output := captureStdoutAndStderr(t, func() {
 		if err := cmd.Run(context.Background(), []string{"collection", "run", "checkout-dry", "--env", "beta", "--dry-run"}); err != nil {
 			t.Fatalf("collection dry-run failed: %v", err)
 		}

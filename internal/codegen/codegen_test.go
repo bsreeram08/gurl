@@ -284,3 +284,18 @@ func TestCodeGen_Curl_WithHeaders(t *testing.T) {
 		t.Errorf("generated code should include header key")
 	}
 }
+
+func TestCurlGeneratorQuotesWholeHeader(t *testing.T) {
+	req := &types.SavedRequest{
+		Method:  "POST",
+		URL:     "https://api.example.com",
+		Headers: []types.Header{{Key: "Content-Type", Value: "application/json"}},
+	}
+	out, err := Generate("curl", req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `-H 'Content-Type: application/json'`) {
+		t.Fatalf("expected header quoted as one argument, got: %s", out)
+	}
+}

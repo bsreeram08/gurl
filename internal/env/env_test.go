@@ -2,6 +2,7 @@ package env
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 )
 
@@ -96,5 +97,81 @@ func TestEnvironmentParentInheritance(t *testing.T) {
 	}
 	if childEnv.ParentID != "env-global" {
 		t.Errorf("child should have ParentID 'env-global', got '%s'", childEnv.ParentID)
+	}
+}
+
+func TestEnvironmentResolvedVariables(t *testing.T) {
+	tests := []struct {
+		name string
+		vars map[string]string
+		want map[string]string
+	}{
+		{
+			name: "alias resolves",
+			vars: map[string]string{"API_KEY": "{{SA_KEY}}", "SA_KEY": "sk-1"},
+			want: map[string]string{"API_KEY": "sk-1", "SA_KEY": "sk-1"},
+		},
+		{
+			name: "multi-level alias with surrounding text",
+			vars: map[string]string{"URL": "{{BASE}}/v1", "BASE": "https://{{HOST}}", "HOST": "api.test"},
+			want: map[string]string{"URL": "https://api.test/v1", "BASE": "https://api.test", "HOST": "api.test"},
+		},
+		{
+			name: "unknown, typed and dynamic refs left literal",
+			vars: map[string]string{"A": "{{missing}}", "B": "{{C:num}}", "C": "1", "D": "{{$uuid}}"},
+			want: map[string]string{"A": "{{missing}}", "B": "{{C:num}}", "C": "1", "D": "{{$uuid}}"},
+		},
+		{
+			name: "self cycle left literal",
+			vars: map[string]string{"A": "x{{A}}"},
+			want: map[string]string{"A": "x{{A}}"},
+		},
+		{
+			name: "two-key cycle left literal, dependent left literal",
+			vars: map[string]string{"A": "{{B}}", "B": "{{A}}", "X": "{{A}}", "OK": "fine"},
+			want: map[string]string{"A": "{{B}}", "B": "{{A}}", "X": "{{A}}", "OK": "fine"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := &Environment{Variables: tt.vars}
+			for i := 0; i < 20; i++ { // map order varies; result must not
+				got := e.ResolvedVariables()
+				if len(got) != len(tt.want) {
+					t.Fatalf("ResolvedVariables() = %v, want %v", got, tt.want)
+				}
+				for k, v := range tt.want {
+					if got[k] != v {
+						t.Fatalf("ResolvedVariables()[%q] = %q, want %q (all: %v)", k, got[k], v, got)
+					}
+				}
+			}
+			if tt.name == "alias resolves" && e.Variables["API_KEY"] != "{{SA_KEY}}" {
+				t.Errorf("ResolvedVariables mutated the environment: %v", e.Variables)
+			}
+		})
+	}
+}
+
+func TestEnvironmentResolvedVariables_DepthLimit(t *testing.T) {
+	vars := map[string]string{}
+	const n = maxAliasDepth + 3
+	for i := 0; i < n; i++ {
+		vars[fmt.Sprintf("V%d", i)] = fmt.Sprintf("{{V%d}}", i+1)
+	}
+	vars[fmt.Sprintf("V%d", n)] = "end"
+	e := &Environment{Variables: vars}
+	for i := 0; i < 50; i++ { // must not depend on map iteration order
+		got := e.ResolvedVariables()
+		if got["V0"] != "{{V1}}" {
+			t.Errorf("V0 = %q, want literal {{V1}} when chain exceeds depth", got["V0"])
+		}
+		if got[fmt.Sprintf("V%d", n-1)] != "end" {
+			t.Errorf("short chain should resolve, got %q", got[fmt.Sprintf("V%d", n-1)])
+		}
+		if got[fmt.Sprintf("V%d", n-maxAliasDepth)] != "end" {
+			t.Errorf("chain of exactly maxAliasDepth should resolve, got %q", got[fmt.Sprintf("V%d", n-maxAliasDepth)])
+		}
 	}
 }

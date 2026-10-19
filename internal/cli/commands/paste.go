@@ -16,6 +16,12 @@ func PasteCommand(db storage.DB) *cli.Command {
 		Name:    "paste",
 		Aliases: []string{"clip", "copy"},
 		Usage:   "Copy request as curl command to clipboard",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "reveal",
+				Usage: "Include secret header and auth values instead of masking them",
+			},
+		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
 			if args.Len() < 1 {
@@ -26,6 +32,9 @@ func PasteCommand(db storage.DB) *cli.Command {
 			req, err := db.GetRequestByName(name)
 			if err != nil {
 				return fmt.Errorf("request not found: %s", name)
+			}
+			if !c.Bool("reveal") {
+				req = maskRequestSecrets(req)
 			}
 
 			// Build curl command using array form to prevent shell injection

@@ -132,6 +132,8 @@ Quick Start:
 			commands.ImportCommand(db),
 			commands.AuthCommand(),
 			commands.EnvCommand(envStorage),
+			commands.ExecCommand(envStorage),
+			commands.ExtractCommand(),
 			commands.PasteCommand(db),
 			commands.CollectionCommand(db, envStorage),
 			commands.SequenceCommand(db),
