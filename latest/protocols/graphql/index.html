@@ -7,7 +7,7 @@
 </span></span></code></pre></div><h2 id=from-a-file>From a File<a hidden class=anchor aria-hidden=true href=#from-a-file>#</a></h2><p>For complex queries, store them in <code>.graphql</code> files:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>gurl graphql <span style=color:#f1fa8c>&#34;https://api.example.com/graphql&#34;</span> --query-file queries/get-users.graphql
 </span></span></code></pre></div><p>Example <code>queries/get-users.graphql</code>:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-graphql data-lang=graphql><span style=display:flex><span><span style=color:#8be9fd;font-style:italic>query</span> <span style=color:#50fa7b>GetUsers</span>(<span style=color:#8be9fd;font-style:italic>$limit</span>: <span style=color:#50fa7b>Int</span>!, <span style=color:#8be9fd;font-style:italic>$offset</span>: <span style=color:#50fa7b>Int</span>) {
 </span></span><span style=display:flex><span>  users(limit: <span style=color:#8be9fd;font-style:italic>$limit</span>, <span style=color:#50fa7b>offset</span>: <span style=color:#8be9fd;font-style:italic>$offset</span>) {
-</span></span><span style=display:flex><span>    <span style=color:#50fa7b>id</span>
+</span></span><span style=display:flex><span>    id
 </span></span><span style=display:flex><span>    name
 </span></span><span style=display:flex><span>    email
 </span></span><span style=display:flex><span>    createdAt
