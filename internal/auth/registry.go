@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"github.com/sreeram/gurl/internal/client"
-	coretemplate "github.com/sreeram/gurl/internal/core/template"
-	"github.com/sreeram/gurl/pkg/types"
 )
 
 type Registry struct {
@@ -54,27 +52,4 @@ func BuiltinRegistry() *Registry {
 	registry.Register(&DigestHandler{})
 	registry.Register(&NTLMHandler{})
 	return registry
-}
-
-func ApplyAuth(registry *Registry, authConfig *types.AuthConfig, req *client.Request, templateVars map[string]string) error {
-	if authConfig == nil || authConfig.Type == "" || authConfig.Type == "none" {
-		return nil
-	}
-	if registry == nil {
-		return fmt.Errorf("auth registry is nil for auth type %q", authConfig.Type)
-	}
-
-	params := make(map[string]string, len(authConfig.Params))
-	for name, value := range authConfig.Params {
-		substituted, err := coretemplate.Substitute(value, templateVars)
-		if err != nil {
-			return fmt.Errorf("%s auth param %q: %w", authConfig.Type, name, err)
-		}
-		params[name] = substituted
-	}
-
-	if err := registry.Apply(authConfig.Type, req, params); err != nil {
-		return err
-	}
-	return nil
 }

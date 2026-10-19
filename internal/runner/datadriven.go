@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -219,73 +218,4 @@ func (dl *DataLoader) iterateJSON(fn func(row map[string]string) error) error {
 
 type DataConfig struct {
 	FilePath string
-}
-
-func substituteTemplate(tmpl string, row map[string]string) string {
-	keys := make([]string, 0, len(row))
-	for k := range row {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	result := tmpl
-	for _, k := range keys {
-		placeholder := "{{" + k + "}}"
-		result = strings.ReplaceAll(result, placeholder, row[k])
-	}
-	return result
-}
-
-func SubstituteTemplateWithVars(template string, baseVars, rowVars map[string]string) (string, error) {
-	vars := make(map[string]string)
-
-	for k, v := range baseVars {
-		vars[k] = v
-	}
-	for k, v := range rowVars {
-		vars[k] = v
-	}
-
-	result := template
-	for k, v := range vars {
-		placeholder := "{{" + k + "}}"
-		result = strings.ReplaceAll(result, placeholder, v)
-	}
-
-	remaining := extractTemplateVars(result)
-	if len(remaining) > 0 {
-		return "", &MissingColumnError{Column: remaining[0], Row: 0}
-	}
-
-	return result, nil
-}
-
-func extractTemplateVars(s string) []string {
-	var vars []string
-	placeholder := "{{"
-	endPlaceholder := "}}"
-
-	for {
-		start := strings.Index(s, placeholder)
-		if start == -1 {
-			break
-		}
-		end := strings.Index(s[start+len(placeholder):], endPlaceholder)
-		if end == -1 {
-			break
-		}
-		varName := s[start+len(placeholder) : start+len(placeholder)+end]
-		vars = append(vars, varName)
-		s = s[start+len(placeholder)+end+len(endPlaceholder):]
-	}
-
-	return vars
-}
-
-type MissingColumnError struct {
-	Column string
-	Row    int
-}
-
-func (e *MissingColumnError) Error() string {
-	return fmt.Sprintf("missing column '%s' in data row %d", e.Column, e.Row)
 }

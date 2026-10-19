@@ -13,9 +13,9 @@ import (
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/google/uuid"
-	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/importers"
+	"github.com/sreeram/gurl/internal/resolve"
 	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
@@ -756,7 +756,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.activeTab < len(m.tabs) {
-			if cmd := m.sendActiveRequestWithVars(msg.Variables); cmd != nil {
+			if cmd := m.requestSendWithVarsFlow(msg.Variables); cmd != nil {
 				return m, cmd
 			}
 		}
@@ -804,16 +804,9 @@ func (m *App) requestSendWithVarsFlow(overrides map[string]string) tea.Cmd {
 		return nil
 	}
 
-	vars := m.collectDefaults(req)
-	for k, v := range m.collectActiveEnvVars() {
-		vars[k] = v
-	}
-	for k, v := range overrides {
-		vars[k] = v
-	}
-
-	missing := m.missingTemplateVars(req, vars)
-	if len(missing) > 0 {
+	scopes := m.sendScopes(req, overrides)
+	resolved, problems := resolve.Resolve(req, scopes, resolve.Options{Interactive: true})
+	if missing := problems.Missing(); len(missing) > 0 && len(problems.Others()) == 0 {
 		if m.quickTuiMode {
 			return func() tea.Msg {
 				return RequestSentMsg{Response: nil, Error: fmt.Errorf("missing template variables: %s", strings.Join(missing, ", "))}
@@ -824,14 +817,29 @@ func (m *App) requestSendWithVarsFlow(overrides map[string]string) tea.Cmd {
 		if name == "" {
 			name = "Request"
 		}
-		m.variablePrompt = NewVariablePrompt(name, missing, vars)
+		values := make(map[string]string, len(resolved.Vars))
+		for k, v := range resolved.Vars {
+			values[k] = v.Value
+		}
+		m.variablePrompt = NewVariablePrompt(name, missing, values)
 		return nil
 	}
 
-	return m.sendActiveRequestWithVars(vars)
+	return m.sendActiveRequest(scopes)
 }
 
-func (m *App) sendActiveRequestWithVars(vars map[string]string) tea.Cmd {
+// sendScopes builds the resolution scopes for sending req from the TUI: the
+// request's variable defaults sit under the active environment, and
+// overrides (e.g. values entered in the variable prompt) are the CLI scope.
+func (m *App) sendScopes(req *types.SavedRequest, overrides map[string]string) resolve.Scopes {
+	scopes := resolve.Scopes{Env: m.collectDefaults(req), CLI: overrides}
+	for k, v := range m.collectActiveEnvVars() {
+		scopes.Env[k] = v
+	}
+	return scopes
+}
+
+func (m *App) sendActiveRequest(scopes resolve.Scopes) tea.Cmd {
 	if m.activeTab >= len(m.tabs) {
 		return nil
 	}
@@ -841,7 +849,7 @@ func (m *App) sendActiveRequestWithVars(vars map[string]string) tea.Cmd {
 		return nil
 	}
 
-	return tab.Builder.sendRequestWithVars(vars)
+	return tab.Builder.sendRequestWithScopes(scopes)
 }
 
 // SetQuickMode enables a minimal execution mode that skips modal variable prompting.
@@ -884,58 +892,6 @@ func (m *App) collectActiveEnvVars() map[string]string {
 		}
 	}
 	return vars
-}
-
-func (m *App) missingTemplateVars(req *types.SavedRequest, provided map[string]string) []string {
-	seen := make(map[string]bool)
-	ordered := make([]string, 0)
-
-	add := func(name string) {
-		if name == "" || seen[name] {
-			return
-		}
-		seen[name] = true
-		ordered = append(ordered, name)
-	}
-
-	appendNames := func(values []string) {
-		for _, name := range values {
-			add(name)
-		}
-	}
-
-	appendNames(template.ExtractVarNames(req.URL))
-	appendNames(template.ExtractVarNames(req.Body))
-
-	for _, h := range req.Headers {
-		appendNames(template.ExtractVarNames(h.Key))
-		appendNames(template.ExtractVarNames(h.Value))
-	}
-
-	if req.AuthConfig != nil {
-		for _, value := range req.AuthConfig.Params {
-			appendNames(template.ExtractVarNames(value))
-		}
-	}
-
-	for _, p := range req.PathParams {
-		add(p.Name)
-	}
-
-	if len(ordered) == 0 {
-		for _, v := range template.GetVariablesFromRequest(req) {
-			add(v.Name)
-		}
-	}
-
-	missing := make([]string, 0, len(ordered))
-	for _, name := range ordered {
-		if value, ok := provided[name]; !ok || strings.TrimSpace(value) == "" {
-			missing = append(missing, name)
-		}
-	}
-
-	return missing
 }
 
 // handleGlobalKeyPress handles app-level shortcuts before a focused pane processes the key.

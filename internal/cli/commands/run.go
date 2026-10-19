@@ -13,12 +13,11 @@ import (
 
 	"github.com/sreeram/gurl/internal/assertions"
 	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/core/curl"
-	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/formatter"
 	"github.com/sreeram/gurl/internal/plugins"
 	"github.com/sreeram/gurl/internal/plugins/builtins"
+	"github.com/sreeram/gurl/internal/resolve"
 	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
@@ -140,17 +139,16 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 				}
 			}
 
-			envVars := make(map[string]string)
-
+			var runEnv *env.Environment
 			if requestedEnv != "" {
 				e, err := envStorage.GetEnvByName(requestedEnv)
 				if err != nil || e == nil {
 					return fmt.Errorf("environment '%s' not found", requestedEnv)
 				}
-				envVars = e.ResolvedVariables()
+				runEnv = e
 			} else if activeEnvName, err := envStorage.GetActiveEnv(); err == nil && activeEnvName != "" {
 				if e, err := envStorage.GetEnvByName(activeEnvName); err == nil && e != nil {
-					envVars = e.ResolvedVariables()
+					runEnv = e
 				}
 			}
 
@@ -165,56 +163,20 @@ func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
 				if dataFile != "" || enableChain {
 					return cli.Exit("--dry-run cannot be combined with --data or --chain", 2)
 				}
-				return executeDryRun(ctx, db, envStorage, name, envVars, cliVars, secretValues(envStorage, requestedEnv), os.Stdout)
+				return executeDryRun(ctx, db, envStorage, name, runEnv, cliVars, os.Stdout)
 			}
 
 			if dataFile != "" {
-				return executeDataDriven(ctx, db, envStorage, name, envVars, cliVars, c, persistEnvName)
+				return executeDataDriven(ctx, db, envStorage, name, runEnv, cliVars, c, persistEnvName)
 			}
 
 			if enableChain {
-				return executeChain(ctx, db, envStorage, name, envVars, cliVars, c, persistEnvName)
+				return executeChain(ctx, db, envStorage, name, runEnv, cliVars, c, persistEnvName)
 			}
 
-			return executeSingleRequest(ctx, db, envStorage, name, envVars, cliVars, c, persistEnvName)
+			return executeSingleRequest(ctx, db, envStorage, name, runEnv, cliVars, c, persistEnvName)
 		},
 	}
-}
-
-func requestVarsAndOrigins(db storage.DB, req *types.SavedRequest, envVars map[string]string, cliVars map[string]string, rowVars map[string]string) (map[string]string, map[string]runner.VarOrigin, runner.VarOrigin) {
-	vars := make(map[string]string)
-	origins := make(map[string]runner.VarOrigin)
-	for key, value := range envVars {
-		vars[key] = value
-		origins[key] = runner.VarOriginEnvironment
-	}
-
-	if req != nil && req.Collection != "" {
-		if collectionStore, ok := db.(storage.CollectionStore); ok {
-			if collection, err := collectionStore.GetCollectionByName(req.Collection); err == nil && collection != nil {
-				keys := sortedStringKeys(collection.Variables)
-				for _, key := range keys {
-					vars[key] = env.Resolve(collection.Variables[key], envVars)
-					origins[key] = runner.VarOriginCollection
-				}
-			}
-		}
-	}
-
-	for key, value := range rowVars {
-		vars[key] = value
-		origins[key] = runner.VarOriginData
-	}
-	for key, value := range cliVars {
-		vars[key] = value
-		origins[key] = runner.VarOriginCLI
-	}
-
-	defaultPersistOrigin := runner.VarOriginEnvironment
-	if req != nil && req.Collection != "" {
-		defaultPersistOrigin = runner.VarOriginCollection
-	}
-	return vars, origins, defaultPersistOrigin
 }
 
 func sortedStringKeys(values map[string]string) []string {
@@ -226,17 +188,14 @@ func sortedStringKeys(values map[string]string) []string {
 	return keys
 }
 
-func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, envVars map[string]string, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
+func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
 	currentName := name
 	visited := make(map[string]bool)
 	singleRunner := runner.NewRunner(db, envStorage)
 	var chainAssertionErr error
 	dirtyForPersist := make(map[string]string)
-	dirtyOriginsForPersist := make(map[string]runner.VarOrigin)
+	dirtyOriginsForPersist := make(map[string]resolve.Origin)
 	dirtyCollectionTargets := make(map[string]string)
-	var vars map[string]string
-	var origins map[string]runner.VarOrigin
-	defaultPersistOrigin := runner.VarOriginEnvironment
 	currentCollectionName := ""
 	chainStarted := false
 	finish := func(err error) error {
@@ -268,12 +227,10 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 		if c.Bool("persist") && req.Collection == "" && persistEnvName == "" {
 			return finish(fmt.Errorf("--persist requires --env or an active environment"))
 		}
-		vars, origins, defaultPersistOrigin = requestVarsAndOrigins(db, req, envVars, cliVars, nil)
+		scopes := runner.ScopesFor(db, runEnv, req.Collection, cliVars)
+		scopes.Runtime = make(map[string]resolve.Var, len(dirtyForPersist))
 		for key, value := range dirtyForPersist {
-			vars[key] = value
-			if origin, ok := dirtyOriginsForPersist[key]; ok {
-				origins[key] = origin
-			}
+			scopes.Runtime[key] = resolve.Var{Value: value, Origin: dirtyOriginsForPersist[key]}
 		}
 		currentCollectionName = req.Collection
 
@@ -290,15 +247,13 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 			}
 		}
 
-		execution := singleRunner.RunSavedRequestWithOrigins(ctx, req, vars, origins, defaultPersistOrigin)
+		execution := singleRunner.RunSavedRequestInScopes(ctx, req, scopes)
 		chainStarted = true
 		for key, value := range execution.Result.DirtyVars {
-			vars[key] = value
 			dirtyForPersist[key] = value
 			if origin, ok := execution.Result.DirtyVarOrigins[key]; ok {
-				origins[key] = origin
 				dirtyOriginsForPersist[key] = origin
-				if origin != runner.VarOriginEnvironment && req.Collection != "" {
+				if origin != resolve.OriginEnvironment && req.Collection != "" {
 					dirtyCollectionTargets[key] = req.Collection
 				} else {
 					delete(dirtyCollectionTargets, key)
@@ -366,7 +321,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 	return finish(fmt.Errorf("max iterations (%d) reached", maxChainIterations))
 }
 
-func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, envVars map[string]string, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
+func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
@@ -381,8 +336,8 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.En
 		req = &copy
 	}
 
-	vars, origins, defaultPersistOrigin := requestVarsAndOrigins(db, req, envVars, cliVars, nil)
-	execution := runner.NewRunner(db, envStorage).RunSavedRequestWithOrigins(ctx, req, vars, origins, defaultPersistOrigin)
+	scopes := runner.ScopesFor(db, runEnv, req.Collection, cliVars)
+	execution := runner.NewRunner(db, envStorage).RunSavedRequestInScopes(ctx, req, scopes)
 	if c.Bool("persist") {
 		collectionStore, _ := db.(storage.CollectionStore)
 		persisted, persistErr := runner.PersistDirtyVariables(envStorage, collectionStore, persistEnvName, req.Collection, execution.Result.DirtyVars, execution.Result.DirtyVarOrigins)
@@ -483,29 +438,16 @@ func warnUnpersisted(out io.Writer, dirty map[string]string) {
 	fmt.Fprintf(out, "note: %s not saved; add --persist to use them in later runs\n", strings.Join(sortedStringKeys(dirty), ", "))
 }
 
-// executeDryRun prints the request as it would be sent and fails when any
-// template variable is unresolved. Secret values are masked in the output.
-func executeDryRun(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, envVars map[string]string, cliVars map[string]string, secrets []string, out io.Writer) error {
+// executeDryRun prints the request as it would be sent, after pre-request
+// scripts, and fails when it cannot be resolved. Secret values are masked in
+// the output.
+func executeDryRun(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, runEnv *env.Environment, cliVars map[string]string, out io.Writer) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
 	}
-	vars, origins, defaultPersistOrigin := requestVarsAndOrigins(db, req, envVars, cliVars, nil)
-	for key, value := range vars {
-		if isSensitiveName(key) && value != "" {
-			secrets = append(secrets, value)
-		}
-	}
-	mask := func(s string) string {
-		for _, secret := range secrets {
-			if secret != "" {
-				s = strings.ReplaceAll(s, secret, secretMask)
-			}
-		}
-		return s
-	}
-
-	execution := runner.NewRunner(db, envStorage).PlanSavedRequestWithOrigins(ctx, req, vars, origins, defaultPersistOrigin)
+	scopes := runner.ScopesFor(db, runEnv, req.Collection, cliVars)
+	execution := runner.NewRunner(db, envStorage).PlanSavedRequest(ctx, req, scopes)
 	result := execution.Result
 	if result.Error != "" {
 		return fmt.Errorf("%s", result.Error)
@@ -515,16 +457,36 @@ func executeDryRun(ctx context.Context, db storage.DB, envStorage *env.EnvStorag
 		return nil
 	}
 
+	vars := resolve.Vars(scopes)
+	var secrets []string
+	for key, v := range vars {
+		if (v.Secret || isSensitiveName(key)) && v.Value != "" {
+			secrets = append(secrets, v.Value)
+		}
+	}
+	for key, value := range result.DirtyVars {
+		if (vars[key].Secret || isSensitiveName(key)) && value != "" {
+			secrets = append(secrets, value)
+		}
+	}
+	mask := func(s string) string {
+		for _, secret := range secrets {
+			s = strings.ReplaceAll(s, secret, secretMask)
+		}
+		return s
+	}
+
+	preview := execution.Request
 	fmt.Fprintf(out, "%s %s\n", result.PlannedMethod, mask(result.PlannedURL))
-	for _, h := range req.Headers {
-		value := template.ResolveKnown(h.Value, vars)
-		if isSensitiveName(h.Key) && shouldMaskValue(h.Value) {
+	for _, h := range preview.Headers {
+		value := h.Value
+		if isSensitiveName(h.Key) && shouldMaskValue(value) {
 			value = secretMask
 		}
 		fmt.Fprintf(out, "%s: %s\n", h.Key, mask(value))
 	}
-	if req.Body != "" {
-		fmt.Fprintf(out, "\n%s\n", mask(template.ResolveKnown(req.Body, vars)))
+	if preview.Body != "" {
+		fmt.Fprintf(out, "\n%s\n", mask(preview.Body))
 	}
 	for _, extract := range result.PlannedExtracts {
 		fmt.Fprintf(out, "extract: %s <- %s\n", extract.Name, extract.Source)
@@ -532,34 +494,10 @@ func executeDryRun(ctx context.Context, db storage.DB, envStorage *env.EnvStorag
 	if len(result.DryRunWarnings) > 0 {
 		return fmt.Errorf("dry run found %s", strings.Join(result.DryRunWarnings, ", "))
 	}
-	// Catches what the plan can't see: leftover placeholders inside values and bad typed values.
-	if _, err := curl.BuildClientRequest(req, vars); err != nil {
+	if err := result.DryRunProblems.Err(); err != nil {
 		return fmt.Errorf("dry run: %w", err)
 	}
 	return nil
-}
-
-// secretValues returns the values of variables marked secret in the selected
-// (or active) environment, so previews can mask them.
-func secretValues(envStorage *env.EnvStorage, envName string) []string {
-	if envName == "" {
-		envName, _ = envStorage.GetActiveEnv()
-	}
-	if envName == "" {
-		return nil
-	}
-	e, err := envStorage.GetEnvByName(envName)
-	if err != nil || e == nil {
-		return nil
-	}
-	resolved := e.ResolvedVariables()
-	var values []string
-	for key := range e.SecretKeys {
-		if v := resolved[key]; v != "" {
-			values = append(values, v)
-		}
-	}
-	return values
 }
 
 func runnerAssertionFailureMessage(result *runner.RequestResult) string {
@@ -611,7 +549,7 @@ func assertionVarsFromResult(result *runner.RequestResult) map[string]string {
 	return vars
 }
 
-func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, envVars map[string]string, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
+func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
@@ -643,7 +581,7 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvSt
 
 	rowNum := 0
 	dirtyForPersist := make(map[string]string)
-	dirtyOriginsForPersist := make(map[string]runner.VarOrigin)
+	dirtyOriginsForPersist := make(map[string]resolve.Origin)
 	singleRunner := runner.NewRunner(db, envStorage)
 	err = loader.Iterate(func(rowVars map[string]string) error {
 		rowNum++
@@ -655,8 +593,9 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvSt
 			effectiveReq = &copy
 		}
 
-		mergedVars, origins, defaultPersistOrigin := requestVarsAndOrigins(db, effectiveReq, envVars, cliVars, rowVars)
-		execution := singleRunner.RunSavedRequestWithOrigins(ctx, effectiveReq, mergedVars, origins, defaultPersistOrigin)
+		scopes := runner.ScopesFor(db, runEnv, effectiveReq.Collection, cliVars)
+		scopes.Data = rowVars
+		execution := singleRunner.RunSavedRequestInScopes(ctx, effectiveReq, scopes)
 		for key, value := range execution.Result.DirtyVars {
 			dirtyForPersist[key] = value
 			if origin, ok := execution.Result.DirtyVarOrigins[key]; ok {

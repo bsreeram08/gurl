@@ -46,25 +46,61 @@ func BaseName(inner string) string {
 	return name
 }
 
+// IssueKind classifies why a placeholder could not be filled by Fill.
+type IssueKind int
+
+const (
+	// IssueMissing: no value is known for the placeholder's variable.
+	IssueMissing IssueKind = iota + 1
+	// IssueLeftover: the variable's value itself contains a placeholder.
+	IssueLeftover
+	// IssueBadType: the value does not match the placeholder's type suffix.
+	IssueBadType
+	// IssueDynamic: a {{$fn}} dynamic function is unknown or badly called.
+	IssueDynamic
+)
+
+// Issue is one placeholder Fill could not replace. Message never contains
+// the variable's value.
+type Issue struct {
+	Kind IssueKind
+	// Name is the variable name (type suffix removed), or "$fn" for a
+	// dynamic function.
+	Name    string
+	Message string
+}
+
+// Dynamic selects how Fill treats {{$fn}} dynamic function placeholders.
+type Dynamic int
+
+const (
+	// DynamicOff treats {{$fn}} as an ordinary variable name.
+	DynamicOff Dynamic = iota
+	// DynamicResolve evaluates {{$fn}} (see ResolveDynamic).
+	DynamicResolve
+	// DynamicKeep leaves {{$fn}} in place without reporting it.
+	DynamicKeep
+)
+
 // resolver performs single-pass placeholder substitution against vars.
 // Substituted values are never re-expanded: a value that itself contains a
-// placeholder is an error in strict mode, so untrusted values (e.g. extracted
+// placeholder is an issue in strict mode, so untrusted values (e.g. extracted
 // from a response) cannot pull other variables such as secrets into a request.
 type resolver struct {
 	vars    map[string]string
-	strict  bool // strict reports missing vars and value errors; otherwise best-effort
-	missing []string
-	errs    []string
-	seen    map[string]bool
+	strict  bool // strict reports issues; otherwise best-effort
+	dynamic Dynamic
+	issues  []Issue
+	seen    map[Issue]bool
 }
 
-func (r *resolver) addOnce(list *[]string, item string) {
+func (r *resolver) add(issue Issue) {
 	if r.seen == nil {
-		r.seen = make(map[string]bool)
+		r.seen = make(map[Issue]bool)
 	}
-	if !r.seen[item] {
-		r.seen[item] = true
-		*list = append(*list, item)
+	if !r.seen[issue] {
+		r.seen[issue] = true
+		r.issues = append(r.issues, issue)
 	}
 }
 
@@ -75,12 +111,25 @@ func (r *resolver) substitute(s string) string {
 		if quoted {
 			inner = match[3 : len(match)-3]
 		}
+
+		if r.dynamic != DynamicOff && strings.HasPrefix(inner, "$") {
+			if r.dynamic == DynamicKeep {
+				return match
+			}
+			val, err := resolveFunction(inner[1:])
+			if err != nil {
+				r.add(Issue{Kind: IssueDynamic, Name: inner, Message: err.Error()})
+				return match
+			}
+			return val
+		}
+
 		name, typ := parsePlaceholder(inner)
 
 		val, ok := r.vars[name]
 		if !ok {
 			if r.strict {
-				r.addOnce(&r.missing, name)
+				r.add(Issue{Kind: IssueMissing, Name: name})
 			}
 			return match
 		}
@@ -90,18 +139,29 @@ func (r *resolver) substitute(s string) string {
 
 		if nested := templatePattern.FindAllString(val, -1); len(nested) > 0 {
 			for _, p := range nested {
-				r.addOnce(&r.errs, fmt.Sprintf("variable %q contains unresolved placeholder %s", name, p))
+				r.add(Issue{Kind: IssueLeftover, Name: name, Message: fmt.Sprintf("variable %q contains unresolved placeholder %s", name, p)})
 			}
 			return match
 		}
 
 		out, err := applyType(name, val, typ)
 		if err != nil {
-			r.addOnce(&r.errs, err.Error())
+			r.add(Issue{Kind: IssueBadType, Name: name, Message: err.Error()})
 			return match
 		}
 		return out
 	})
+}
+
+// Fill replaces every placeholder in s in a single pass and reports each
+// placeholder it could not replace, in order of appearance (duplicates
+// removed). Unreplaced placeholders are left as written in the result.
+// Typed placeholders behave as in Substitute; dyn selects how {{$fn}}
+// dynamic functions are treated.
+func Fill(s string, vars map[string]string, dyn Dynamic) (string, []Issue) {
+	r := &resolver{vars: vars, strict: true, dynamic: dyn}
+	out := r.substitute(s)
+	return out, r.issues
 }
 
 // applyType validates val against typ and returns the text to insert.
@@ -140,14 +200,19 @@ func applyTypeOrKeep(match, val, typ string) string {
 // placeholder is reported as an error. Returns an error listing every missing
 // variable and every invalid value, in order of appearance.
 func Substitute(cmd string, vars map[string]string) (string, error) {
-	r := &resolver{vars: vars, strict: true}
-	result := r.substitute(cmd)
+	result, issues := Fill(cmd, vars, DynamicOff)
 
-	var problems []string
-	if len(r.missing) > 0 {
-		problems = append(problems, "missing required variables: "+strings.Join(r.missing, ", "))
+	var missing, problems []string
+	for _, issue := range issues {
+		if issue.Kind == IssueMissing {
+			missing = append(missing, issue.Name)
+			continue
+		}
+		problems = append(problems, issue.Message)
 	}
-	problems = append(problems, r.errs...)
+	if len(missing) > 0 {
+		problems = append([]string{"missing required variables: " + strings.Join(missing, ", ")}, problems...)
+	}
 	if len(problems) > 0 {
 		return "", errors.New(strings.Join(problems, "; "))
 	}

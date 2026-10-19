@@ -642,6 +642,33 @@ func TestRunCommandFailFlagAndPersistHint(t *testing.T) {
 	}
 }
 
+func TestRunCommandDryRunReflectsPreRequestScript(t *testing.T) {
+	db := newMockDB()
+	db.requests["req-dry-script"] = &types.SavedRequest{
+		ID:        "req-dry-script",
+		Name:      "scripted",
+		URL:       "https://api.example.com/orders",
+		Method:    "POST",
+		Body:      `{"trace":"{{trace}}"}`,
+		PreScript: `gurl.setVar("trace", "t-1"); gurl.setVar("session_token", "tok_from_script"); gurl.request.headers.set("X-Session", "{{session_token}}")`,
+	}
+	db.names["scripted"] = "req-dry-script"
+
+	var runErr error
+	output := captureStdoutAndStderr(t, func() {
+		runErr = RunCommand(db, newRunTestEnvStorage(t)).Run(context.Background(), []string{"run", "scripted", "--dry-run"})
+	})
+	if runErr != nil {
+		t.Fatalf("dry run failed: %v\n%s", runErr, output)
+	}
+	if !strings.Contains(output, `{"trace":"t-1"}`) || !strings.Contains(output, "X-Session: *****") {
+		t.Fatalf("dry run did not reflect the pre-request script:\n%s", output)
+	}
+	if strings.Contains(output, "tok_from_script") {
+		t.Fatalf("dry run leaked a script-set secret:\n%s", output)
+	}
+}
+
 func TestRunCommandDryRunPreviewsWithoutSendingAndMasksSecrets(t *testing.T) {
 	db := newMockDB()
 	hits := 0
