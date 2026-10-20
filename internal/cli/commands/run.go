@@ -227,7 +227,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name
 	// last one.
 	steps := &ndjsonWriter{w: os.Stdout}
 	finish := func(err error) error {
-		if !c.Bool("persist") {
+		if !c.Bool("persist") && !jsonOut {
 			warnUnpersisted(os.Stderr, dirtyForPersist)
 		}
 		var persisted *runner.PersistSummary
@@ -414,7 +414,7 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Sto
 				fmt.Fprintf(os.Stderr, "Run aborted after persisting %d variables.\n", len(execution.Result.DirtyVars))
 			}
 		}
-	} else {
+	} else if !jsonOut {
 		warnUnpersisted(os.Stderr, execution.Result.DirtyVars)
 	}
 	emit := func(out runOutput) error {

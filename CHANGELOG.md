@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `cookies list` masks cookie values as `*****`. `--reveal` shows them (refused in agent mode), and the new `--json` follows the same rules.
+- `show --format curl` (and `paste`) print each header as one shell argument, `-H 'Key: Value'`, instead of quoting key and value separately.
+- `echo 'curl ...' | gurl save <name>` reads the curl command from stdin and saves it under that name, as the README documents, instead of failing with "name and URL arguments are required".
+- `run --json` and agent mode no longer print the `note: ... not saved; add --persist` hint on stderr; the JSON object already lists the extracted values.
+- `collection run --reporter-output <dir>` creates the directory, including missing parents, instead of failing to write the report.
+
 ## [v0.7.0] - 2026-10-20
 
 ### Added

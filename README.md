@@ -119,7 +119,7 @@ gurl env import prod --file .env     # add variables from a .env file
 gurl env set partner-beta 'API_KEY={{SA_KEY}}'
 ```
 
-Secret values are encrypted at rest with AES-256-GCM. `env show`, `show`, `list --json`, `codegen` and `paste` mask secret values and credential headers unless you pass `--reveal`.
+Secret values are encrypted at rest with AES-256-GCM. `env show`, `show`, `list --json`, `cookies list`, `codegen` and `paste` mask secret values, credential headers and cookie values unless you pass `--reveal`.
 
 ### Placeholders
 

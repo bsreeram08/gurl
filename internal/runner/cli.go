@@ -162,7 +162,11 @@ func CollectionRunCommand(db storage.DB, envStorage env.Store) *cli.Command {
 
 				if reporterOutput != "" {
 					filename := getReporterFilename(name, reporterOutput)
-					if err := os.WriteFile(filename, content, 0644); err != nil {
+					err := os.MkdirAll(reporterOutput, 0o755)
+					if err == nil {
+						err = os.WriteFile(filename, content, 0644)
+					}
+					if err != nil {
 						fmt.Fprintf(os.Stderr, "failed to write %s report to %s: %v\n", name, filename, err)
 					} else {
 						fmt.Printf("Report written to %s\n", filename)
