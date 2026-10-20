@@ -12,6 +12,7 @@ import (
 
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/project"
+	"github.com/sreeram/gurl/internal/redact"
 	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/secrets"
 	"github.com/sreeram/gurl/internal/storage"
@@ -67,7 +68,14 @@ func collectionShowCommand(db storage.DB) *cli.Command {
 		Name:    "show",
 		Aliases: []string{"view", "info"},
 		Usage:   "Show requests and variables in a collection",
-		Action: func(ctx context.Context, c *cli.Command) error {
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "json",
+				Aliases: []string{"j"},
+				Usage:   "JSON output (secrets masked)",
+			},
+		},
+		Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
 			if args.Len() < 1 {
 				return fmt.Errorf("collection name argument is required")
@@ -84,6 +92,10 @@ func collectionShowCommand(db storage.DB) *cli.Command {
 			}
 
 			sortRequests(requests)
+
+			if jsonOutput(c) {
+				return writeJSON(os.Stdout, collectionShowOutputOf(name, collection, requests))
+			}
 
 			fmt.Printf("Collection: %s\n", name)
 			if collection != nil {
@@ -105,8 +117,52 @@ func collectionShowCommand(db storage.DB) *cli.Command {
 				}
 			}
 			return nil
-		},
+		}),
 	}
+}
+
+// collectionShowOutput is `collection show --json` output.
+type collectionShowOutput struct {
+	Name      string            `json:"name"`
+	ID        string            `json:"id,omitempty"`
+	Variables map[string]string `json:"variables"`
+	Secrets   []string          `json:"secrets"`
+	Requests  []collectionReq   `json:"requests"`
+}
+
+type collectionReq struct {
+	Name   string `json:"name"`
+	Method string `json:"method"`
+	URL    string `json:"url"`
+	Folder string `json:"folder,omitempty"`
+}
+
+// collectionShowOutputOf masks the values of secret and sensitively named
+// variables and literal secrets in request URLs.
+func collectionShowOutputOf(name string, collection *types.Collection, requests []*types.SavedRequest) collectionShowOutput {
+	out := collectionShowOutput{Name: name, Variables: map[string]string{}, Secrets: []string{}, Requests: []collectionReq{}}
+	if collection != nil {
+		out.ID = collection.ID
+		for key, value := range collection.Variables {
+			if collection.IsSecret(key) {
+				out.Secrets = append(out.Secrets, key)
+			}
+			if (collection.IsSecret(key) || redact.SensitiveName(key)) && value != "" {
+				value = redact.Mask
+			}
+			out.Variables[key] = value
+		}
+		sort.Strings(out.Secrets)
+	}
+	for _, req := range requests {
+		masked := redact.SavedRequest(req)
+		method := masked.Method
+		if method == "" {
+			method = "GET"
+		}
+		out.Requests = append(out.Requests, collectionReq{Name: masked.Name, Method: method, URL: masked.URL, Folder: masked.Folder})
+	}
+	return out
 }
 
 func collectionListCommand(db storage.DB) *cli.Command {
@@ -114,7 +170,14 @@ func collectionListCommand(db storage.DB) *cli.Command {
 		Name:    "list",
 		Aliases: []string{"ls", "l"},
 		Usage:   "List all collections",
-		Action: func(ctx context.Context, c *cli.Command) error {
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "json",
+				Aliases: []string{"j"},
+				Usage:   "JSON output",
+			},
+		},
+		Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
 			requests, err := db.ListRequests(&storage.ListOptions{})
 			if err != nil {
 				return fmt.Errorf("failed to list requests: %w", err)
@@ -148,11 +211,6 @@ func collectionListCommand(db storage.DB) *cli.Command {
 				stats[collection.Name] = row
 			}
 
-			if len(stats) == 0 {
-				fmt.Println("No collections found.")
-				return nil
-			}
-
 			rows := make([]collectionListRow, 0, len(stats))
 			for _, row := range stats {
 				rows = append(rows, row)
@@ -160,6 +218,29 @@ func collectionListCommand(db storage.DB) *cli.Command {
 			sort.SliceStable(rows, func(i, j int) bool {
 				return rows[i].Name < rows[j].Name
 			})
+
+			if jsonOutput(c) {
+				type collectionSummary struct {
+					Name      string `json:"name"`
+					Requests  int    `json:"requests"`
+					Variables int    `json:"variables"`
+					Updated   string `json:"updated,omitempty"`
+				}
+				out := make([]collectionSummary, 0, len(rows))
+				for _, row := range rows {
+					summary := collectionSummary{Name: row.Name, Requests: row.Requests, Variables: row.Variables}
+					if row.UpdatedAt > 0 {
+						summary.Updated = time.Unix(row.UpdatedAt, 0).UTC().Format(time.RFC3339)
+					}
+					out = append(out, summary)
+				}
+				return writeJSON(os.Stdout, out)
+			}
+
+			if len(rows) == 0 {
+				fmt.Println("No collections found.")
+				return nil
+			}
 
 			fmt.Println("┌─ Collections ────────────────────────────────────────────┐")
 			fmt.Println("│  NAME          REQUESTS   VARIABLES   UPDATED           │")
@@ -174,7 +255,7 @@ func collectionListCommand(db storage.DB) *cli.Command {
 			fmt.Println("└──────────────────────────────────────────────────────────┘")
 
 			return nil
-		},
+		}),
 	}
 }
 
@@ -450,6 +531,9 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 			}
 			passphrase := collectionPassphraseValue(c)
 			collection, requests, err := parseCollectionImportSource(path, passphrase)
+			if err != nil && passphrase == "" && isCollectionImportPassphraseRequired(err) && noInput(c) {
+				return errPassphraseRequired
+			}
 			if err != nil && passphrase == "" && isCollectionImportPassphraseRequired(err) && collectionPassphraseIsInteractive() {
 				passphrase, err = collectionPassphrase(c, "Passphrase for collection import: ")
 				if err != nil {
@@ -603,6 +687,9 @@ func collectionPassphrase(c *cli.Command, prompt string) (string, error) {
 	if passphrase := collectionPassphraseValue(c); passphrase != "" {
 		return passphrase, nil
 	}
+	if noInput(c) {
+		return "", errPassphraseRequired
+	}
 	if !collectionPassphraseIsInteractive() {
 		return "", nil
 	}
@@ -615,6 +702,10 @@ func collectionPassphrase(c *cli.Command, prompt string) (string, error) {
 	}
 	return passphrase, nil
 }
+
+// errPassphraseRequired is returned instead of prompting for a passphrase
+// in non-interactive mode.
+var errPassphraseRequired = errors.New("passphrase required: pass --passphrase or set GURL_IMPORT_PASSPHRASE")
 
 func isCollectionImportPassphraseRequired(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "passphrase is required to import collection secrets")
@@ -744,7 +835,7 @@ func collectionDeleteCommand(db storage.DB) *cli.Command {
 			}
 
 			if !c.Bool("force") {
-				confirmed, err := confirmCollectionDelete(name, len(requests), secretCount)
+				confirmed, err := confirmCollectionDelete(c, name, len(requests), secretCount)
 				if err != nil {
 					return err
 				}
@@ -772,10 +863,10 @@ func collectionDeleteCommand(db storage.DB) *cli.Command {
 	}
 }
 
-func confirmCollectionDelete(name string, requestCount int, secretCount int) (bool, error) {
+func confirmCollectionDelete(c *cli.Command, name string, requestCount int, secretCount int) (bool, error) {
 	requestLabel := pluralizeCount(requestCount, "request", "requests")
 	secretLabel := pluralizeCount(secretCount, "secret", "secrets")
-	if !collectionDeleteIsInteractive() {
+	if !canPrompt(c, collectionDeleteIsInteractive) {
 		return false, fmt.Errorf("collection %q has %s and %s; use --force to delete non-interactively", name, requestLabel, secretLabel)
 	}
 

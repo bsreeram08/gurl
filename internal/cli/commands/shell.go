@@ -135,6 +135,9 @@ executing requests without fullscreen keybindings or terminal key conflicts.`,
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
+			if noInput(c) {
+				return cli.Exit("gurl shell is interactive and cannot run with --no-input or --agent; use gurl run <name> instead", 2)
+			}
 			session := newShellSession(db, envStorage, os.Stdin, os.Stdout, c.String("format"))
 
 			if envName := strings.TrimSpace(c.String("env")); envName != "" {

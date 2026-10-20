@@ -1,14 +1,18 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/redact"
+	"github.com/sreeram/gurl/internal/resolve"
 	"github.com/urfave/cli/v3"
 )
 
@@ -83,8 +87,27 @@ func ExecCommand(db env.Store) *cli.Command {
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
+			var flush func()
+			if agentMode(c) {
+				// The child's output lands in the agent's context, so mask the
+				// injected secrets in it line by line.
+				secrets := redact.ScopeSecrets(resolve.Scopes{Env: vars, EnvSecrets: e.SecretKeys}, nil)
+				var outDone, errDone <-chan struct{}
+				cmd.Stdout, outDone = redactingWriter(os.Stdout, secrets)
+				cmd.Stderr, errDone = redactingWriter(os.Stderr, secrets)
+				flush = func() {
+					cmd.Stdout.(io.Closer).Close()
+					cmd.Stderr.(io.Closer).Close()
+					<-outDone
+					<-errDone
+				}
+			}
 
-			if err := cmd.Run(); err != nil {
+			err = cmd.Run()
+			if flush != nil {
+				flush()
+			}
+			if err != nil {
 				var exitErr *exec.ExitError
 				if errors.As(err, &exitErr) {
 					code := exitErr.ExitCode()
@@ -98,4 +121,26 @@ func ExecCommand(db env.Store) *cli.Command {
 			return nil
 		},
 	}
+}
+
+// redactingWriter returns a pipe whose lines are written to out with secrets
+// masked; the channel closes once the pipe is closed and fully drained.
+// ponytail: line-buffered, so a secret split across lines is not caught.
+func redactingWriter(out io.Writer, secrets []string) (io.WriteCloser, <-chan struct{}) {
+	r, w := io.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		br := bufio.NewReader(r)
+		for {
+			line, err := br.ReadString('\n')
+			if line != "" {
+				io.WriteString(out, redact.Replace(line, secrets))
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return w, done
 }

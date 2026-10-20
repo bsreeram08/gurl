@@ -13,6 +13,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
@@ -24,7 +25,10 @@ const diagBodyLimit = 4096
 
 // DiagCommand shows one execution record and how it differs from the last
 // successful execution of the same request.
-func DiagCommand(db storage.DB) *cli.Command {
+//
+// In agent mode the output is JSON and secrets of the request, its
+// collection and its environment are also masked in response bodies.
+func DiagCommand(db storage.DB, envs env.Store) *cli.Command {
 	return &cli.Command{
 		Name:      "diag",
 		Usage:     "Inspect one execution: request, variables, response, and what changed since the last success",
@@ -43,7 +47,7 @@ func DiagCommand(db storage.DB) *cli.Command {
 				Usage: "Print the execution record and comparison as JSON",
 			},
 		},
-		Action: func(ctx context.Context, c *cli.Command) error {
+		Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
 			id := c.String("id")
 			if id == "" {
 				id = c.Args().First()
@@ -59,14 +63,19 @@ func DiagCommand(db storage.DB) *cli.Command {
 			if err != nil {
 				return err
 			}
+			if agentMode(c) {
+				secrets := currentSecrets(db, envs, rec)
+				if base != nil { // the baseline may have run in another environment
+					secrets = append(secrets, currentSecrets(db, envs, base)...)
+				}
+				rec, base = maskedRecord(rec, secrets), maskedRecord(base, secrets)
+			}
 			cmp := compareExecutions(base, rec)
-			if c.Bool("json") {
-				enc := json.NewEncoder(os.Stdout)
-				enc.SetIndent("", "  ")
-				return enc.Encode(diagReport{Record: rec, ComparedWith: cmp})
+			if jsonOutput(c) {
+				return writeJSON(os.Stdout, diagReport{Record: rec, ComparedWith: cmp})
 			}
 			return writeDiag(os.Stdout, rec, cmp, c.Bool("full"))
-		},
+		}),
 	}
 }
 

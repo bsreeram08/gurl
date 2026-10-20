@@ -79,9 +79,27 @@ func (a Attempt) Record() *types.ExecutionHistory {
 	}
 	sort.Slice(rec.Vars, func(i, j int) bool { return rec.Vars[i].Name < rec.Vars[j].Name })
 
-	secrets := append(redact.ScopeSecrets(a.Scopes, a.Updates), redact.SavedRequestSecrets(a.Saved)...)
-	redact.Execution(rec, secrets)
+	redact.Execution(rec, a.secrets())
 	return rec
+}
+
+// secrets are the values masked in a's record.
+func (a Attempt) secrets() []string {
+	return append(redact.ScopeSecrets(a.Scopes, a.Updates), redact.SavedRequestSecrets(a.Saved)...)
+}
+
+// Secrets returns the secret values of e: the values its execution record
+// masks (see Attempt.Record), for masking other output of the same
+// execution, such as the response body.
+func (e *SingleRequestExecution) Secrets() []string {
+	if e == nil || e.saved == nil {
+		return nil
+	}
+	var updates map[string]string
+	if e.Result != nil {
+		updates = e.Result.DirtyVars
+	}
+	return Attempt{Saved: e.saved, Scopes: e.scopes, Updates: updates}.secrets()
 }
 
 // AssertionRecords converts assertion results for an execution record.

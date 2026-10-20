@@ -3,10 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 
@@ -23,8 +25,13 @@ func HistoryCommand(db storage.DB) *cli.Command {
 				Usage:   "Limit number of entries",
 				Value:   10,
 			},
+			&cli.BoolFlag{
+				Name:    "json",
+				Aliases: []string{"j"},
+				Usage:   "JSON output",
+			},
 		},
-		Action: func(ctx context.Context, c *cli.Command) error {
+		Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
 			if args.Len() < 1 {
 				return fmt.Errorf("request name argument is required")
@@ -40,6 +47,14 @@ func HistoryCommand(db storage.DB) *cli.Command {
 			history, err := db.GetHistory(req.ID, limit)
 			if err != nil {
 				return fmt.Errorf("failed to get history: %w", err)
+			}
+
+			if jsonOutput(c) {
+				out := make([]recordSummary, 0, len(history))
+				for _, h := range history {
+					out = append(out, recordSummaryOf(h))
+				}
+				return writeJSON(os.Stdout, out)
 			}
 
 			if len(history) == 0 {
@@ -80,7 +95,37 @@ func HistoryCommand(db storage.DB) *cli.Command {
 			fmt.Println("└────────────────────────────────────────────────────────────────────┘")
 
 			return nil
-		},
+		}),
+	}
+}
+
+// recordSummary is one execution record in `history --json` and
+// `timeline --json`. Error is masked as stored.
+type recordSummary struct {
+	ID           string `json:"id"`
+	ShortID      string `json:"short_id"`
+	Request      string `json:"request,omitempty"`
+	Time         string `json:"time"`
+	OK           bool   `json:"ok"`
+	Status       int    `json:"status,omitempty"`
+	DurationMs   int64  `json:"duration_ms"`
+	SizeBytes    int64  `json:"size_bytes"`
+	Error        string `json:"error,omitempty"`
+	FailurePhase string `json:"failure_phase,omitempty"`
+}
+
+func recordSummaryOf(h *types.ExecutionHistory) recordSummary {
+	return recordSummary{
+		ID:           h.ID,
+		ShortID:      h.ShortID(),
+		Request:      h.RequestName,
+		Time:         h.Time().Format(time.RFC3339),
+		OK:           !h.Failed(),
+		Status:       h.StatusCode,
+		DurationMs:   h.DurationMs,
+		SizeBytes:    h.SizeBytes,
+		Error:        h.Error,
+		FailurePhase: h.FailurePhase,
 	}
 }
 

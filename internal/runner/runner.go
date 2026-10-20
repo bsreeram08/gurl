@@ -74,7 +74,12 @@ type RequestResult struct {
 	DryRunWarnings    []string
 	// DryRunProblems are the resolution problems of a dry run other than
 	// missing variables (those are DryRunWarnings).
-	DryRunProblems      resolve.Problems
+	DryRunProblems resolve.Problems
+	// Problems are the resolution problems that stopped the request from
+	// being sent (FailurePhaseRequestBuild) or, in a dry run, would stop it:
+	// every problem, minus missing variables an earlier step's extract plans
+	// to provide.
+	Problems            resolve.Problems
 	SkipReason          string
 	FailurePhase        string
 	NextRequestOverride string
@@ -587,6 +592,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 		result.PlannedExtracts = append([]types.Extract(nil), effectiveReq.Extracts...)
 		result.PlannedVarSources, result.DryRunWarnings = planMissingVars(problems.Missing(), plannedVarSources)
 		result.DryRunProblems = problems.Others()
+		result.Problems = unplannedProblems(problems, result.PlannedVarSources)
 		result.DirtyVars = nonEmptyMap(dirtyVars)
 		result.DirtyVarOrigins = nonEmptyOriginMap(dirtyVarOrigins)
 		result.Duration = time.Since(start)
@@ -599,6 +605,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	if err := problems.Err(); err != nil {
 		result.Error = fmt.Sprintf("variable substitution failed: %v", err)
 		result.FailurePhase = FailurePhaseRequestBuild
+		result.Problems = problems
 		result.DirtyVars = nonEmptyMap(dirtyVars)
 		result.DirtyVarOrigins = nonEmptyOriginMap(dirtyVarOrigins)
 		return execution
@@ -703,6 +710,19 @@ func planMissingVars(missing []string, plannedVarSources map[string]string) (map
 		warnings = append(warnings, fmt.Sprintf("unresolved {{%s}}", name))
 	}
 	return sources, warnings
+}
+
+// unplannedProblems returns problems without the missing variables that
+// planned names as provided by an earlier step.
+func unplannedProblems(problems resolve.Problems, planned map[string]string) resolve.Problems {
+	var out resolve.Problems
+	for _, p := range problems {
+		if p.Kind == resolve.ProblemMissing && planned[p.Variable] != "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 func requestIndexByName(requests []*types.SavedRequest) map[string]int {

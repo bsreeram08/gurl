@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
@@ -120,7 +121,7 @@ func TestDiffCommand(t *testing.T) {
 				tt.setup(db)
 			}
 
-			cmd := DiffCommand(db)
+			cmd := DiffCommand(db, env.NewMemoryStore())
 			fullArgs := append([]string{"diff"}, tt.args...)
 
 			err := cmd.Run(context.Background(), fullArgs)

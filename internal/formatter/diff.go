@@ -204,3 +204,58 @@ func CombineDiffs(diffs ...string) string {
 	}
 	return strings.TrimSpace(buf.String())
 }
+
+// DiffResult is a structured diff of two response bodies, from a (before) to
+// b (after).
+type DiffResult struct {
+	// Format is "json" when both bodies are valid JSON, otherwise "text".
+	Format    string `json:"format"`
+	Identical bool   `json:"identical"`
+	// Changes are RFC 6902 operations turning a into b (json format).
+	Changes []JSONChange `json:"changes,omitempty"`
+	// Text is the character diff, equal runs included (text format).
+	Text []TextChange `json:"text,omitempty"`
+}
+
+// JSONChange is one RFC 6902 operation, with the replaced or removed value.
+type JSONChange struct {
+	Op       string `json:"op"`
+	Path     string `json:"path"`
+	From     string `json:"from,omitempty"`
+	OldValue any    `json:"old_value,omitempty"`
+	Value    any    `json:"value,omitempty"`
+}
+
+// TextChange is one run of a text diff: "equal", "insert" or "delete".
+type TextChange struct {
+	Op   string `json:"op"`
+	Text string `json:"text"`
+}
+
+// Diff compares two response bodies structurally.
+func Diff(a, b []byte) DiffResult {
+	if json.Valid(a) && json.Valid(b) {
+		if patch, err := jsondiff.CompareJSON(a, b); err == nil {
+			result := DiffResult{Format: "json", Identical: len(patch) == 0}
+			for _, op := range patch {
+				result.Changes = append(result.Changes, JSONChange{Op: op.Type, Path: op.Path, From: op.From, OldValue: op.OldValue, Value: op.Value})
+			}
+			return result
+		}
+	}
+	result := DiffResult{Format: "text", Identical: true}
+	dmp := diffmatchpatch.New()
+	for _, d := range dmp.DiffMain(string(a), string(b), true) {
+		op := "equal"
+		switch d.Type {
+		case diffmatchpatch.DiffInsert:
+			op = "insert"
+			result.Identical = false
+		case diffmatchpatch.DiffDelete:
+			op = "delete"
+			result.Identical = false
+		}
+		result.Text = append(result.Text, TextChange{Op: op, Text: d.Text})
+	}
+	return result
+}

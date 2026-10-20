@@ -95,17 +95,38 @@ func run() error {
 		envStorage = env.NewEnvStorageWithPathAndProject(baseDB.Path(), proj)
 	}
 
-	app := &cli.Command{
+	app := newApp(db, envStorage, cookieProvider)
+
+	args := os.Args
+	if len(args) > 0 && invokedAsAgent(args[0]) {
+		args = append([]string{args[0], "--agent"}, args[1:]...)
+	}
+	agent := commands.AgentRequested(args)
+	app.ExitErrHandler = commands.ExitErrHandler(agent)
+	if agent {
+		commands.QuietUsageErrors(app)
+	}
+
+	// Set up signal handling for graceful shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	return app.Run(ctx, args)
+}
+
+// newApp builds the gurl command tree.
+func newApp(db storage.DB, envStorage env.Store, cookieProvider commands.CookieJarProvider) *cli.Command {
+	return &cli.Command{
 		Name:                  "gurl",
 		Usage:                 "Smart curl saver - Your named request library",
 		Version:               version,
 		EnableShellCompletion: true,
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.StringFlag{
 				Name:  "project-dir",
 				Usage: "Project root containing .gurl file storage",
 			},
-		},
+		}, commands.GlobalFlags()...),
 		Description: `gurl replaces your chaotic curl history with an intelligent, 
 named request library. Save requests with memorable names 
 and run them whenever you need.
@@ -124,8 +145,8 @@ Quick Start:
 			commands.RenameCommand(db),
 			commands.HistoryCommand(db),
 			commands.TimelineCommand(db),
-			commands.DiffCommand(db),
-			commands.DiagCommand(db),
+			commands.DiffCommand(db, envStorage),
+			commands.DiagCommand(db, envStorage),
 			commands.DetectCommand(db),
 			commands.EditCommand(db),
 			commands.ShowCommand(db),
@@ -146,14 +167,24 @@ Quick Start:
 			websocket.WSCommand(db),
 			sse.SSECommand(db),
 			commands.CookiesCommand(cookieProvider),
+			commands.DocsCommand(),
 		},
 	}
+}
 
-	// Set up signal handling for graceful shutdown
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+// agentBinaryName is the program name that turns on agent mode, so
+// `ln -s "$(command -v gurl)" ~/.local/bin/agentgurl` gives agents a gurl
+// that always runs with --agent.
+const agentBinaryName = "agentgurl"
 
-	return app.Run(ctx, os.Args)
+// invokedAsAgent reports whether gurl was started as agentgurl (or
+// agentgurl.exe).
+func invokedAsAgent(arg0 string) bool {
+	name := filepath.Base(arg0)
+	if ext := filepath.Ext(name); strings.EqualFold(ext, ".exe") {
+		name = strings.TrimSuffix(name, ext)
+	}
+	return strings.EqualFold(name, agentBinaryName)
 }
 
 func projectDirFromArgs(args []string) string {

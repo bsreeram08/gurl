@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -39,8 +40,13 @@ func TimelineCommand(db storage.DB) *cli.Command {
 				Usage:   "Limit number of entries",
 				Value:   50,
 			},
+			&cli.BoolFlag{
+				Name:    "json",
+				Aliases: []string{"j"},
+				Usage:   "JSON output",
+			},
 		},
-		Action: func(ctx context.Context, c *cli.Command) error {
+		Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
 			limit := c.Int("limit")
 			filter := c.String("filter")
 
@@ -70,14 +76,24 @@ func TimelineCommand(db storage.DB) *cli.Command {
 			// Sort by timestamp (most recent first)
 			sortByTimestamp(entries)
 
-			if len(entries) == 0 {
-				fmt.Println("No execution history found.")
-				return nil
-			}
-
 			// Apply limit
 			if len(entries) > limit {
 				entries = entries[:limit]
+			}
+
+			if jsonOutput(c) {
+				out := make([]recordSummary, 0, len(entries))
+				for _, e := range entries {
+					summary := recordSummaryOf(e.history)
+					summary.Request = e.requestName
+					out = append(out, summary)
+				}
+				return writeJSON(os.Stdout, out)
+			}
+
+			if len(entries) == 0 {
+				fmt.Println("No execution history found.")
+				return nil
 			}
 
 			fmt.Println("┌─ Execution Timeline ─────────────────────────────────────┐")
@@ -101,7 +117,7 @@ func TimelineCommand(db storage.DB) *cli.Command {
 			fmt.Println("└────────────────────────────────────────────────────────────┘")
 
 			return nil
-		},
+		}),
 	}
 }
 

@@ -71,7 +71,10 @@ func ListCommand(db storage.DB) *cli.Command {
 				Value:   "updated",
 			},
 		},
-		Action: func(ctx context.Context, c *cli.Command) error {
+		Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
+			if err := rejectReveal(c); err != nil {
+				return err
+			}
 			sortVal := c.String("sort")
 			if sortVal != "name" && sortVal != "updated" && sortVal != "collection" {
 				return fmt.Errorf("invalid sort '%s': must be one of name, updated, collection", sortVal)
@@ -89,7 +92,7 @@ func ListCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("failed to list requests: %w", err)
 			}
 
-			if c.Bool("json") {
+			if jsonOutput(c) {
 				out := requests
 				if !c.Bool("reveal") {
 					out = make([]*types.SavedRequest, len(requests))
@@ -122,7 +125,7 @@ func ListCommand(db storage.DB) *cli.Command {
 			fmt.Printf("\n  %d requests\n", len(requests))
 
 			return nil
-		},
+		}),
 	}
 }
 

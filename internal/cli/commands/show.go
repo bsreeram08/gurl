@@ -37,13 +37,16 @@ func ShowCommand(db storage.DB) *cli.Command {
 				Usage: "Show secret header and auth values instead of masking them",
 			},
 		},
-		Action: func(ctx context.Context, c *cli.Command) error {
+		Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
 			if args.Len() < 1 {
 				return fmt.Errorf("request name argument is required")
 			}
 			name := args.Get(0)
 
+			if err := rejectReveal(c); err != nil {
+				return err
+			}
 			req, err := db.GetRequestByName(name)
 			if err != nil {
 				return fmt.Errorf("request not found: %s", name)
@@ -53,7 +56,7 @@ func ShowCommand(db storage.DB) *cli.Command {
 			}
 
 			format := c.String("format")
-			if c.Bool("json") {
+			if jsonOutput(c) {
 				format = "json"
 			}
 			if format != "pretty" && format != "json" && format != "curl" {
@@ -135,6 +138,6 @@ func ShowCommand(db storage.DB) *cli.Command {
 			}
 
 			return nil
-		},
+		}),
 	}
 }

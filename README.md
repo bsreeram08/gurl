@@ -135,6 +135,8 @@ gurl list
 
 gurl is designed to give coding agents a safe, repeatable way to inspect and exercise APIs without putting credentials in the model context.
 
+**Start here:** `gurl docs` prints one compact reference (about 25KB): every command and subcommand with its arguments and flags (types, defaults, aliases), generated from the binary itself, plus placeholders, scope precedence, extract rules, `--persist`, the `run --json` shape and exit codes. `gurl docs run` narrows it to one command, and `gurl docs --json` returns `{"commands":[{"path","usage","args","flags":[{"name","aliases","type","default","usage"}]}],"sections":{...}}`.
+
 The agent should operate on names, environments, collections, and templates:
 
 ```bash
@@ -149,7 +151,7 @@ gurl run "get-user" --var API_KEY=sk-live-...
 
 Recommended agent workflow:
 
-1. Discover what exists with `gurl list`, `gurl env list`, and `gurl collection list`.
+1. Read `gurl docs`, then discover what exists with `gurl list`, `gurl env list`, and `gurl collection list`.
 2. Inspect before running with `gurl show <request>` or `gurl collection show <collection>`.
 3. Prefer named environments and collections over ad-hoc `--var` secrets.
 4. Use `--dry-run` before collection runs to see request order, variable sources, and unresolved templates.
@@ -189,6 +191,66 @@ gurl collection import payments-api.gurl --passphrase "$TEAM_SECRET"
 ```
 
 For CI or non-interactive agents, provide collection import/unlock passphrases with `GURL_IMPORT_PASSPHRASE` or `--passphrase`.
+
+### Agent mode
+
+Use one switch, any of these three:
+
+```bash
+gurl --agent run "get-user" --env staging     # flag, any position
+GURL_AGENT=1 gurl run "get-user"              # environment variable
+ln -s "$(command -v gurl)" ~/.local/bin/agentgurl
+agentgurl run "get-user"                      # binary named agentgurl
+```
+
+Agent mode:
+
+- turns on `--json` for every command that has it (`run`, `run --dry-run`, `diag`, `list`, `show`, `env list`/`show`, `history`, `timeline`, `diff`, `collection list`/`show`, `docs`)
+- turns on `--no-input`
+- masks secrets strictly: `--reveal` is refused, `paste` and `codegen --clipboard` are refused, and secret values are also masked in response bodies, response headers and errors. Secret values here means secret or credential-looking variables and literal secrets in the saved request, including their URL- and JSON-escaped forms. Outside agent mode, `run --json` shows bodies as received, like execution records.
+
+Every error is printed on stdout as `{"ok":false,"error":"..."}`, unless it is already part of an execution object. The message also goes to stderr.
+
+`--no-input` (or `GURL_NO_INPUT=1`; implied by `--json` and `--agent`) never prompts. A command that would ask fails and names what to pass instead, for example `request name is required: gurl run <name>`, `collection "x" does not exist; create it first with 'gurl collection create x'`, or `passphrase required: pass --passphrase or set GURL_IMPORT_PASSPHRASE`. `gurl shell` refuses to start.
+
+### `run --json`
+
+stdout carries only JSON: one object for a single run, and NDJSON (one line per step or row) for `--chain` and `--data`. With `--persist`, `persisted` is on the last line. Status lines, notes and assertion summaries are not printed, and the failure notice is dropped because `id` is in the object. Empty fields are omitted:
+
+```json
+{"id":"7fd1254b-5a17-48b1-ad64-ac7f874d365e","short_id":"7fd1254b","request":"get-user","environment":"dev",
+ "ok":true,"method":"POST","url":"http://127.0.0.1:18731/users?api_key=*****","status":200,"status_text":"OK",
+ "duration_ms":4,"size_bytes":144,"response_headers":{"Content-Type":"application/json","Set-Cookie":"*****"},
+ "body":{"id":"u-123"},"extracted":{"uid":"u-123"}}
+```
+
+(This example is wrapped here; the real output is one line.)
+
+- `ok` is true when there was no error, no failed assertion and the status was 2xx.
+- `body` is the parsed JSON value when the body is valid JSON, otherwise a string.
+- A failed attempt has `error` and `failure_phase`: `request_build`, `http`, `extraction`, `assertion`, `status`, `pre_request_script`, `post_response_script`, `run_if` or `next_request`.
+- Unresolvable requests list structured `problems`:
+
+```json
+{"ok":false,"failure_phase":"request_build","error":"variable substitution failed: missing required variables: API_KEY",
+ "problems":[{"kind":"missing","variable":"API_KEY","location":"header Authorization","message":"missing required variable \"API_KEY\""}], ...}
+```
+
+Problem kinds are `missing`, `leftover_placeholder`, `bad_type`, `unknown_dynamic` and `auth`.
+
+`run --dry-run --json` prints `{"dry_run":true,"ok":...,"method","url","headers":[{"key","value"}],"body","extracts":[{"name","source"}],"problems":[...]}` with secrets masked. Nothing is sent or recorded, and it exits 1 when there are problems.
+
+Pass the `id` or `short_id` to `gurl diag <id> --json` to see the request as sent, where each variable came from, and what changed since the last success.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success. A non-2xx response is still 0 unless `--fail` is passed (`ok` is false in JSON). |
+| 1 | Error: request or environment not found, resolution problems, transport error, script or extraction error, failed assertion, non-2xx with `--fail`, dry run with problems, unknown flag |
+| 2 | Usage: missing argument with `--no-input`, conflicting flags (`--persist --dry-run`), `--reveal` in agent mode, `shell` with `--no-input` |
+
+`gurl exec --env NAME -- <cmd>` runs a command with the environment's variables in its process environment, without printing them, and exits with the command's exit code.
 
 ## Real Workflows
 
@@ -324,6 +386,7 @@ gurl codegen "create-order" --lang curl
 | `codegen` | Generate code (curl, Go, Python, JavaScript) |
 | `exec` | Run a command with an environment's variables injected |
 | `extract` | Test extraction rules against a sample response |
+| `docs` | Compact reference of every command, flag and concept (`--json` for agents) |
 | `tui` | Launch interactive TUI (not functional yet) |
 | `update` | Self-update to latest release |
 
@@ -383,7 +446,7 @@ request failed: HTTP 500 (id: 078b9896) — inspect with: gurl diag 078b9896
 $ gurl diag 078b9896          # or: gurl diag --id 078b9896; any unique prefix works
 ```
 
-`diag` shows the request as sent, the variables and where each came from, the response (`--full` for bodies over 4KB), assertions, and what changed since the last successful run of the same request: status, duration, URL/headers/body, variable values and origins, response headers and top-level JSON fields. `--json` prints the same as JSON. `gurl history <name>` lists record ids.
+`diag` shows the request as sent, the variables and where each came from, the response (`--full` for bodies over 4KB), assertions, and what changed since the last successful run of the same request: status, duration, URL/headers/body, variable values and origins, response headers and top-level JSON fields. `--json` prints the same as JSON. `gurl history <name>` lists record ids. With `run --json` there is no notice on stderr: the record id is in the JSON object (`id`, `short_id`).
 
 Records never contain secrets: secret and credential-looking values are masked before saving, so secret variables are compared by origin only. Response bodies are stored as received.
 

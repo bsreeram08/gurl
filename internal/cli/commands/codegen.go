@@ -41,6 +41,12 @@ func CodegenCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("request name argument is required")
 			}
 			name := args.Get(0)
+			if err := rejectReveal(c); err != nil {
+				return err
+			}
+			if agentMode(c) && c.Bool("clipboard") {
+				return cli.Exit("--clipboard is not allowed in agent mode; codegen prints masked code to stdout", 2)
+			}
 
 			req, err := db.GetRequestByName(name)
 			if err != nil {
