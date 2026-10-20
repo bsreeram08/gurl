@@ -8,13 +8,14 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/sreeram/gurl/internal/env"
 	"github.com/urfave/cli/v3"
 )
 
 // ExecCommand creates the exec command, which runs a child process with an
 // environment's variables injected into its process environment. Values are
 // never printed.
-func ExecCommand(db EnvStorage) *cli.Command {
+func ExecCommand(db env.Store) *cli.Command {
 	// Stop flag parsing at the first positional so the child's own flags
 	// (e.g. sh -c) are passed through even without "--".
 	stopAtCommand := 1

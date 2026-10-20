@@ -12,6 +12,7 @@ import (
 	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/internal/storage/memstore"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 )
@@ -741,5 +742,54 @@ func TestRunCommandDryRunMasksOverriddenSecretReachedThroughAlias(t *testing.T) 
 	})
 	if strings.Contains(output, "sk_live_alias") {
 		t.Fatalf("overridden secret leaked through alias:\n%s", output)
+	}
+}
+
+func TestRunCommandSingleRequestUsesCollectionScope(t *testing.T) {
+	var gotPath, gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotAuth = r.URL.Path, r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	db := memstore.New()
+	payments := types.NewCollection("payments")
+	payments.SetVariable("BASE_URL", server.URL)
+	payments.SetVariable("REGION", "eu")
+	payments.SetSecretVariable("TOKEN", "collection-token")
+	if err := db.SaveCollection(payments); err != nil {
+		t.Fatalf("SaveCollection: %v", err)
+	}
+	if err := db.SaveRequest(&types.SavedRequest{
+		Name:       "charge",
+		Method:     "GET",
+		URL:        "{{BASE_URL}}/{{REGION}}/charge",
+		Headers:    []types.Header{{Key: "Authorization", Value: "Bearer {{TOKEN}}"}},
+		Collection: "payments",
+	}); err != nil {
+		t.Fatalf("SaveRequest: %v", err)
+	}
+
+	envs := env.NewMemoryStore()
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("BASE_URL", "http://env-should-lose.invalid")
+	beta.SetVariable("REGION", "us")
+	if err := envs.SaveEnv(beta); err != nil {
+		t.Fatalf("SaveEnv: %v", err)
+	}
+
+	// Scopes: environment < collection < CLI.
+	cmd := RunCommand(db, envs)
+	captureStdoutAndStderr(t, func() {
+		if err := cmd.Run(context.Background(), []string{"run", "charge", "--env", "beta", "--var", "REGION=apac"}); err != nil {
+			t.Fatalf("run failed: %v", err)
+		}
+	})
+	if gotPath != "/apac/charge" {
+		t.Errorf("path = %q, want /apac/charge (collection BASE_URL, CLI REGION)", gotPath)
+	}
+	if gotAuth != "Bearer collection-token" {
+		t.Errorf("Authorization = %q, want collection token", gotAuth)
 	}
 }

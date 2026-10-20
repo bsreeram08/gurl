@@ -23,16 +23,9 @@ import (
 	"golang.org/x/term"
 )
 
-type shellEnvStore interface {
-	GetEnvByName(name string) (*env.Environment, error)
-	GetActiveEnv() (string, error)
-	ListEnvs() ([]*env.Environment, error)
-	SetActiveEnv(name string) error
-}
-
 type shellSession struct {
 	db            storage.DB
-	envStorage    shellEnvStore
+	envStorage    env.Store
 	reader        *bufio.Reader
 	out           io.Writer
 	inFile        *os.File
@@ -115,7 +108,7 @@ var shellHelpTopics = []shellCommandHelp{
 	{Name: "quit", Usage: "quit", Summary: "Exit the shell", Examples: []string{"quit"}},
 }
 
-func ShellCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
+func ShellCommand(db storage.DB, envStorage env.Store) *cli.Command {
 	return &cli.Command{
 		Name:    "shell",
 		Aliases: []string{"sh", "repl"},
@@ -160,7 +153,7 @@ executing requests without fullscreen keybindings or terminal key conflicts.`,
 	}
 }
 
-func newShellSession(db storage.DB, envStorage shellEnvStore, in io.Reader, out io.Writer, outputFormat string) *shellSession {
+func newShellSession(db storage.DB, envStorage env.Store, in io.Reader, out io.Writer, outputFormat string) *shellSession {
 	session := &shellSession{
 		db:           db,
 		envStorage:   envStorage,
@@ -231,11 +224,7 @@ func (s *shellSession) Run(ctx context.Context) error {
 }
 
 func (s *shellSession) startFileWatcher(ctx context.Context) *storage.CollectionWatcher {
-	store, ok := s.db.(storage.CollectionWatcherStore)
-	if !ok {
-		return nil
-	}
-	watcher, err := store.WatchCollections(ctx, storage.CollectionWatchOptions{})
+	watcher, err := s.db.WatchCollections(ctx, storage.CollectionWatchOptions{})
 	if err != nil {
 		return nil
 	}

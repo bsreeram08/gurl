@@ -251,4 +251,3 @@ func collectionWatchSnapshot(roots []string) (map[string]collectionWatchFile, er
 }
 
 var _ CollectionWatcherStore = (*FileStore)(nil)
-var _ CollectionWatcherStore = (*ProjectDB)(nil)

@@ -276,12 +276,7 @@ func saveRequestWithCollectionGuard(db storage.DB, req *types.SavedRequest) erro
 		return db.SaveRequest(req)
 	}
 
-	store, ok := db.(storage.CollectionStore)
-	if !ok {
-		return db.SaveRequest(req)
-	}
-
-	if _, err := store.GetCollectionByName(req.Collection); err == nil {
+	if _, err := db.GetCollectionByName(req.Collection); err == nil {
 		return db.SaveRequest(req)
 	} else if storage.IsCollectionLocked(err) {
 		return db.SaveRequest(req)
@@ -289,7 +284,7 @@ func saveRequestWithCollectionGuard(db storage.DB, req *types.SavedRequest) erro
 		return err
 	}
 
-	if err := confirmCreateCollection(store, req.Collection); err != nil {
+	if err := confirmCreateCollection(db, req.Collection); err != nil {
 		return err
 	}
 	return db.SaveRequest(req)

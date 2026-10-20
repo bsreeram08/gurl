@@ -11,11 +11,13 @@ import (
 
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/internal/storage/memstore"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
 // seqMockDB implements storage.DB for testing
 type seqMockDB struct {
+	memstore.DB
 	requests map[string]*types.SavedRequest
 	names    map[string]string
 }
@@ -100,20 +102,6 @@ func (m *seqMockDB) ListFolderRecursive(path string) ([]*types.SavedRequest, err
 func (m *seqMockDB) DeleteFolder(path string) error                                 { return nil }
 func (m *seqMockDB) GetAllFolders() ([]string, error)                               { return nil, nil }
 
-// seqMockEnvStorage implements env.EnvStorage for testing
-type seqMockEnvStorage struct{}
-
-func newSeqMockEnvStorage() *seqMockEnvStorage {
-	return &seqMockEnvStorage{}
-}
-func (m *seqMockEnvStorage) GetEnvByName(name string) (*env.Environment, error) {
-	return nil, errors.New("not found")
-}
-func (m *seqMockEnvStorage) GetActiveEnv() (string, error)         { return "", nil }
-func (m *seqMockEnvStorage) SaveEnv(e *env.Environment) error      { return nil }
-func (m *seqMockEnvStorage) ListEnvs() ([]*env.Environment, error) { return nil, nil }
-func (m *seqMockEnvStorage) DeleteEnv(name string) error           { return nil }
-
 // sortRequests is a helper to sort requests by SortOrder then by Name
 func sortRequests(reqs []*types.SavedRequest) []*types.SavedRequest {
 	sorted := make([]*types.SavedRequest, len(reqs))
@@ -179,7 +167,7 @@ func TestSequence_Explicit(t *testing.T) {
 
 func TestSequence_InCollection(t *testing.T) {
 	db := newSeqMockDB()
-	envStorage := newSeqMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -236,7 +224,7 @@ func TestSequence_InCollection(t *testing.T) {
 
 func TestSequence_Unordered(t *testing.T) {
 	db := newSeqMockDB()
-	envStorage := newSeqMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -305,7 +293,7 @@ func TestSequence_Unordered(t *testing.T) {
 
 func TestSequence_Reorder(t *testing.T) {
 	db := newSeqMockDB()
-	envStorage := newSeqMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
