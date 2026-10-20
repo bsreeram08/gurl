@@ -1,4 +1,4 @@
-# AGENT.md
+# AGENTS.md
 
 This guide is for AI coding agents working **on** the gurl repository. If you want to **use** gurl, run `gurl docs` instead.
 
@@ -50,3 +50,17 @@ GURL_DB_PATH=/tmp/g.db GURL_COOKIE_DB_PATH=/tmp/gc.db ./gurl ...   # manual runs
 ## Commits
 
 Conventional prefixes (`feat(scope):`, `fix:`, `docs:`, `test:`, `refactor:`, `ci:`, `chore:`). **No `Co-Authored-By` trailers.** See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR checklist and release process.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for bsreeram08/gurl, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default labels: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
