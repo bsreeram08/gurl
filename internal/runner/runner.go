@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"sort"
 	"time"
@@ -127,8 +128,19 @@ type Runner struct {
 	auth       *auth.Registry
 }
 
-func NewRunner(db storage.DB, envStorage env.Store) *Runner {
-	return &Runner{
+// Option configures a Runner.
+type Option func(*Runner)
+
+// WithCookieJar makes the runner store response cookies in jar and send
+// matching cookies on later requests. A nil jar disables cookie handling.
+func WithCookieJar(jar http.CookieJar) Option {
+	return func(r *Runner) {
+		r.client.Jar = jar
+	}
+}
+
+func NewRunner(db storage.DB, envStorage env.Store, opts ...Option) *Runner {
+	r := &Runner{
 		db:         db,
 		envStorage: envStorage,
 		client:     client.NewClient(),
@@ -136,6 +148,10 @@ func NewRunner(db storage.DB, envStorage env.Store) *Runner {
 		extractor:  extract.NewExtractor(),
 		auth:       auth.BuiltinRegistry(),
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 func (r *Runner) Run(ctx context.Context, config RunConfig) ([]RunResult, error) {

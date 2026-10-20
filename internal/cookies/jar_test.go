@@ -1005,3 +1005,40 @@ func TestLMDBCookieDB_Open_CreatesDirIfNeeded(t *testing.T) {
 		t.Errorf("expected database file to exist: %v", err)
 	}
 }
+
+// TestCookieJar_ReloadsHostOnlyCookieForHostWithPort checks that a cookie set
+// by a host with a port is sent again after the jar is reloaded from the
+// database, i.e. by a later gurl process.
+func TestCookieJar_ReloadsHostOnlyCookieForHostWithPort(t *testing.T) {
+	for _, rawURL := range []string{
+		"http://127.0.0.1:18452/login",
+		"http://localhost:8080/login",
+		"http://[::1]:9000/login",
+		"https://api.example.com:8443/login",
+		"https://api.example.com/login",
+	} {
+		t.Run(rawURL, func(t *testing.T) {
+			db := newMockCookieDB()
+			jar1, err := NewCookieJar(db)
+			if err != nil {
+				t.Fatalf("failed to create jar1: %v", err)
+			}
+			u, err := url.Parse(rawURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			jar1.SetCookies(u, []*http.Cookie{{Name: "session", Value: "sess-test-1", Path: "/"}})
+
+			jar2, err := NewCookieJar(db)
+			if err != nil {
+				t.Fatalf("failed to create jar2: %v", err)
+			}
+			next := *u
+			next.Path = "/me"
+			got := jar2.Cookies(&next)
+			if len(got) != 1 || got[0].Value != "sess-test-1" {
+				t.Fatalf("reloaded jar sends %v to %s, want session=sess-test-1", got, next.String())
+			}
+		})
+	}
+}

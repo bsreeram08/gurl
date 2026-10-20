@@ -95,21 +95,32 @@ func (c *CookieJar) loadFromDB() error {
 	}
 
 	for _, e := range entries {
-		u := &url.URL{Scheme: "https", Host: e.Domain, Path: e.Path}
-		cookies := []*http.Cookie{
-			{
-				Name:     e.Name,
-				Value:    e.Value,
-				Domain:   e.Domain,
-				Path:     e.Path,
-				Secure:   e.Secure,
-				HttpOnly: e.HttpOnly,
-			},
-		}
-		c.jar.SetCookies(u, cookies)
+		u, cookie := storedCookie(e)
+		c.jar.SetCookies(u, []*http.Cookie{cookie})
 	}
 
 	return nil
+}
+
+// storedCookie rebuilds the URL and cookie that replay a stored entry into
+// the in-memory jar. Host-only cookies are stored under the request host,
+// which may carry a port ("127.0.0.1:8080"); cookiejar rejects a domain
+// attribute with a port, so the cookie domain is the bare host name.
+func storedCookie(e *cookieJarEntry) (*url.URL, *http.Cookie) {
+	u := &url.URL{Scheme: "https", Host: e.Domain, Path: e.Path}
+	var expires time.Time
+	if e.Expires > 0 {
+		expires = time.Unix(e.Expires, 0)
+	}
+	return u, &http.Cookie{
+		Name:     e.Name,
+		Value:    e.Value,
+		Domain:   u.Hostname(),
+		Path:     e.Path,
+		Secure:   e.Secure,
+		HttpOnly: e.HttpOnly,
+		Expires:  expires,
+	}
 }
 
 func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
@@ -200,22 +211,8 @@ func (c *CookieJar) DeleteCookie(host, name string) error {
 	}
 
 	for _, e := range entries {
-		u := &url.URL{Scheme: "https", Host: e.Domain, Path: e.Path}
-		var expires time.Time
-		if e.Expires > 0 {
-			expires = time.Unix(e.Expires, 0)
-		}
-		newJar.SetCookies(u, []*http.Cookie{
-			{
-				Name:     e.Name,
-				Value:    e.Value,
-				Domain:   e.Domain,
-				Path:     e.Path,
-				Secure:   e.Secure,
-				HttpOnly: e.HttpOnly,
-				Expires:  expires,
-			},
-		})
+		u, cookie := storedCookie(e)
+		newJar.SetCookies(u, []*http.Cookie{cookie})
 	}
 
 	c.jar = newJar

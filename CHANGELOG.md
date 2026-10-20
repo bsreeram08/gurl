@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `run` (single, `--chain`, `--data`) and `collection run` store response cookies in the shared cookie jar and send them on later requests to the same host, so `cookies list` shows them (masked). Before, the runner used its own client without a jar and dropped every `Set-Cookie`.
+- Stored cookies from a host with a port (`localhost:8080`, `127.0.0.1:3000`) are sent again by later gurl invocations. The jar rejected them when reloading from disk.
+
 ## [v0.7.1] - 2026-10-21
 
 ### Fixed

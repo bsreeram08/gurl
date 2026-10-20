@@ -20,6 +20,7 @@ import (
 	"github.com/sreeram/gurl/internal/protocols/grpc"
 	"github.com/sreeram/gurl/internal/protocols/sse"
 	"github.com/sreeram/gurl/internal/protocols/websocket"
+	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/urfave/cli/v3"
 )
@@ -81,6 +82,7 @@ func run() error {
 	commands.SetPluginRegistry(pluginRegistry)
 
 	cookieProvider := commands.CookieJarProvider(cookieJarHolder{})
+	var runnerOpts []runner.Option
 	if cookieDB, cookieErr := cookies.NewLMDBCookieDB(); cookieErr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: cookie store unavailable: %v\n", cookieErr)
 	} else if jar, jarErr := cookies.NewCookieJar(cookieDB); jarErr != nil {
@@ -88,6 +90,7 @@ func run() error {
 	} else {
 		client.SetDefaultCookieJar(jar)
 		cookieProvider = cookieJarHolder{jar: jar}
+		runnerOpts = append(runnerOpts, runner.WithCookieJar(jar))
 	}
 
 	envStorage := env.NewEnvStorageWithPath(baseDB.Path())
@@ -95,7 +98,7 @@ func run() error {
 		envStorage = env.NewEnvStorageWithPathAndProject(baseDB.Path(), proj)
 	}
 
-	app := newApp(db, envStorage, cookieProvider)
+	app := newApp(db, envStorage, cookieProvider, runnerOpts...)
 
 	args := os.Args
 	if len(args) > 0 && invokedAsAgent(args[0]) {
@@ -115,7 +118,7 @@ func run() error {
 }
 
 // newApp builds the gurl command tree.
-func newApp(db storage.DB, envStorage env.Store, cookieProvider commands.CookieJarProvider) *cli.Command {
+func newApp(db storage.DB, envStorage env.Store, cookieProvider commands.CookieJarProvider, runnerOpts ...runner.Option) *cli.Command {
 	return &cli.Command{
 		Name:                  "gurl",
 		Usage:                 "Smart curl saver - Your named request library",
@@ -139,7 +142,7 @@ Quick Start:
 		Commands: []*cli.Command{
 			commands.InitCommand(),
 			commands.SaveCommand(db),
-			commands.RunCommand(db, envStorage),
+			commands.RunCommand(db, envStorage, runnerOpts...),
 			commands.ListCommand(db),
 			commands.DeleteCommand(db),
 			commands.RenameCommand(db),
@@ -157,7 +160,7 @@ Quick Start:
 			commands.ExecCommand(envStorage),
 			commands.ExtractCommand(),
 			commands.PasteCommand(db),
-			commands.CollectionCommand(db, envStorage),
+			commands.CollectionCommand(db, envStorage, runnerOpts...),
 			commands.SequenceCommand(db),
 			commands.UpdateCommand(),
 			commands.ShellCommand(db, envStorage),

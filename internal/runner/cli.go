@@ -15,7 +15,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func CollectionRunCommand(db storage.DB, envStorage env.Store) *cli.Command {
+func CollectionRunCommand(db storage.DB, envStorage env.Store, opts ...Option) *cli.Command {
 	return &cli.Command{
 		Name:    "run",
 		Aliases: []string{"r"},
@@ -111,7 +111,7 @@ func CollectionRunCommand(db storage.DB, envStorage env.Store) *cli.Command {
 				}
 			}
 
-			runner := NewRunner(db, envStorage)
+			runner := NewRunner(db, envStorage, opts...)
 			envName := c.String("env")
 			if envName == "" && persistEnvName != "" {
 				envName = persistEnvName
