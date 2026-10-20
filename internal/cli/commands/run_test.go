@@ -793,3 +793,31 @@ func TestRunCommandSingleRequestUsesCollectionScope(t *testing.T) {
 		t.Errorf("Authorization = %q, want collection token", gotAuth)
 	}
 }
+
+func TestRunCommandTransportErrorDoesNotLeakQuerySecret(t *testing.T) {
+	db := newMockDB()
+	db.requests["req-leak"] = &types.SavedRequest{
+		ID:     "req-leak",
+		Name:   "leak",
+		URL:    "http://127.0.0.1:1/x?api_key={{API_TOKEN}}",
+		Method: "GET",
+	}
+	db.names["leak"] = "req-leak"
+	envStorage := newRunTestEnvStorage(t)
+	beta := env.NewEnvironment("beta", "")
+	beta.SetSecretVariable("API_TOKEN", "sk_live_transport")
+	if err := envStorage.SaveEnv(beta); err != nil {
+		t.Fatal(err)
+	}
+
+	var runErr error
+	output := captureStdoutAndStderr(t, func() {
+		runErr = RunCommand(db, envStorage).Run(context.Background(), []string{"run", "leak", "--env", "beta"})
+	})
+	if runErr == nil {
+		t.Fatal("expected transport error")
+	}
+	if strings.Contains(runErr.Error(), "sk_live_transport") || strings.Contains(output, "sk_live_transport") {
+		t.Fatalf("secret leaked: err=%v output=%s", runErr, output)
+	}
+}

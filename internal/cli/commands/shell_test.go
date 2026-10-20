@@ -3,9 +3,13 @@ package commands
 import (
 	"bufio"
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/sreeram/gurl/internal/runner"
+	"github.com/sreeram/gurl/internal/storage/memstore"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
@@ -299,5 +303,45 @@ func TestShellResolveForSendResolvesDynamicFunctions(t *testing.T) {
 	}
 	if strings.Contains(clientReq.URL, "{{") || len(clientReq.Headers[0].Value) != 8 {
 		t.Fatalf("dynamic functions not resolved: %+v", clientReq)
+	}
+}
+
+func TestShellSendRecordsEveryAttempt(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	defer server.Close()
+	closed := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	closedURL := closed.URL
+	closed.Close()
+
+	db := memstore.New()
+	req := &types.SavedRequest{Name: "teapot", Method: "GET", URL: server.URL}
+	if err := db.SaveRequest(req); err != nil {
+		t.Fatal(err)
+	}
+	session := newShellSession(db, nil, strings.NewReader(""), &bytes.Buffer{}, "auto")
+	session.current, session.persisted = req, true
+
+	if err := session.handleSend(""); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	req.URL = closedURL
+	if err := session.handleSend(""); err == nil {
+		t.Fatal("expected a transport error")
+	}
+
+	history, err := db.GetHistory(req.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("want 2 records, got %d", len(history))
+	}
+	if history[0].FailurePhase != runner.FailurePhaseHTTP || history[0].Error == "" {
+		t.Errorf("transport error not recorded: %+v", history[0])
+	}
+	if history[1].StatusCode != http.StatusTeapot || history[1].FailurePhase != runner.FailurePhaseStatus {
+		t.Errorf("non-2xx not recorded: %+v", history[1])
 	}
 }

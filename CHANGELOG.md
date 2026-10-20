@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `gurl diag <id>` (or `--id`) inspects one execution: the request as sent, variables with their origins, response, assertions, and what changed since the last successful run of the same request. `--json` and `--full` are supported.
+- Every execution of `run` (single, `--chain` steps, `--data` rows), `collection run` and shell `send` is recorded, including failures before a response: resolution problems, connection errors and timeouts, script errors, assertion failures and non-2xx responses. Dry runs are not recorded.
+- A failed `run` prints `request failed: <reason> (id: …) — inspect with: gurl diag …` to stderr; `collection run` prints the id next to each failed request on stderr.
+- `gurl history` shows each record's short id, and the error for attempts without a response.
+
+### Changed
+
+- Execution records store the method, URL, headers, body, variables, response headers, error, failure phase and assertion results. Secrets are masked before saving; response bodies are stored as before. Older records still load.
+- The masking rules used by `show`, `list --json`, `codegen`, `paste` and `run --dry-run` now live in one package (`internal/redact`), shared with execution records.
+
+### Fixed
+
+- Two runs of a request in the same second no longer overwrite each other's history.
+- `history`, `diff` and `timeline` showed the oldest entries when a request had more than `--limit` entries; they now show the newest.
+
 ## [v0.5.0] - 2026-10-19
 
 ### Added

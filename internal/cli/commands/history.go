@@ -48,18 +48,24 @@ func HistoryCommand(db storage.DB) *cli.Command {
 			}
 
 			// Print table header
-			fmt.Printf("┌─ History: %s ─────────────────────────────────────────┐\n", name)
-			fmt.Println("│  #   STATUS   DURATION   SIZE     TIMESTAMP           │")
-			fmt.Println("├──────────────────────────────────────────────────────────┤")
+			fmt.Printf("┌─ History: %s ───────────────────────────────────────────────────┐\n", name)
+			fmt.Println("│  #   ID         STATUS   DURATION   SIZE     TIMESTAMP           │")
+			fmt.Println("├────────────────────────────────────────────────────────────────────┤")
 
 			for i, h := range history {
 				timestamp := time.Unix(h.Timestamp, 0).Format("2006-01-02 15:04:05")
 				status := fmt.Sprintf("%d", h.StatusCode)
+				if h.StatusCode == 0 && h.Error != "" {
+					status = "ERR"
+				}
 				duration := fmt.Sprintf("%dms", h.DurationMs)
 				size := formatBytes(h.SizeBytes)
 
-				fmt.Printf("│  %d   %-6s   %-8s   %-8s %s\n",
-					i+1, status, duration, size, timestamp)
+				fmt.Printf("│  %d   %-8s   %-6s   %-8s   %-8s %s\n",
+					i+1, h.ShortID(), status, duration, size, timestamp)
+				if h.Error != "" {
+					fmt.Printf("│       ERROR: %s\n", h.Error)
+				}
 
 				if h.Response != "" {
 					preview := h.Response
@@ -71,7 +77,7 @@ func HistoryCommand(db storage.DB) *cli.Command {
 				}
 			}
 
-			fmt.Println("└──────────────────────────────────────────────────────────┘")
+			fmt.Println("└────────────────────────────────────────────────────────────────────┘")
 
 			return nil
 		},

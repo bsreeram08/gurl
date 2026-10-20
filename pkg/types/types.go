@@ -74,7 +74,10 @@ type SavedRequest struct {
 	UpdatedAt    int64       `json:"updated_at"`
 }
 
-// ExecutionHistory represents an execution record
+// ExecutionHistory is an execution record: one attempt to run a saved
+// request, successful or not. Request fields and variable values are stored
+// with secrets already masked; the response body is stored as received.
+// Records written before v0.6 only have the fields up to Timestamp.
 type ExecutionHistory struct {
 	ID         string `json:"id"`
 	RequestID  string `json:"request_id"`
@@ -82,20 +85,85 @@ type ExecutionHistory struct {
 	StatusCode int    `json:"status_code"`
 	DurationMs int64  `json:"duration_ms"`
 	SizeBytes  int64  `json:"size_bytes"`
-	Timestamp  int64  `json:"timestamp"`
+	// Timestamp is in unix seconds; TimestampNs, when set, is the same
+	// instant in unix nanoseconds and orders records within a second.
+	Timestamp   int64 `json:"timestamp"`
+	TimestampNs int64 `json:"timestamp_ns,omitempty"`
+
+	RequestName     string              `json:"request_name,omitempty"`
+	EnvName         string              `json:"env_name,omitempty"`
+	CollectionName  string              `json:"collection_name,omitempty"`
+	Method          string              `json:"method,omitempty"`
+	URL             string              `json:"url,omitempty"`
+	RequestHeaders  []Header            `json:"request_headers,omitempty"`
+	RequestBody     string              `json:"request_body,omitempty"`
+	ResponseHeaders map[string][]string `json:"response_headers,omitempty"`
+	// Error is why the attempt failed before or after the response;
+	// FailurePhase is where (e.g. "request_build", "http", "assertion",
+	// "status" for a non-2xx response).
+	Error        string            `json:"error,omitempty"`
+	FailurePhase string            `json:"failure_phase,omitempty"`
+	Assertions   []AssertionRecord `json:"assertions,omitempty"`
+	Vars         []VarRecord       `json:"vars,omitempty"`
+}
+
+// AssertionRecord is the outcome of one assertion in an execution record.
+type AssertionRecord struct {
+	Name    string `json:"name"`
+	Passed  bool   `json:"passed"`
+	Message string `json:"message,omitempty"`
+}
+
+// VarRecord is one variable the request was resolved against. Value is
+// masked when the variable is secret or sensitively named.
+type VarRecord struct {
+	Name   string `json:"name"`
+	Origin string `json:"origin"`
+	Value  string `json:"value"`
+	Secret bool   `json:"secret,omitempty"`
 }
 
 // NewExecutionHistory creates a new execution history entry
 func NewExecutionHistory(requestID string, response string, statusCode int, durationMs int64, sizeBytes int64) *ExecutionHistory {
+	now := time.Now()
 	return &ExecutionHistory{
-		ID:         uuid.New().String(),
-		RequestID:  requestID,
-		Response:   response,
-		StatusCode: statusCode,
-		DurationMs: durationMs,
-		SizeBytes:  sizeBytes,
-		Timestamp:  time.Now().Unix(),
+		ID:          uuid.New().String(),
+		RequestID:   requestID,
+		Response:    response,
+		StatusCode:  statusCode,
+		DurationMs:  durationMs,
+		SizeBytes:   sizeBytes,
+		Timestamp:   now.Unix(),
+		TimestampNs: now.UnixNano(),
 	}
+}
+
+// Time is when the execution happened, to the nanosecond when known.
+func (h *ExecutionHistory) Time() time.Time {
+	if h.TimestampNs != 0 {
+		return time.Unix(0, h.TimestampNs)
+	}
+	return time.Unix(h.Timestamp, 0)
+}
+
+// Failed reports whether the execution failed: an error, a failure phase
+// (such as a failed assertion) or a non-2xx status.
+func (h *ExecutionHistory) Failed() bool {
+	return h.Error != "" || h.FailurePhase != "" || h.StatusCode < 200 || h.StatusCode >= 300
+}
+
+// ShortID is the first 8 characters of the record ID, enough to name it on
+// the command line.
+func (h *ExecutionHistory) ShortID() string {
+	return ShortID(h.ID)
+}
+
+// ShortID returns the first 8 characters of an execution record ID.
+func ShortID(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
 }
 
 // Collection represents a collection of requests

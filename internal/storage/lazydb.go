@@ -109,6 +109,16 @@ func (db *LazyDB) GetHistory(requestID string, limit int) ([]*types.ExecutionHis
 	return result, err
 }
 
+func (db *LazyDB) GetHistoryByID(idOrPrefix string) (*types.ExecutionHistory, error) {
+	var result *types.ExecutionHistory
+	err := db.withDB(func(lmdb *LMDB) error {
+		var innerErr error
+		result, innerErr = lmdb.GetHistoryByID(idOrPrefix)
+		return innerErr
+	})
+	return result, err
+}
+
 func (db *LazyDB) ListFolder(path string) ([]*types.SavedRequest, error) {
 	var result []*types.SavedRequest
 	err := db.withDB(func(lmdb *LMDB) error {

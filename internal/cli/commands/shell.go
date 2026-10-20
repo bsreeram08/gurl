@@ -17,6 +17,7 @@ import (
 	"github.com/sreeram/gurl/internal/client"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/resolve"
+	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
@@ -887,27 +888,31 @@ func (s *shellSession) handleSend(rest string) error {
 		return err
 	}
 
-	clientReq, err := s.resolveForSend(req, overrides)
+	clientReq, scopes, err := s.resolveAttempt(req, overrides)
+	attempt := runner.Attempt{Saved: req, EnvName: s.activeEnvName, Request: &clientReq, Scopes: scopes}
+	var problems resolve.Problems
+	if errors.As(err, &problems) {
+		attempt.Error = fmt.Sprintf("variable substitution failed: %v", err)
+		attempt.FailurePhase = runner.FailurePhaseRequestBuild
+		s.saveAttempt(attempt)
+	}
 	if err != nil {
 		return err
 	}
 
+	start := time.Now()
 	resp, err := client.Execute(clientReq)
 	if err != nil {
+		attempt.Error = fmt.Sprintf("request failed: %v", err)
+		attempt.FailurePhase = runner.FailurePhaseHTTP
+		attempt.Duration = time.Since(start)
+		s.saveAttempt(attempt)
 		return fmt.Errorf("request failed: %w", err)
 	}
 
-	if s.persisted && req.ID != "" {
-		history := types.NewExecutionHistory(
-			req.ID,
-			string(resp.Body),
-			resp.StatusCode,
-			resp.Duration.Milliseconds(),
-			resp.Size,
-		)
-		if err := s.db.SaveHistory(history); err != nil {
-			return fmt.Errorf("failed to save history: %w", err)
-		}
+	attempt.Response = &resp
+	if err := s.saveAttempt(attempt); err != nil {
+		return fmt.Errorf("failed to save history: %w", err)
 	}
 
 	format := s.outputFormat
@@ -1021,9 +1026,26 @@ func (s *shellSession) envScope() (map[string]string, map[string]bool) {
 // variable defaults sit under the active environment; overrides are the CLI
 // scope. When the only problems are missing variables, the user is asked for
 // them and resolution is retried.
+// saveAttempt stores the execution record of attempt when the open request
+// is saved; unsaved requests have no history.
+func (s *shellSession) saveAttempt(attempt runner.Attempt) error {
+	if !s.persisted || attempt.Saved.ID == "" {
+		return nil
+	}
+	return s.db.SaveHistory(attempt.Record())
+}
+
 func (s *shellSession) resolveForSend(req *types.SavedRequest, overrides map[string]string) (client.Request, error) {
+	clientReq, _, err := s.resolveAttempt(req, overrides)
+	return clientReq, err
+}
+
+// resolveAttempt is resolveForSend that also returns the scopes the request
+// was resolved against. On resolution problems the error is resolve.Problems
+// and the request is filled in as far as possible.
+func (s *shellSession) resolveAttempt(req *types.SavedRequest, overrides map[string]string) (client.Request, resolve.Scopes, error) {
 	if req == nil {
-		return client.Request{}, fmt.Errorf("no request is open")
+		return client.Request{}, resolve.Scopes{}, fmt.Errorf("no request is open")
 	}
 	execReq := cloneRequest(req)
 	execReq.Method = strings.ToUpper(strings.TrimSpace(execReq.Method))
@@ -1045,23 +1067,23 @@ func (s *shellSession) resolveForSend(req *types.SavedRequest, overrides map[str
 	resolved, problems := resolve.Resolve(execReq, scopes, opts)
 	if missing := problems.Missing(); len(missing) > 0 && len(problems.Others()) == 0 {
 		if err := s.promptForMissingVars(scopes.CLI, missing); err != nil {
-			return client.Request{}, err
+			return client.Request{}, scopes, err
 		}
 		resolved, problems = resolve.Resolve(execReq, scopes, opts)
 	}
 	if err := problems.Err(); err != nil {
-		return client.Request{}, err
+		return resolved.Request, scopes, err
 	}
 
 	clientReq := resolved.Request
 	if execReq.Timeout != "" {
 		timeout, err := time.ParseDuration(execReq.Timeout)
 		if err != nil {
-			return client.Request{}, fmt.Errorf("invalid timeout %q: %w", execReq.Timeout, err)
+			return client.Request{}, scopes, fmt.Errorf("invalid timeout %q: %w", execReq.Timeout, err)
 		}
 		clientReq.Timeout = timeout
 	}
-	return clientReq, nil
+	return clientReq, scopes, nil
 }
 
 func (s *shellSession) selectRequest(requests []*types.SavedRequest, prompt string) (string, error) {

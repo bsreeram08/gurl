@@ -176,6 +176,19 @@ func (db *DB) GetHistory(requestID string, limit int) ([]*types.ExecutionHistory
 	return results, nil
 }
 
+// GetHistoryByID returns the record whose ID is idOrPrefix or starts with
+// it, as in LMDB.
+func (db *DB) GetHistoryByID(idOrPrefix string) (*types.ExecutionHistory, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	h, err := storage.MatchHistoryID(db.history, idOrPrefix)
+	if err != nil {
+		return nil, err
+	}
+	copy := *h
+	return &copy, nil
+}
+
 func (db *DB) ListFolder(path string) ([]*types.SavedRequest, error) {
 	return db.filterRequests(func(req *types.SavedRequest) bool {
 		return req.Folder == path

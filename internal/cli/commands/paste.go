@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/sreeram/gurl/internal/redact"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/urfave/cli/v3"
 )
@@ -34,7 +35,7 @@ func PasteCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("request not found: %s", name)
 			}
 			if !c.Bool("reveal") {
-				req = maskRequestSecrets(req)
+				req = redact.SavedRequest(req)
 			}
 
 			// Build curl command using array form to prevent shell injection

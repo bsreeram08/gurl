@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sreeram/gurl/internal/redact"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
@@ -93,7 +94,7 @@ func ListCommand(db storage.DB) *cli.Command {
 				if !c.Bool("reveal") {
 					out = make([]*types.SavedRequest, len(requests))
 					for i, req := range requests {
-						out[i] = maskRequestSecrets(req)
+						out[i] = redact.SavedRequest(req)
 					}
 				}
 				data, err := json.MarshalIndent(out, "", "  ")

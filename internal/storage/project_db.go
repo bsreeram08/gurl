@@ -148,6 +148,10 @@ func (db *ProjectDB) GetHistory(requestID string, limit int) ([]*types.Execution
 	return db.base.GetHistory(requestID, limit)
 }
 
+func (db *ProjectDB) GetHistoryByID(idOrPrefix string) (*types.ExecutionHistory, error) {
+	return db.base.GetHistoryByID(idOrPrefix)
+}
+
 func (db *ProjectDB) ListFolder(path string) ([]*types.SavedRequest, error) {
 	requests, err := db.ListRequests(nil)
 	if err != nil {

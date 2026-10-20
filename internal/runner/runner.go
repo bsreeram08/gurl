@@ -84,6 +84,15 @@ type SingleRequestExecution struct {
 	Result   *RequestResult
 	Request  *client.Request
 	Response *client.Response
+
+	// For the execution record (see Record): the saved request, the request
+	// as far as it was built (set even when it could not be sent), the
+	// variables it was resolved against, and the scopes, whose runtime
+	// values include script and extracted updates.
+	saved     *types.SavedRequest
+	attempted *client.Request
+	vars      map[string]resolve.Var
+	scopes    resolve.Scopes
 }
 
 const (
@@ -98,6 +107,10 @@ const (
 	FailurePhasePostResponseScript = "post_response_script"
 	FailurePhaseAssertion          = "assertion"
 	FailurePhaseNextRequest        = "next_request"
+	FailurePhaseExtraction         = "extraction"
+	// FailurePhaseStatus marks an execution record whose response was not
+	// 2xx. It only appears in records, never in a RequestResult.
+	FailurePhaseStatus = "status"
 )
 
 type Runner struct {
@@ -394,6 +407,12 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		}
 
 		result.RequestResults = append(result.RequestResults, reqResult)
+		if !config.DryRun {
+			if rec := r.saveRecord(execution, config.Environment); rec != nil && rec.Failed() {
+				id := rec.ShortID()
+				fmt.Fprintf(os.Stderr, "  [FAIL] %s: %s (id: %s) — inspect with: gurl diag %s\n", req.Name, FailureReason(rec), id, id)
+			}
+		}
 		if config.DryRun {
 			step := len(result.RequestResults)
 			for _, plannedExtract := range reqResult.PlannedExtracts {
@@ -499,7 +518,8 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	result := &RequestResult{
 		RequestName: req.Name,
 	}
-	execution := &SingleRequestExecution{Result: result}
+	execution := &SingleRequestExecution{Result: result, saved: req, scopes: scopes}
+	execution.attempted = &client.Request{Method: req.Method, URL: req.URL, Headers: convertHeaders(req.Headers), Body: req.Body}
 
 	dirtyVars := make(map[string]string)
 	dirtyVarOrigins := make(map[string]resolve.Origin)
@@ -554,6 +574,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 		copy.Body = modifiedReq.Body
 		copy.Headers = convertClientHeadersToTypes(modifiedReq.Headers)
 		effectiveReq = &copy
+		execution.attempted = &client.Request{Method: copy.Method, URL: copy.URL, Headers: modifiedReq.Headers, Body: copy.Body}
 	}
 
 	if dryRun {
@@ -573,6 +594,8 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	}
 
 	resolved, problems := resolve.Resolve(effectiveReq, scopes, resolve.Options{Auth: r.auth})
+	execution.attempted = &resolved.Request
+	execution.vars = resolved.Vars
 	if err := problems.Err(); err != nil {
 		result.Error = fmt.Sprintf("variable substitution failed: %v", err)
 		result.FailurePhase = FailurePhaseRequestBuild
@@ -582,6 +605,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	}
 	clientReq := resolved.Request
 	execution.Request = &clientReq
+	execution.attempted = &clientReq
 
 	if effectiveReq.Timeout != "" {
 		if d, err := time.ParseDuration(effectiveReq.Timeout); err == nil && d > 0 {
@@ -593,6 +617,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	if err != nil {
 		result.Error = fmt.Sprintf("request failed: %v", err)
 		result.FailurePhase = FailurePhaseHTTP
+		result.Duration = time.Since(start)
 		result.DirtyVars = nonEmptyMap(dirtyVars)
 		result.DirtyVarOrigins = nonEmptyOriginMap(dirtyVarOrigins)
 		return execution
@@ -606,6 +631,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 		extracted, err := r.extractor.Extract(resp.Body, resp.Headers, effectiveReq.Extracts)
 		if err != nil {
 			result.Error = fmt.Sprintf("extraction failed: %v", err)
+			result.FailurePhase = FailurePhaseExtraction
 			result.DirtyVars = nonEmptyMap(dirtyVars)
 			result.DirtyVarOrigins = nonEmptyOriginMap(dirtyVarOrigins)
 			return execution
