@@ -1,7 +1,7 @@
 ---
-title: "Credential Storage"
-description: "How Gurl stores and encrypts your API credentials"
-weight: 2
+title: "Credential storage"
+description: "How gurl stores and encrypts your API credentials"
+weight: 1
 ---
 
 Gurl separates secret storage from general configuration. Secrets are encrypted at rest using AES-256-GCM with a machine-specific key. General settings live in a plain TOML config file with no credentials.
@@ -9,6 +9,12 @@ Gurl separates secret storage from general configuration. Secrets are encrypted 
 ## Environment Secrets (Encrypted)
 
 Environment variables marked `--secret` are encrypted before storage in both the default database and file-backed project environments under `.gurl/environments/`. This applies to API keys, OAuth tokens, passwords, and any other value you want protected.
+
+Enter secrets without putting them on the command line: `KEY=-` reads the value from stdin, with a no-echo prompt on a terminal.
+
+```bash
+gurl env set prod API_KEY=- --secret API_KEY
+```
 
 **Algorithm**: AES-256-GCM
 
@@ -55,13 +61,17 @@ Saved requests store auth configuration in a goleveldb database at `~/.local/sha
 
 **Database**: goleveldb (LevelDB port, memory-mapped, transactional)
 
-**Auth params**: Values are stored as JSON in `SavedRequest.AuthConfig`. If you put a literal password or token in `--auth-param`, it is saved in the request database. Prefer templates that point at encrypted environment secrets, such as `--auth-param token='{{API_TOKEN}}'`.
+**Auth params**: Values are stored as JSON in `SavedRequest.AuthConfig`. If you put a literal password or token in `--auth-param` (or a literal `Authorization` header, or `?api_key=…` in the URL), it is saved in the request database in plaintext. gurl masks such literals in `show`, `list --json`, `codegen`, `paste` and dry runs (see [Secret masking]({{< relref "/security/header-redaction" >}})), but masking is not encryption. Prefer placeholders that point at encrypted secrets, such as `--auth-param token='{{API_TOKEN}}'`.
 
 **Permissions**: Database file has owner-only permissions by default
 
 At execution time, gurl substitutes templates in auth parameters before the auth handler applies credentials to the outgoing request. Saved auth can be replaced with `gurl edit <name> --auth ...` or cleared with `gurl edit <name> --auth none`.
 
 **Future**: Keychain integration for macOS and Windows is under consideration.
+
+## Execution Records (No Secrets)
+
+Every run is recorded in the same database so failures can be inspected with `gurl diag`. Records never contain secrets: secret and credential-looking values, literal credential headers and sensitive query parameters are masked before the record is written, as are their URL- and JSON-escaped copies in the URL, headers, body, errors and assertion messages. Response bodies are stored as received. See [Secret masking]({{< relref "/security/header-redaction#execution-records-never-store-secrets" >}}).
 
 ## Config File
 
@@ -89,7 +99,7 @@ The TOML config file at `~/.config/gurl/config.toml` or `~/.gurlrc` contains gen
 |---------|----------|-------------------------|
 | Credentials at rest | Env secrets encrypted AES-256-GCM | AI might store in plaintext context |
 | Credentials in transit | Applied to headers by auth handlers | AI might log/expose in prompts |
-| Logs | Sensitive headers redacted | AI might output full headers |
+| Output and records | Secrets masked as `*****` (bodies too in agent mode) | AI might output full headers |
 | Machine key | Per-machine 256-bit key (0600) | AI has no equivalent |
 | Token caching | OAuth2 tokens cached in memory with TTL | AI might expose cached tokens |
 

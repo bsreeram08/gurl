@@ -1,235 +1,254 @@
 ---
 title: "gurl collection"
-description: "Manage request collections"
+description: "Manage collections, their variables, and collection runs"
 ---
 
-# gurl collection
 
-Manage collections for organizing saved requests.
+Group related requests into a collection with its own variables and encrypted secrets, run the whole collection, and share it through git or passphrase-encrypted exports.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl collection [subcommand] [flags]
+gurl collection <subcommand> [flags] [arguments]
 ```
 
-## Description
-
-Collections group related requests together. Use collections to organize requests by project, API, or any other logical grouping.
+Collection variables sit above environment variables in scope precedence (environment < collection < data row < CLI < runtime), and may reference environment keys (`API_URL={{BASE_URL}}/v1`).
 
 ## Subcommands
 
-### list
-
-List all collections.
-
-```bash
-gurl collection list
-```
-
-Aliases: `ls`, `l`
-
-### add
-
-Create a new collection.
-
-```bash
-gurl collection add [name]
-```
-
-Aliases: `create`, `new`
-
-### show
-
-Show requests in a collection.
-
-```bash
-gurl collection show [name]
-```
-
-Aliases: `view`, `info`
-
 ### run
 
-Run every request in a collection.
+Run every request in a collection in sequence order.
 
 ```bash
-gurl collection run [name] [flags]
+gurl collection run <name> [flags]
 ```
-
-Common flags:
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--env` | `-e` | none | Environment to use |
-| `--var` | `-v` | none | Variable as `key=value` |
-| `--data` | `-D` | none | CSV or JSON data file |
-| `--bail` | `-b` | `false` | Stop on first failure |
-| `--assert-bail` | | `false` | Stop on first assertion failure only |
-| `--persist` | | `false` | Persist extracted/script variables back to the selected environment |
-| `--dry-run` | | `false` | Preview collection execution without sending requests |
-| `--reporter` | `-R` | none | Reporter to use: `junit`, `json`, `html`, or `console` |
+| `--bail` | `-b` | `false` | Stop on the first failure |
+| `--assert-bail` | | `false` | Stop on the first assertion failure only |
+| `--persist` | | `false` | Write extracted and script-set variables back to their variable origin |
+| `--dry-run` | | `false` | Preview the run without sending requests |
+| `--verbose` | | `false` | Print request and response headers and bodies for each request |
+| `--iterations` | `-n` | `1` | Number of times to run the collection |
+| `--delay` | `-d` | `0s` | Delay between requests (e.g., `100ms`, `1s`) |
+| `--var` | `-v` | none | Variable as `key=value` (repeatable) |
+| `--data` | `-D` | none | CSV or JSON data file for data-driven iteration |
+| `--reporter` | `-R` | none | Reporter(s): `junit`, `json`, `html`, `console` |
 | `--reporter-output` | `-O` | none | Output directory for reporter files |
+| `--ci` | | `false` | CI mode: treat skipped requests as failures (exit 1) |
+
+Each execution is recorded. For every failed request, the id is printed on stderr: `[FAIL] failing: HTTP 500 (id: 51be33a5) — inspect with: gurl diag 51be33a5`. `--persist` and `--dry-run` cannot be used together.
+
+Aliases: `r`
+
+### show
+
+Show a collection's variables (secrets masked) and requests.
+
+```bash
+gurl collection show <name> [--json]
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--json` | `-j` | `false` | JSON output (secrets masked): `{"name","id","variables":{},"secrets":[],"requests":[{"name","method","url"}]}` |
+
+Aliases: `view`, `info`
+
+### list
+
+List all collections with request and variable counts.
+
+```bash
+gurl collection list [--json]
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--json` | `-j` | `false` | JSON output: `[{"name","requests","variables","updated"}]` |
+
+Aliases: `ls`, `l`
+
+### create
+
+Create a collection, optionally with variables and secrets.
+
+```bash
+gurl collection create <name> [--var KEY=VALUE ...] [--secret KEY=VALUE ...]
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--var` | `-v` | none | Variable as `KEY=VALUE` (repeatable) |
+| `--secret` | `-s` | none | Secret variable as `KEY=VALUE` (repeatable), encrypted at rest |
+
+Aliases: `add`, `new`
+
+### set-var
+
+Set one variable in a collection.
+
+```bash
+gurl collection set-var <collection> KEY=VALUE [--secret]
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--secret` | | `false` | Store the variable as a secret |
+
+Aliases: `set`
+
+### unset-var
+
+Remove one variable from a collection.
+
+```bash
+gurl collection unset-var <collection> KEY
+```
+
+None.
+
+Aliases: `unset`
+
+### migrate
+
+Move a database-backed collection into project file storage (`.gurl/collections/<name>/`).
+
+```bash
+gurl collection migrate <name> [--passphrase <pass>]
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--project-dir` | | none | Project root for `.gurl` file storage |
+| `--passphrase` | | none | Write collection secrets with passphrase-derived encryption |
+
+With `--passphrase`, secrets are written to `collection.json` with passphrase-derived encryption and no local `collection.key` is left behind; teammates unlock with the passphrase.
+
+### unlock
+
+Unlock a passphrase-protected file collection after cloning. The derived key is cached in the OS keychain.
+
+```bash
+gurl collection unlock <name> [--passphrase <pass>]
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--passphrase` | | none | Collection import passphrase |
+
+### export
+
+Export a collection with passphrase-encrypted secrets.
+
+```bash
+gurl collection export <name> --passphrase <pass> [--output <file>]
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--output` | `-o` | stdout | Output file |
+| `--passphrase` | | none | Passphrase for encrypting collection secrets |
+
+### import
+
+Import a collection export, a collection directory, or `.env` variables.
+
+```bash
+gurl collection import <file-or-directory> [--passphrase <pass>] [--force]
+gurl collection import <collection> --file .env
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--force` | `-f` | `false` | Overwrite existing collection/request records |
+| `--file` | | none | Path to a `.env` file for collection variable import |
+| `--passphrase` | | none | Passphrase for decrypting collection secrets (or set `GURL_IMPORT_PASSPHRASE`) |
+
+`.env` imports create the collection if needed and store values as plain (non-secret) variables. Without a passphrase and with `--no-input`, an encrypted import fails with `passphrase required: pass --passphrase or set GURL_IMPORT_PASSPHRASE`.
 
 ### remove
 
-Remove a collection label while keeping its requests.
+Remove a collection label but keep its requests.
 
 ```bash
-gurl collection remove [name]
+gurl collection remove <name>
 ```
+
+None.
 
 Aliases: `rm`
 
 ### delete
 
-Delete a collection and all requests in it. Interactive terminals ask for confirmation. Use `--force` for non-interactive scripts.
+Delete a collection and all of its requests. Interactive terminals ask for confirmation; with `--no-input` (or `--json`/`--agent`) it fails unless `--force` is passed.
 
 ```bash
-gurl collection delete [name]
-gurl collection delete [name] --force
+gurl collection delete <name> [--force]
 ```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--force` | | `false` | Delete without interactive confirmation |
 
 Aliases: `del`
-
-### export
-
-Export a collection with passphrase-encrypted collection secrets.
-
-```bash
-gurl collection export [name] --passphrase "$TEAM_SECRET" --output collection.gurl
-```
-
-If `--passphrase` is omitted in an interactive terminal, gurl prompts for it without echoing the value.
-
-### import
-
-Import a collection export or collection directory and re-encrypt secrets with the local collection key.
-
-```bash
-gurl collection import collection.gurl --passphrase "$TEAM_SECRET"
-gurl collection import .gurl/collections/payments
-```
-
-If the export contains encrypted secrets and `--passphrase` is omitted in an interactive terminal, gurl prompts for it. For CI, set `GURL_IMPORT_PASSPHRASE` instead of passing `--passphrase`.
-
-Import variables from a `.env` file into a collection.
-
-```bash
-gurl collection import payments --file .env.production
-```
-
-This creates the collection if it does not exist. Imported `.env` values are stored as plain collection variables, not secrets.
-
-### unlock
-
-Unlock a passphrase-protected file-backed collection after cloning shared project files. The derived key is cached in the OS keychain, so later commands can use the collection without re-entering the passphrase.
-
-```bash
-gurl collection unlock [name] --passphrase "$TEAM_SECRET"
-```
-
-If `--passphrase` is omitted in an interactive terminal, gurl prompts for it without echoing the value.
-
-### migrate
-
-Migrate a DB-backed collection into project file storage.
-
-```bash
-gurl collection migrate [name]
-gurl collection migrate [name] --passphrase "$TEAM_SECRET"
-```
-
-With `--passphrase`, collection secrets are written to `collection.json` with passphrase-derived encryption and no local `collection.key` is left behind. Teammates can clone the project files and run `gurl collection unlock [name] --passphrase "$TEAM_SECRET"` to cache the derived key in the OS keychain.
 
 ### rename
 
 Rename a collection.
 
 ```bash
-gurl collection rename [old-name] [new-name]
+gurl collection rename <old-name> <new-name>
 ```
+
+None.
 
 Aliases: `mv`, `ren`
 
+## Aliases
+
+- `collections`
+- `col`
+- `c`
+
 ## Examples
 
-### List collections
+### Create a collection with a secret and run it
 
 ```bash
-gurl collection list
+gurl collection create payments-api \
+  --var BASE_URL=https://api.example.com \
+  --secret API_KEY=sk-live-...
+
+gurl save "list-payments" '{{BASE_URL}}/payments' \
+  --collection payments-api \
+  --auth bearer --auth-param token='{{API_KEY}}'
+
+gurl collection run payments-api --env staging --bail
 ```
 
-Shows all collections and request counts.
-
-### Create a collection
+### Preview a run, then persist what it extracts
 
 ```bash
-gurl collection add "api-v2"
+gurl collection run checkout-flow --env staging --dry-run
+gurl collection run checkout-flow --env staging --persist
 ```
 
-Creates a new collection called "api-v2".
-
-### Rename a collection
+### Share a collection with its secrets
 
 ```bash
-gurl collection rename "api" "api-v3"
+gurl collection export payments-api --passphrase "$TEAM_SECRET" --output payments-api.gurl
+gurl collection import payments-api.gurl --passphrase "$TEAM_SECRET"
 ```
 
-Renames "api" to "api-v3".
+## Related commands
 
-### Show a collection
-
-```bash
-gurl collection show "api-v2"
-```
-
-Shows each request in the collection with method and URL.
-
-### Run a collection dry run
-
-```bash
-gurl collection run "checkout-flow" --env staging --dry-run
-```
-
-Prints request order, planned variable sources, extraction rules, and unresolved placeholders without sending HTTP requests.
-
-### Persist extracted flow variables
-
-```bash
-gurl collection run "checkout-flow" --env staging --persist
-```
-
-Writes only extracted variables and script-set variables back to the selected environment. `--persist` and `--dry-run` cannot be used together.
-
-### Stop on assertion failures only
-
-```bash
-gurl collection run "checkout-flow" --assert-bail
-```
-
-Stops after the first assertion failure. Other request failures are reported, but they do not trigger assertion bail mode.
-
-### Delete a collection
-
-```bash
-gurl collection delete "old-api" --force
-```
-
-Deletes the "old-api" collection and all requests in it.
-
-### Share a collection with secrets
-
-```bash
-gurl collection export "checkout-flow" --passphrase "$TEAM_SECRET" --output checkout-flow.gurl
-gurl collection import checkout-flow.gurl --passphrase "$TEAM_SECRET"
-gurl collection import .gurl/collections/checkout-flow
-```
-
-The export encrypts collection secrets with the passphrase. Import decrypts those values and stores them with the local `.gurl/collections/<collection>/collection.key`. Directory import reads `collection.json` and request JSON files directly; local-key encrypted directories require their `collection.key`. For passphrase-protected project files, `unlock` verifies the passphrase and caches the derived key in the OS keychain.
-
-## See also
-
-- [`gurl save`](save) - Save a request to a collection
-- [`gurl list`](list) - List requests in a collection
-- [`gurl env`](env) - Manage environments
+- [`gurl sequence`]({{< relref "/cli/sequence" >}}) - Set execution order
+- [`gurl init`]({{< relref "/cli/init" >}}) - Project file storage
+- [`gurl env`]({{< relref "/cli/env" >}}) - Environment variables
+- [`gurl diag`]({{< relref "/cli/diag" >}}) - Inspect a failed request
+- [Collections and data-driven runs]({{< relref "/guides/collection-runner" >}}) - Guide
+- [Credential storage]({{< relref "/security/credential-storage" >}}) - How collection secrets are encrypted

@@ -3,25 +3,24 @@ title: "gurl show"
 description: "Show details of a saved request"
 ---
 
-# gurl show
 
-Display the full details of a saved request.
+Print everything stored on a saved request: method, URL, headers, body, auth, extraction rules, scripts, collection and tags. Literal secrets are masked by default.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl show [name] [flags]
+gurl show <name> [flags]
 ```
 
-## Description
-
-The `show` command prints all stored properties of a named request: URL, method, headers, body, variables, assertions, timeout, collection, folder, and tags. It is useful for inspecting what was saved before running or editing a request.
+Values of credential headers, sensitive query parameters (for example `?token=...`) and secret auth params print as `*****`. Values that are placeholders such as `Bearer {{API_KEY}}` stay visible, because they only name a variable. Pass `--reveal` to print the literals; `--reveal` is refused in agent mode.
 
 ## Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--format` | `-f` | `pretty` | Output format: `pretty`, `json`, or `curl` |
+| `--json` | | `false` | Output as JSON (same as `--format json`) |
+| `--reveal` | | `false` | Show secret header and auth values instead of masking them |
 
 ## Aliases
 
@@ -31,32 +30,38 @@ The `show` command prints all stored properties of a named request: URL, method,
 
 ## Examples
 
-### Pretty-print a request
+### Inspect a request before running it
 
 ```bash
-gurl show "users"
+gurl show literal
 ```
 
-Prints the request in a human-readable format with labeled fields.
+```text
+Name:       literal
+Method:     GET
+URL:        http://127.0.0.1:18731/x?token=*****
 
-### Output as JSON
+Headers:
+  Authorization: *****
+```
+
+### JSON for scripts
 
 ```bash
-gurl show "users" --format json
+gurl show "create-order" --json | jq .headers
 ```
 
-Returns the full request object as indented JSON. Useful for scripting or piping to `jq`.
-
-### Output as curl command
+### Reconstruct the curl command
 
 ```bash
-gurl show "create-user" --format curl
+gurl show "create-order" --format curl
 ```
 
-Reconstructs and prints the equivalent `curl` command. Useful for sharing or debugging outside of Gurl.
+Prints an equivalent `curl` command, masked the same way. For a copy-paste-ready command use [`gurl codegen -l curl`]({{< relref "/cli/codegen" >}}).
 
-## See also
+## Related commands
 
-- [`gurl run`](run) - Execute a saved request
-- [`gurl edit`](edit) - Edit a saved request
-- [`gurl list`](list) - List all saved requests
+- [`gurl run`]({{< relref "/cli/run" >}}) - Execute a saved request (`--dry-run` previews the resolved request)
+- [`gurl edit`]({{< relref "/cli/edit" >}}) - Edit a saved request
+- [`gurl list`]({{< relref "/cli/list" >}}) - List saved requests
+- [Header redaction]({{< relref "/security/header-redaction" >}}) - What gets masked

@@ -3,31 +3,32 @@ title: "gurl list"
 description: "List saved requests"
 ---
 
-# gurl list
 
-List all saved requests, optionally filtered by pattern, collection, or tag.
+List saved requests, optionally filtered by text, collection or tag.
 
-## Usage
+## Synopsis
 
 ```bash
 gurl list [flags]
 ```
 
-## Description
+`--pattern` matches a substring of the request name, URL or any header value, so you can find requests by merchant ID, host or similar. Names are shown in full whenever stdout is not a terminal (or with `--wide`), so piped output is never truncated.
 
-The `list` command displays saved requests with their names, URLs, methods, and collections. Use filters to narrow down results when you have many requests.
+`--json` prints the saved requests with literal secrets masked: values of credential headers (`Authorization`, `Cookie`, names containing `key`, `token`, `secret`, `password`, `signature`), sensitive query parameters such as `?api_key=...`, and secret auth params show as `*****`. Values that are still placeholders (`Bearer {{API_KEY}}`) stay visible. Pass `--reveal` to see the literals.
 
 ## Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--pattern` | `-p` | none | Filter by name pattern |
-| `--collection` | `-c` | none | Filter by collection name |
+| `--pattern` | `-p` | none | Filter by substring of name, URL or header value |
+| `--collection` | `-c` | none | Filter by collection |
 | `--tag` | `-t` | none | Filter by tag |
-| `--json` | `-j` | `false` | Output as JSON |
+| `--json` | `-j` | `false` | JSON output (secrets masked) |
+| `--reveal` | | `false` | Show literal secret header values in `--json` output (refused in agent mode) |
+| `--wide` | `-w` | `false` | Never truncate names (default when stdout is not a terminal) |
 | `--format` | `-f` | `table` | Output format: `table` or `list` |
-| `--limit` | `-n` | none | Limit number of results |
-| `--sort` | `-s` | `name` | Sort by: `name`, `updated`, or `collection` |
+| `--limit` | `-n` | none | Limit the number of results |
+| `--sort` | `-s` | `updated` | Sort by `name`, `updated` or `collection` |
 
 ## Aliases
 
@@ -36,48 +37,27 @@ The `list` command displays saved requests with their names, URLs, methods, and 
 
 ## Examples
 
-### List all requests
+### Find a request by a header value
 
 ```bash
-gurl list
+gurl list --pattern M-4242
 ```
 
-Displays all saved requests in a table.
-
-### Filter by collection
+### Requests in one collection, sorted by name
 
 ```bash
-gurl list --collection "api"
+gurl list --collection payments-api --sort name
 ```
 
-Shows only requests in the "api" collection.
-
-### Filter by tag
+### Machine-readable list
 
 ```bash
-gurl list --tag "production"
+gurl list --json | jq -r '.[].name'
 ```
 
-Shows requests tagged with "production".
+## Related commands
 
-### JSON output
-
-```bash
-gurl list --json
-```
-
-Outputs all requests as JSON for programmatic use.
-
-### Sort by last updated
-
-```bash
-gurl list --sort updated
-```
-
-Lists requests sorted by most recently updated.
-
-## See also
-
-- [`gurl save`](save) - Save a new request
-- [`gurl delete`](delete) - Remove a request
-- [`gurl collection`](collection) - Manage collections
+- [`gurl show`]({{< relref "/cli/show" >}}) - Show one request in full
+- [`gurl save`]({{< relref "/cli/save" >}}) - Save a new request
+- [`gurl collection`]({{< relref "/cli/collection" >}}) - Manage collections
+- [Header redaction]({{< relref "/security/header-redaction" >}}) - What gets masked

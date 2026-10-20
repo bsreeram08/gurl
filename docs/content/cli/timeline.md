@@ -1,30 +1,27 @@
 ---
 title: "gurl timeline"
-description: "Show global execution timeline"
+description: "Show the global execution timeline"
 ---
 
-# gurl timeline
 
-Show a global timeline of all request executions across all requests.
+Show recent executions across all requests, newest first.
 
-## Usage
+## Synopsis
 
 ```bash
 gurl timeline [flags]
 ```
 
-## Description
-
-The `timeline` command displays executions from all requests in chronological order. Use it to get an overview of API activity or investigate issues across multiple endpoints.
+Each entry carries the execution id, so any row can be opened with `gurl diag <id>`. Failed attempts without a response are included with their error.
 
 ## Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--since` | `-s` | none | Show entries from this time ago (e.g., `24h`, `7d`) |
-| `--filter` | `-f` | none | Filter by pattern |
-| `--limit` | `-n` | `50` | Number of entries to show |
-| `--limit` | `-l` | `50` | Number of entries to show |
+| `--since` | `-s` | none | Show entries since a duration ago (e.g., `24h`, `7d`) |
+| `--filter` | `-f` | none | Filter by request name pattern |
+| `--limit` | `-n`, `-l` | `50` | Number of entries to show (the newest) |
+| `--json` | `-j` | `false` | JSON output |
 
 ## Aliases
 
@@ -33,32 +30,28 @@ The `timeline` command displays executions from all requests in chronological or
 
 ## Examples
 
-### View recent timeline
-
-```bash
-gurl timeline
-```
-
-Shows the last 50 executions across all requests.
-
-### View last 24 hours
+### Last 24 hours
 
 ```bash
 gurl timeline --since 24h
 ```
 
-Shows executions from the past 24 hours.
-
-### Filter by pattern
+### Only requests matching a name
 
 ```bash
-gurl timeline --filter "users"
+gurl timeline --filter users
 ```
 
-Shows only executions involving "users" requests.
+### JSON for scripts
 
-## See also
+```bash
+gurl timeline --json --limit 2
+```
 
-- [`gurl history`](history) - View history for a specific request
-- [`gurl run`](run) - Execute a request
-- [`gurl diff`](diff) - Compare responses
+The JSON is an array of the same objects as [`gurl history --json`]({{< relref "/cli/history" >}}): `id`, `short_id`, `request`, `time`, `ok`, `status`, `duration_ms`, `size_bytes`, and `error` / `failure_phase` for failures.
+
+## Related commands
+
+- [`gurl history`]({{< relref "/cli/history" >}}) - History for one request
+- [`gurl diag`]({{< relref "/cli/diag" >}}) - Inspect one execution
+- [`gurl diff`]({{< relref "/cli/diff" >}}) - Compare responses

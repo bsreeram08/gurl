@@ -1,25 +1,24 @@
 ---
 title: "gurl paste"
-description: "Copy request as curl to clipboard"
+description: "Copy a request as a curl command to the clipboard"
 ---
 
-# gurl paste
 
-Copy a saved request to the clipboard as a curl command.
+Copy a saved request to the clipboard as a curl command, with literal secrets masked.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl paste [name]
+gurl paste <name> [--reveal]
 ```
 
-## Description
-
-The `paste` command copies the specified request to your clipboard as a fully-formed curl command. This is useful for sharing requests or running them directly with curl.
+Literal secret header values, sensitive query parameters and secret auth params are masked as `*****` unless you pass `--reveal`. `paste` is refused in [agent mode]({{< relref "/ai/agent-mode" >}}) because it writes to the clipboard; use `gurl show <name> --format curl` instead.
 
 ## Flags
 
-None.
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--reveal` | | `false` | Include secret header and auth values instead of masking them |
 
 ## Aliases
 
@@ -28,24 +27,20 @@ None.
 
 ## Examples
 
-### Copy request as curl
+### Copy a request to share
 
 ```bash
-gurl paste "my-request"
+gurl paste "create-order"
 ```
 
-Copies "my-request" as a curl command to the clipboard.
-
-### Paste and run
+### Copy with real credentials (for your own terminal only)
 
 ```bash
-gurl paste "my-request" | bash
+gurl paste "create-order" --reveal
 ```
 
-Copies the request and pipes it to bash for execution.
+## Related commands
 
-## See also
-
-- [`gurl save`](save) - Save a new request
-- [`gurl export`](export) - Export requests to file
-- [`gurl codegen`](codegen) - Generate code in other languages
+- [`gurl codegen`]({{< relref "/cli/codegen" >}}) - Generate code in other languages
+- [`gurl show`]({{< relref "/cli/show" >}}) - Print the request as curl (`--format curl`)
+- [`gurl export`]({{< relref "/cli/export" >}}) - Export requests to a file

@@ -1,104 +1,71 @@
 ---
 title: "gurl"
 description: "CLI API workbench — save, run, and manage HTTP requests from the terminal"
-layout: home
+layout: hextra-home
+type: docs
+cascade:
+  - type: docs
 ---
 
-gurl is a CLI API workbench. Save, organize, and execute HTTP requests from the terminal — with built-in auth handling, scripting, collection runner, and code generation.
+{{< hextra/hero-badge link="https://github.com/bsreeram08/gurl/releases" >}}
+  <span>v0.7 — agent mode, gurl docs, gurl diag</span>
+{{< /hextra/hero-badge >}}
 
-> **Status: early (v0.4.x).** The CLI works. The TUI exists in code but is not functional yet.
+<div class="hx:mt-6 hx:mb-6">
+{{< hextra/hero-headline >}}
+  Named HTTP requests,&nbsp;<br class="hx:sm:block hx:hidden" />run from the terminal
+{{< /hextra/hero-headline >}}
+</div>
 
-## CLI API workbench.
+<div class="hx:mb-8">
+{{< hextra/hero-subtitle >}}
+  Save a request once, run it by name against any environment.&nbsp;<br class="hx:sm:block hx:hidden" />Secrets stay encrypted and masked. Built for humans and AI agents.
+{{< /hextra/hero-subtitle >}}
+</div>
 
-Save any request, run it by name, manage auth and environments, and generate client code — all from the terminal. Works well for humans and AI agents alike.
-
-## Features
-
-### 21 CLI Commands
-
-Every command you need for API workflows: save, run, list, edit, delete, duplicate, export, import, and more.
-
-### 8 Auth Handlers
-
-Programmatic credential injection for every auth scheme:
-
-| Auth Type | Use Case |
-|-----------|----------|
-| Basic | Username/password |
-| Bearer | Token-based |
-| Digest | Challenge-response |
-| API Key | Header or query |
-| OAuth 1.0 | Signature-based |
-| OAuth 2.0 | Token flow |
-| AWS SigV4 | AWS API Gateway |
-| NTLM | Windows integrated |
-
-### 5 Protocol Clients
-
-Support for modern API protocols:
-
-- **HTTP** - Full request/response with multipart support
-- **GraphQL** - Query, mutation, subscription
-- **gRPC** - Proto-based RPC with reflection
-- **WebSocket** - Real-time bidirectional
-- **SSE** - Server-sent events
-
-### Scripting Engine
-
-Extend requests with JavaScript using the goja runtime. Modify headers, transform responses, or chain dependent requests with full access to the request and response objects.
-
-### Collection Runner
-
-Run collections with data-driven testing. Feed CSV or JSON test data, assert on response status, body, and headers.
-
-### Plugin System
-
-Extend gurl with middleware for request/response transformation, custom output formatters, and additional CLI commands. Plugins hook into the request lifecycle.
-
-### Interactive TUI (not functional yet)
-
-A TUI built with bubbletea exists in the codebase but is not functional. The `gurl tui` command is present but the interface is not usable. This is planned for a future release.
-
-### Multi-language Code Generation
-
-Generate idiomatic client code from saved requests:
+<div class="hx:mb-8 gurl-hero-code">
 
 ```bash
-gurl codegen "my-request" --lang python
-gurl codegen "my-request" --lang javascript
-gurl codegen "my-request" --lang go
-gurl codegen "my-request" --lang curl
+brew tap bsreeram08/gurl https://github.com/bsreeram08/gurl && brew install gurl
+gurl save "health" https://api.example.com/health && gurl run "health"
 ```
 
-## Quick Start
+</div>
 
-```bash
-brew tap bsreeram08/gurl https://github.com/bsreeram08/gurl
-brew install gurl
-gurl save "my-api" https://api.example.com/users -H "Authorization: Bearer $TOKEN"
-gurl run "my-api"
-```
+<div class="hx:mb-12 hx:flex hx:flex-wrap hx:gap-3">
+{{< hextra/hero-button text="Get started" link="docs/quickstart/" >}}
+{{< hextra/hero-button text="For AI agents" link="ai/agent-mode/" style="background: transparent; color: inherit; border: 1px solid currentColor;" >}}
+</div>
 
-Save any request, run it instantly, generate code, and share with your team.
-
-## Built for AI Agents
-
-They never touch your credentials.
-
-Gurl is designed for AI agent workflows where security matters. Credentials never appear in logs, never leak into prompts, and never get exposed to model providers.
-
-**Security model:**
-
-- Environment secrets encrypted at rest with AES-256-GCM
-- Auth handlers inject credentials programmatically
-- Header redaction in all log output
-- No credentials in generated code without explicit flags
-
-See the [AI integration page](/ai/) for how Gurl works with AI agents.
-
-## Why Gurl
-
-- **Local-first** — no account, no cloud sync, no lock-in
-- **Git-friendly** — collections are just data, export and version them
-- **Scriptable** — JavaScript pre/post-request hooks, chain requests, CI-ready exit codes
-- **Open source** — inspect and extend everything
+{{< hextra/feature-grid >}}
+  {{< hextra/feature-card
+    title="Named requests"
+    subtitle="Save any request, or paste a curl command, and replay it by name. Inspect with show, generate code with codegen."
+    link="docs/quickstart/"
+  >}}
+  {{< hextra/feature-card
+    title="Environments & secrets"
+    subtitle="`{{placeholders}}` filled at send time from environments. Secrets encrypted with AES-256-GCM and shown as `*****`."
+    link="guides/environments/"
+  >}}
+  {{< hextra/feature-card
+    title="Collections & runs"
+    subtitle="Group requests, chain them with extracted values, feed CSV/JSON rows, and emit JUnit reports for CI."
+    link="guides/collection-runner/"
+  >}}
+  {{< hextra/feature-card
+    title="Diagnose failures"
+    subtitle="Every run is recorded. `gurl diag` shows the request as sent, variable origins, and what changed since the last success."
+    link="guides/diagnosing/"
+  >}}
+  {{< hextra/feature-card
+    title="Agent mode"
+    subtitle="`--agent`: JSON-only output, no prompts, secrets masked everywhere. Agents start with `gurl docs`."
+    link="ai/agent-mode/"
+  >}}
+  {{< hextra/feature-card
+    title="Code generation"
+    subtitle="Turn any saved request into curl, Go, Python or JavaScript, with credentials masked by default."
+    link="cli/codegen/"
+  >}}
+{{< /hextra/feature-grid >}}

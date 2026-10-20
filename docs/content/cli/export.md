@@ -1,31 +1,29 @@
 ---
 title: "gurl export"
-description: "Export requests to file"
+description: "Export requests to a file"
 ---
 
-# gurl export
 
-Export saved requests to a file in various formats.
+Write one request, one collection or every request to a file (or stdout) in gurl's native format.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl export [flags]
+gurl export (--name <request> | --collection <name> | --all) [--output <file>] [--passphrase <pass>]
 ```
 
-## Description
-
-The `export` command writes one or more requests to a file. You can export individual requests, entire collections, or all requests.
+A collection export includes the collection's variables and request membership. Collection secrets are encrypted with `--passphrase` and can be imported with [`gurl import`]({{< relref "/cli/import" >}}) or `gurl collection import`.
 
 ## Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--name` | `-n` | none | Export a specific request by name |
+| `--name` | `-n` | none | Export one request by name |
 | `--collection` | `-c` | none | Export an entire collection |
 | `--all` | `-a` | `false` | Export all requests |
-| `--output` | `-o` | stdout | Output file path |
-| `--passphrase` | | none | Encrypt collection secrets when exporting a collection |
+| `--output` | `-o` | stdout | Output file |
+| `--format` | `--fmt` | `gurl` | Export format (only `gurl` is supported) |
+| `--passphrase` | | none | Passphrase for encrypting collection secrets |
 
 ## Aliases
 
@@ -33,32 +31,26 @@ The `export` command writes one or more requests to a file. You can export indiv
 
 ## Examples
 
-### Export a single request
+### Export one request to stdout
 
 ```bash
-gurl export --name "my-request" --output my-request.gurl
+gurl export --name get-user
 ```
 
-Exports the "my-request" to a file.
-
-### Export a collection
+### Share a collection with its secrets
 
 ```bash
-gurl export --collection "api" --passphrase "$TEAM_SECRET" --output api-collection.gurl
+gurl export --collection payments-api --passphrase "$TEAM_SECRET" --output payments-api.gurl
 ```
 
-Exports the "api" collection metadata, variables, and requests. Collection secrets are encrypted with the passphrase and can be imported with `gurl collection import`.
-
-### Export all requests
+### Back up everything
 
 ```bash
 gurl export --all --output backup.gurl
 ```
 
-Exports all saved requests to a backup file.
+## Related commands
 
-## See also
-
-- [`gurl import`](import) - Import requests from external formats
-- [`gurl save`](save) - Save a new request
-- [`gurl paste`](paste) - Copy as curl to clipboard
+- [`gurl import`]({{< relref "/cli/import" >}}) - Import requests and collection exports
+- [`gurl collection`]({{< relref "/cli/collection" >}}) - `collection export` / `collection import`
+- [Credential storage]({{< relref "/security/credential-storage" >}}) - How passphrase exports are encrypted

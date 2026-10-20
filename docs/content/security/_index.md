@@ -1,55 +1,42 @@
 ---
 title: "Security"
-description: "How Gurl keeps your credentials safe"
-weight: 1
+description: "How gurl encrypts secrets at rest and keeps them out of output, records and AI context windows."
+weight: 5
 ---
 
-Gurl is designed around a simple principle: your credentials should never leave your machine.
+gurl is built on one principle: credentials stay on your machine and out of anything gurl prints or stores.
 
-When you use an API client directly, your secrets pass through memory, logs, and context windows where they can be exposed. Gurl treats credential security as a first-class concern, not an afterthought.
+| Page | Covers |
+|------|--------|
+| [Credential storage]({{< relref "/security/credential-storage" >}}) | AES-256-GCM encryption of environment and collection secrets, machine and collection keys, sharing secrets with a passphrase |
+| [Secret masking]({{< relref "/security/header-redaction" >}}) | What counts as a secret, where it is masked, `--reveal`, agent mode, execution records |
 
-## Core Security Properties
+## Core properties
 
-**Credentials never leave your machine**
+**Secrets are encrypted at rest.** Environment and collection variables marked secret are encrypted with AES-256-GCM. The machine key is generated with `crypto/rand` on first use and stored with owner-only permissions; encrypted values are useless on another machine.
 
-All secrets are stored locally using machine-specific encryption. When you run a request, Gurl injects credentials at the HTTP layer without ever exposing them to the calling process or its output streams.
+**Secrets are entered without echo.** `gurl env set prod API_KEY=- --secret API_KEY` reads the value from stdin, prompting without echo on a terminal.
 
-**AES-256-GCM encryption for environment secrets**
+**Auth is applied inside gurl.** Saved auth configs are filled from placeholders and applied to the outgoing request; the calling process never builds the credential string.
 
-Environment variables marked as secret are encrypted with AES-256-GCM before storage. The encryption key is generated on your machine and never leaves it.
+**Output is masked.** `show`, `list --json`, `codegen`, `paste`, `env show`, dry runs and `run --json` replace secrets with `*****`, including their URL- and JSON-escaped forms. [Agent mode]({{< relref "/ai/agent-mode" >}}) also masks response bodies, headers, errors and `gurl exec` child output.
 
-**Auth handlers inject credentials programmatically**
-
-Rather than building credential strings that appear in logs or command history, Gurl's auth handlers inject values directly into HTTP headers at the transport layer.
-
-**Sensitive header redaction in logs**
-
-When logging HTTP requests and responses, Gurl automatically redacts sensitive headers including `Authorization`, `Cookie`, `Set-Cookie`, and `Proxy-Authorization`.
-
-**Machine-specific encryption key**
-
-A 256-bit encryption key is generated on first launch using `crypto/rand` and stored with owner-only permissions. Encrypted values are useless on any other machine.
-
-## Security Architecture
-
-Gurl's security model separates concerns across three systems:
+**Execution records never store secrets.** Every run is recorded for `gurl diag`, with secrets masked before saving.
 
 | Layer | What it handles | Where secrets live |
-|-------|------------------|-------------------|
-| Environment secrets | Encrypted storage and retrieval | AES-256-GCM at rest |
-| Auth handlers | Credential injection at request time | In-memory only |
-| Request logging | Redacted output for auditability | Logs with `[REDACTED]` placeholders |
+|-------|-----------------|--------------------|
+| Environment and collection secrets | Encrypted storage and retrieval | AES-256-GCM at rest |
+| Auth handlers | Credential injection at send time | In memory only |
+| Output and execution records | Masked display and auditing | Never: replaced with `*****` |
 
-This separation means that even if logs are compromised or an AI agent is inspecting the process, credentials remain protected.
+## Code generation safety
 
-## Code Generation Safety
+All code generators (curl, Python, JavaScript, Go) escape values for the target language, preventing shell or code injection. `codegen -l curl` quotes each header as one argument (`-H 'Content-Type: application/json'`), masks literal secrets unless `--reveal`, and always replaces `Authorization` with a placeholder.
 
-All code generators (curl, Python, JavaScript, Go) properly escape string values before interpolation. This prevents shell injection when generating curl commands and code injection in generated scripts. Header values, request bodies, and URLs are sanitized for each target language's escaping rules.
+## Path protection
 
-## Path Protection
+Export and import commands validate file paths to prevent directory traversal; paths containing `..` are rejected. Temporary files used during self-update are created with `os.CreateTemp`.
 
-Export and import commands validate file paths to prevent directory traversal attacks. Paths containing `..` sequences are rejected. Temporary files used during self-update are created with `os.CreateTemp` for unpredictable names.
+## Scripting sandbox
 
-## Scripting Sandbox
-
-The JavaScript scripting runtime restricts secret variable access by default. Scripts cannot read environment secrets unless explicitly granted access via the `AllowSecretAccess` flag. URL modifications in scripts are validated to only allow `http` and `https` schemes.
+The JavaScript runtime restricts secret variable access by default: scripts cannot read secrets unless explicitly granted access. URL changes made by scripts are limited to `http` and `https`.

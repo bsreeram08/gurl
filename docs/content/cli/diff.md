@@ -3,51 +3,60 @@ title: "gurl diff"
 description: "Compare responses for a request"
 ---
 
-# gurl diff
 
-Compare responses from different executions of the same request.
+Compare the response bodies of the most recent executions of one request.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl diff [name] [flags]
+gurl diff <name> [flags]
 ```
 
-## Description
+JSON bodies are compared structurally (RFC 6902 changes); other bodies get a text diff. `diff` always compares the newest entries. In [agent mode]({{< relref "/ai/agent-mode" >}}) it masks secrets using the secrets of both compared runs.
 
-The `diff` command shows the differences between multiple executions of a request. This helps identify changes in API responses over time or across different environments.
+To see why one run failed, including variable and header changes since the last success, use [`gurl diag`]({{< relref "/cli/diag" >}}).
 
 ## Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--limit` | `-n` | `2` | Number of executions to compare |
-| `--limit` | `-l` | `2` | Number of executions to compare |
-
-## Aliases
-
-- `d`
+| `--limit` | `-n`, `-l` | `2` | Number of responses to compare |
+| `--json` | `-j` | `false` | JSON output |
 
 ## Examples
 
-### Compare last two executions
+### Compare the last two runs
 
 ```bash
-gurl diff "users"
+gurl diff get-user
 ```
 
-Compares the two most recent executions of the "users" request.
-
-### Compare more executions
+### Compare the last three runs
 
 ```bash
-gurl diff "api-users" --limit 3
+gurl diff get-user --limit 3
 ```
 
-Compares the three most recent executions.
+### JSON for scripts
 
-## See also
+```bash
+gurl diff get-user --json
+```
 
-- [`gurl history`](history) - View execution history
-- [`gurl run`](run) - Execute a request
-- [`gurl timeline`](timeline) - Show global timeline
+```json
+{
+  "request": "get-user",
+  "before": {"id": "699120a5-...", "short_id": "699120a5", "time": "2026-10-20T18:41:41+05:30", "status": 200},
+  "after":  {"id": "e7770aa1-...", "short_id": "e7770aa1", "time": "2026-10-20T18:41:41+05:30", "status": 200},
+  "format": "json",
+  "identical": true
+}
+```
+
+When the bodies differ, the object also carries `changes` (RFC 6902 operations, when `format` is `json`) or `text` (a character diff, when `format` is `text`). `diff --json` compares the newest execution (`after`) with the one before it (`before`).
+
+## Related commands
+
+- [`gurl diag`]({{< relref "/cli/diag" >}}) - Inspect one execution against the last success
+- [`gurl history`]({{< relref "/cli/history" >}}) - List executions and ids
+- [`gurl timeline`]({{< relref "/cli/timeline" >}}) - Executions across all requests

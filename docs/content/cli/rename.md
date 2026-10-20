@@ -3,19 +3,14 @@ title: "gurl rename"
 description: "Rename a saved request"
 ---
 
-# gurl rename
 
-Rename a saved request to a new name.
+Give a saved request a new name. Scripts that call `gurl.setNextRequest("old-name")` are not updated, so change them too.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl rename [old-name] [new-name]
+gurl rename <old-name> <new-name>
 ```
-
-## Description
-
-The `rename` command changes the name of a saved request. All references to the old name remain valid until you update them.
 
 ## Flags
 
@@ -31,13 +26,18 @@ None.
 ### Rename a request
 
 ```bash
-gurl rename "old-name" "new-name"
+gurl rename "get user" "get-user"
 ```
 
-Changes the request name from "old-name" to "new-name".
+### Rename, then confirm
 
-## See also
+```bash
+gurl rename "orders" "list-orders"
+gurl show "list-orders"
+```
 
-- [`gurl save`](save) - Save a new request
-- [`gurl delete`](delete) - Remove a request
-- [`gurl edit`](edit) - Edit a request
+## Related commands
+
+- [`gurl edit`]({{< relref "/cli/edit" >}}) - Change other fields
+- [`gurl delete`]({{< relref "/cli/delete" >}}) - Remove a request
+- [`gurl collection`]({{< relref "/cli/collection" >}}) - `collection rename` renames a collection
