@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.7.0] - 2026-10-20
 
 ### Added
 
@@ -16,6 +16,12 @@
 
 - `run --json` prints no failure notice, persist summary or assertion summary on stderr; the JSON object carries them.
 - `diag --json` no longer escapes `<`, `>` and `&` as `\u003c`-style sequences, and neither do the new JSON outputs. The output is still valid JSON.
+
+### Fixed
+
+- In agent mode, `exec` masks injected secrets in the child's output, `run --output` is refused, and `diag`/`diff` mask with the secrets of both compared runs.
+- Releases publish a multi-arch container image to `ghcr.io/bsreeram08/gurl` (version tag and `latest`).
+- The Hound review workflow runs on pull requests again.
 
 ## [v0.6.0] - 2026-10-20
 
