@@ -5,6 +5,7 @@ A terminal library of named HTTP requests, run against environments and collecti
 [![Latest release](https://img.shields.io/github/v/release/bsreeram08/gurl)](https://github.com/bsreeram08/gurl/releases/latest)
 [![Build](https://github.com/bsreeram08/gurl/actions/workflows/build.yml/badge.svg)](https://github.com/bsreeram08/gurl/actions/workflows/build.yml)
 [![Container image](https://img.shields.io/badge/ghcr.io-bsreeram08%2Fgurl-blue?logo=docker)](https://github.com/bsreeram08/gurl/pkgs/container/gurl)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Docs:** <https://bsreeram08.github.io/gurl/>
 
@@ -282,4 +283,4 @@ Run `gurl <command> --help` or `gurl docs <command>` for flags.
 - [CHANGELOG](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
-- License: MIT
+- License: [MIT](LICENSE)
