@@ -5,6 +5,7 @@
 ### Fixed
 
 - `cookies list` masks cookie values as `*****`. `--reveal` shows them (refused in agent mode), and the new `--json` follows the same rules.
+- `show --format curl` (and `paste`) print each header as one shell argument, `-H 'Key: Value'`, instead of quoting key and value separately.
 
 ## [v0.7.0] - 2026-10-20
 

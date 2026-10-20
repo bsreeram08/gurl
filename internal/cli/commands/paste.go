@@ -41,21 +41,8 @@ func PasteCommand(db storage.DB) *cli.Command {
 				req = redact.SavedRequest(req)
 			}
 
-			// Build curl command using array form to prevent shell injection
-			curlCmd := []string{"curl", "-X", shellEscape(req.Method)}
-
-			for _, header := range req.Headers {
-				curlCmd = append(curlCmd, "-H", fmt.Sprintf("%s: %s", shellEscape(header.Key), shellEscape(header.Value)))
-			}
-
-			if req.Body != "" {
-				curlCmd = append(curlCmd, "-d", shellEscape(req.Body))
-			}
-
-			curlCmd = append(curlCmd, shellEscape(req.URL))
-
 			// Join for display (safe - no shell execution)
-			displayCmd := strings.Join(curlCmd, " ")
+			displayCmd := strings.Join(curlLines(req), " ")
 
 			// Try to copy to clipboard using pbcopy (macOS) or xclip (Linux)
 			var copyCmd *exec.Cmd

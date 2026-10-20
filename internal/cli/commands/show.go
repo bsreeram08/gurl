@@ -8,11 +8,26 @@ import (
 
 	"github.com/sreeram/gurl/internal/redact"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 
 func shellEscape(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// curlLines returns req as a curl command, one option with its shell-quoted
+// argument per element ("-H 'Key: Value'"), for joining with spaces or line
+// continuations. Values are printed as given; mask req first.
+func curlLines(req *types.SavedRequest) []string {
+	lines := []string{"curl -X " + shellEscape(req.Method)}
+	for _, h := range req.Headers {
+		lines = append(lines, "-H "+shellEscape(h.Key+": "+h.Value))
+	}
+	if req.Body != "" {
+		lines = append(lines, "-d "+shellEscape(req.Body))
+	}
+	return append(lines, shellEscape(req.URL))
 }
 
 // ShowCommand creates the show/inspect command
@@ -70,15 +85,7 @@ func ShowCommand(db storage.DB) *cli.Command {
 				}
 				fmt.Println(string(data))
 			case "curl":
-				curlParts := []string{"curl", "-X", shellEscape(req.Method)}
-				for _, h := range req.Headers {
-					curlParts = append(curlParts, "-H", fmt.Sprintf("%s: %s", shellEscape(h.Key), shellEscape(h.Value)))
-				}
-				if req.Body != "" {
-					curlParts = append(curlParts, "-d", shellEscape(req.Body))
-				}
-				curlParts = append(curlParts, shellEscape(req.URL))
-				fmt.Println(strings.Join(curlParts, " \\\n  "))
+				fmt.Println(strings.Join(curlLines(req), " \\\n  "))
 			default:
 				// Pretty print
 				fmt.Printf("Name:       %s\n", req.Name)
