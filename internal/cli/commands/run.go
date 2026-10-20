@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -102,11 +103,19 @@ func RunCommand(db storage.DB, envStorage env.Store) *cli.Command {
 				Aliases: []string{"d"},
 				Usage:   "Data file (CSV or JSON) for data-driven iteration",
 			},
+			&cli.BoolFlag{
+				Name:    "json",
+				Aliases: []string{"j"},
+				Usage:   "JSON object per execution (NDJSON for --chain/--data), nothing else on stdout",
+			},
 		},
-		Action: func(ctx context.Context, c *cli.Command) error {
+		Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
 			args := c.Args()
 			var name string
 			if args.Len() < 1 {
+				if noInput(c) {
+					return cli.Exit("request name is required: gurl run <name> (list names with: gurl list --json)", 2)
+				}
 				requests, err := db.ListRequests(nil)
 				if err != nil {
 					return fmt.Errorf("failed to list requests: %w", err)
@@ -165,6 +174,9 @@ func RunCommand(db storage.DB, envStorage env.Store) *cli.Command {
 				if dataFile != "" || enableChain {
 					return cli.Exit("--dry-run cannot be combined with --data or --chain", 2)
 				}
+				if jsonOutput(c) {
+					return executeDryRunJSON(ctx, db, envStorage, name, runEnv, cliVars, os.Stdout)
+				}
 				return executeDryRun(ctx, db, envStorage, name, runEnv, cliVars, os.Stdout)
 			}
 
@@ -177,7 +189,7 @@ func RunCommand(db storage.DB, envStorage env.Store) *cli.Command {
 			}
 
 			return executeSingleRequest(ctx, db, envStorage, name, runEnv, cliVars, c, persistEnvName)
-		},
+		}),
 	}
 }
 
@@ -200,16 +212,33 @@ func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name
 	dirtyCollectionTargets := make(map[string]string)
 	currentCollectionName := ""
 	chainStarted := false
+	jsonOut, strict := jsonOutput(c), agentMode(c)
+	reported := func(err error) error {
+		if jsonOut {
+			return markReported(err)
+		}
+		return err
+	}
+	// In JSON mode each step is one line; the persist summary goes on the
+	// last one.
+	steps := &ndjsonWriter{w: os.Stdout}
 	finish := func(err error) error {
 		if !c.Bool("persist") {
 			warnUnpersisted(os.Stderr, dirtyForPersist)
 		}
+		var persisted *runner.PersistSummary
 		if c.Bool("persist") && chainStarted {
-			persisted, persistErr := runner.PersistDirtyVariablesWithCollectionTargets(envStorage, db, persistEnvName, currentCollectionName, dirtyForPersist, dirtyOriginsForPersist, dirtyCollectionTargets)
+			summary, persistErr := runner.PersistDirtyVariablesWithCollectionTargets(envStorage, db, persistEnvName, currentCollectionName, dirtyForPersist, dirtyOriginsForPersist, dirtyCollectionTargets)
 			if persistErr != nil {
-				return persistErr
+				return errors.Join(persistErr, steps.finish(nil))
 			}
-			runner.PrintPersistSummaries(os.Stderr, persisted)
+			persisted = summary
+			if !jsonOut {
+				runner.PrintPersistSummaries(os.Stderr, persisted)
+			}
+		}
+		if werr := steps.finish(persistedOutputOf(persisted)); werr != nil {
+			return werr
 		}
 		return err
 	}
@@ -217,7 +246,9 @@ func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name
 	// Each step's failure notice is printed after its response body.
 	var failed *types.ExecutionHistory
 	stdout := newLineTracker(os.Stdout)
-	defer func() { printFailureNotice(os.Stderr, failed, stdout) }()
+	if !jsonOut {
+		defer func() { printFailureNotice(os.Stderr, failed, stdout) }()
+	}
 
 	for i := 0; i < maxChainIterations; i++ {
 		req, err := db.GetRequestByName(currentName)
@@ -268,7 +299,10 @@ func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name
 		if execution.Result.Error != "" {
 			rec := execution.Record(envName(runEnv))
 			failed = keepRecord(db, rec)
-			return finish(fmt.Errorf("%s", rec.Error)) // redacted copy of Result.Error
+			if jsonOut {
+				steps.add(executionOutput(execution, rec, strict))
+			}
+			return finish(reported(fmt.Errorf("%s", rec.Error))) // redacted copy of Result.Error
 		}
 		var assertionErr error
 		if execution.Result.FailurePhase == runner.FailurePhaseAssertion {
@@ -276,8 +310,11 @@ func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name
 			chainAssertionErr = mergeAssertionErrors(chainAssertionErr, assertionErr)
 		}
 		if execution.Result.Skipped || execution.Request == nil || execution.Response == nil {
+			if jsonOut && execution.Result.Skipped {
+				steps.add(skippedOutput(execution, envName(runEnv)))
+			}
 			if execution.Result.NextRequestOverride == "" {
-				return finish(chainAssertionErr)
+				return finish(reported(chainAssertionErr))
 			}
 			currentName = execution.Result.NextRequestOverride
 			continue
@@ -307,16 +344,20 @@ func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name
 			}
 		}
 
-		format := c.String("format")
-		if err := printResponse(stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
-			return finish(err)
+		if jsonOut {
+			steps.add(executionOutput(execution, rec, strict))
+		} else {
+			format := c.String("format")
+			if err := printResponse(stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
+				return finish(err)
+			}
+			printFailureNotice(os.Stderr, failed, stdout)
 		}
-		printFailureNotice(os.Stderr, failed, stdout)
 		failed = nil
 		chainAssertionErr = mergeAssertionErrors(chainAssertionErr, httpFailure(c, resp.StatusCode))
 		nextReq := execution.Result.NextRequestOverride
 		if nextReq == "" {
-			return finish(chainAssertionErr)
+			return finish(reported(chainAssertionErr))
 		}
 
 		currentName = nextReq
@@ -342,32 +383,58 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Sto
 
 	scopes := runner.ScopesFor(db, runEnv, req.Collection, cliVars)
 	execution := runner.NewRunner(db, envStorage).RunSavedRequestInScopes(ctx, req, scopes)
-	// The failure notice is printed last, after the response body.
+	jsonOut, strict := jsonOutput(c), agentMode(c)
+	reported := func(err error) error {
+		if jsonOut {
+			return markReported(err)
+		}
+		return err
+	}
+	// The failure notice is printed last, after the response body. JSON
+	// output carries the record id instead.
 	var failed *types.ExecutionHistory
 	stdout := newLineTracker(os.Stdout)
-	defer func() { printFailureNotice(os.Stderr, failed, stdout) }()
+	if !jsonOut {
+		defer func() { printFailureNotice(os.Stderr, failed, stdout) }()
+	}
+	var persisted *runner.PersistSummary
 	if c.Bool("persist") {
-		persisted, persistErr := runner.PersistDirtyVariables(envStorage, db, persistEnvName, req.Collection, execution.Result.DirtyVars, execution.Result.DirtyVarOrigins)
+		summary, persistErr := runner.PersistDirtyVariables(envStorage, db, persistEnvName, req.Collection, execution.Result.DirtyVars, execution.Result.DirtyVarOrigins)
 		if persistErr != nil {
 			return persistErr
 		}
-		runner.PrintPersistSummaries(os.Stderr, persisted)
-		if execution.Result.Error != "" && len(execution.Result.DirtyVars) > 0 {
-			fmt.Fprintf(os.Stderr, "Run aborted after persisting %d variables.\n", len(execution.Result.DirtyVars))
+		persisted = summary
+		if !jsonOut {
+			runner.PrintPersistSummaries(os.Stderr, persisted)
+			if execution.Result.Error != "" && len(execution.Result.DirtyVars) > 0 {
+				fmt.Fprintf(os.Stderr, "Run aborted after persisting %d variables.\n", len(execution.Result.DirtyVars))
+			}
 		}
 	} else {
 		warnUnpersisted(os.Stderr, execution.Result.DirtyVars)
 	}
+	emit := func(out runOutput) error {
+		out.Persisted = persistedOutputOf(persisted)
+		return writeJSONLine(os.Stdout, out)
+	}
 	if execution.Result.Error != "" {
 		rec := execution.Record(envName(runEnv))
 		failed = keepRecord(db, rec)
-		return fmt.Errorf("%s", rec.Error) // redacted copy of Result.Error
+		if jsonOut {
+			if err := emit(executionOutput(execution, rec, strict)); err != nil {
+				return err
+			}
+		}
+		return reported(fmt.Errorf("%s", rec.Error)) // redacted copy of Result.Error
 	}
 	var assertionErr error
 	if execution.Result.FailurePhase == runner.FailurePhaseAssertion {
 		assertionErr = fmt.Errorf("assertion failed: %s", runnerAssertionFailureMessage(execution.Result))
 	}
 	if execution.Result.Skipped || execution.Request == nil || execution.Response == nil {
+		if jsonOut && execution.Result.Skipped {
+			return emit(skippedOutput(execution, envName(runEnv)))
+		}
 		return nil
 	}
 	clientReq := *execution.Request
@@ -386,9 +453,11 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Sto
 		results := evaluator.Evaluate(&resp, asserts, assertionVarsFromResult(execution.Result))
 		summary := assertions.Summarize(results)
 
-		fmt.Fprintf(os.Stderr, "\n=== Assertions: %d passed, %d failed ===\n", summary.Passed, summary.Failed)
-		for _, r := range results {
-			fmt.Fprintf(os.Stderr, "%s\n", r.Message)
+		if !jsonOut {
+			fmt.Fprintf(os.Stderr, "\n=== Assertions: %d passed, %d failed ===\n", summary.Passed, summary.Failed)
+			for _, r := range results {
+				fmt.Fprintf(os.Stderr, "%s\n", r.Message)
+			}
 		}
 
 		rec.Assertions = append(rec.Assertions, runner.AssertionRecords(results)...)
@@ -419,10 +488,18 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Sto
 		if err := client.SaveToFile(&resp, outputPath, force); err != nil {
 			return fmt.Errorf("failed to save output: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Response saved to %s\n", outputPath)
-		return mergeAssertionErrors(assertionErr, httpFailure(c, resp.StatusCode))
+		if !jsonOut {
+			fmt.Fprintf(os.Stderr, "Response saved to %s\n", outputPath)
+			return mergeAssertionErrors(assertionErr, httpFailure(c, resp.StatusCode))
+		}
 	}
 
+	if jsonOut {
+		if err := emit(executionOutput(execution, rec, strict)); err != nil {
+			return err
+		}
+		return reported(mergeAssertionErrors(assertionErr, httpFailure(c, resp.StatusCode)))
+	}
 	format := c.String("format")
 	if err := printResponse(stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
 		return err
@@ -554,6 +631,61 @@ func executeDryRun(ctx context.Context, db storage.DB, envStorage env.Store, nam
 	return nil
 }
 
+// executeDryRunJSON is executeDryRun printing one JSON object with
+// "dry_run": true and structured problems. Secret values are masked as in
+// executeDryRun.
+func executeDryRunJSON(ctx context.Context, db storage.DB, envStorage env.Store, name string, runEnv *env.Environment, cliVars map[string]string, out io.Writer) error {
+	req, err := db.GetRequestByName(name)
+	if err != nil {
+		return fmt.Errorf("request not found: %s", name)
+	}
+	scopes := runner.ScopesFor(db, runEnv, req.Collection, cliVars)
+	execution := runner.NewRunner(db, envStorage).PlanSavedRequest(ctx, req, scopes)
+	result := execution.Result
+	secrets := execution.Secrets()
+	mask := func(s string) string { return redact.Replace(s, secrets) }
+
+	preview := runOutput{DryRun: true, Request: req.Name, Collection: req.Collection, Environment: envName(runEnv)}
+	if result.Error != "" {
+		preview.Error = mask(result.Error)
+		preview.FailurePhase = result.FailurePhase
+		if err := writeJSONLine(out, preview); err != nil {
+			return err
+		}
+		return markReported(fmt.Errorf("%s", preview.Error))
+	}
+	if result.Skipped {
+		preview.OK = true
+		preview.Skipped = true
+		preview.SkipReason = result.SkipReason
+		return writeJSONLine(out, preview)
+	}
+
+	preview.Method = result.PlannedMethod
+	preview.URL = mask(result.PlannedURL)
+	for _, h := range execution.Request.Headers {
+		value := h.Value
+		if redact.SensitiveName(h.Key) && redact.Literal(value) {
+			value = redact.Mask
+		}
+		preview.Headers = append(preview.Headers, types.Header{Key: h.Key, Value: mask(value)})
+	}
+	preview.Body = jsonBody(mask(execution.Request.Body))
+	preview.Extracts = result.PlannedExtracts
+	preview.Problems = problemOutputs(result.Problems, secrets)
+	preview.OK = len(preview.Problems) == 0
+	if err := writeJSONLine(out, preview); err != nil {
+		return err
+	}
+	if len(result.DryRunWarnings) > 0 {
+		return markReported(fmt.Errorf("dry run found %s", strings.Join(result.DryRunWarnings, ", ")))
+	}
+	if err := result.Problems.Err(); err != nil {
+		return markReported(fmt.Errorf("dry run: %w", err))
+	}
+	return nil
+}
+
 func runnerAssertionFailureMessage(result *runner.RequestResult) string {
 	messages := make([]string, 0, len(result.AssertionResults))
 	for _, assertion := range result.AssertionResults {
@@ -637,6 +769,10 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage env.Store,
 	dirtyForPersist := make(map[string]string)
 	dirtyOriginsForPersist := make(map[string]resolve.Origin)
 	singleRunner := runner.NewRunner(db, envStorage)
+	// In JSON mode each row is one line; the persist summary goes on the
+	// last one.
+	jsonOut, strict := jsonOutput(c), agentMode(c)
+	rows := &ndjsonWriter{w: os.Stdout}
 	err = loader.Iterate(func(rowVars map[string]string) error {
 		rowNum++
 
@@ -658,22 +794,42 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage env.Store,
 		}
 		if execution.Result.Error != "" {
 			rec := execution.Record(envName(runEnv))
+			kept := keepRecord(db, rec)
+			if jsonOut {
+				out := executionOutput(execution, rec, strict)
+				out.Row = rowNum
+				rows.add(out)
+				return nil
+			}
 			fmt.Fprintf(os.Stderr, "Row %d: request failed: %v\n", rowNum, rec.Error)
-			printFailureNotice(os.Stderr, keepRecord(db, rec), nil)
+			printFailureNotice(os.Stderr, kept, nil)
 			return nil
 		}
 		if execution.Result.Skipped || execution.Response == nil {
+			if jsonOut {
+				out := skippedOutput(execution, envName(runEnv))
+				out.Row = rowNum
+				rows.add(out)
+				return nil
+			}
 			fmt.Fprintf(os.Stdout, "Row %d [%s]: skipped\n", rowNum, name)
 			return nil
 		}
 		resp := *execution.Response
 
-		rec := execution.Record(envName(runEnv))
+		built := execution.Record(envName(runEnv))
+		rec := built
 		if err := db.SaveHistory(rec); err != nil {
 			fmt.Fprintf(os.Stderr, "Row %d: failed to save history: %v\n", rowNum, err)
 			rec = nil
 		}
 
+		if jsonOut {
+			out := executionOutput(execution, built, strict)
+			out.Row = rowNum
+			rows.add(out)
+			return nil
+		}
 		fmt.Fprintf(os.Stdout, "Row %d [%s]: %d (%dms)\n", rowNum, name, resp.StatusCode, resp.Duration.Milliseconds())
 		printFailureNotice(os.Stderr, rec, nil)
 
@@ -681,17 +837,21 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage env.Store,
 	})
 
 	if err != nil {
-		return fmt.Errorf("data iteration failed: %w", err)
+		return errors.Join(fmt.Errorf("data iteration failed: %w", err), rows.finish(nil))
 	}
+	var persisted *runner.PersistSummary
 	if c.Bool("persist") {
-		persisted, persistErr := runner.PersistDirtyVariables(envStorage, db, persistEnvName, req.Collection, dirtyForPersist, dirtyOriginsForPersist)
+		summary, persistErr := runner.PersistDirtyVariables(envStorage, db, persistEnvName, req.Collection, dirtyForPersist, dirtyOriginsForPersist)
 		if persistErr != nil {
-			return persistErr
+			return errors.Join(persistErr, rows.finish(nil))
 		}
-		runner.PrintPersistSummaries(os.Stderr, persisted)
+		persisted = summary
+		if !jsonOut {
+			runner.PrintPersistSummaries(os.Stderr, persisted)
+		}
 	}
 
-	return nil
+	return rows.finish(persistedOutputOf(persisted))
 }
 
 func convertHeaders(headers []types.Header) []client.Header {

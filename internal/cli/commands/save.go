@@ -138,7 +138,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.CreatedAt = time.Now().Unix()
 				req.UpdatedAt = time.Now().Unix()
 
-				if err := saveRequestWithCollectionGuard(db, &req); err != nil {
+				if err := saveRequestWithCollectionGuard(c, db, &req); err != nil {
 					return fmt.Errorf("failed to save request: %w", err)
 				}
 
@@ -189,7 +189,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.OutputFormat = format
 				applyFlowMetadata(req, extracts, c.String("pre-script"), c.String("post-script"))
 
-				if err := saveRequestWithCollectionGuard(db, req); err != nil {
+				if err := saveRequestWithCollectionGuard(c, db, req); err != nil {
 					return fmt.Errorf("failed to save request: %w", err)
 				}
 
@@ -233,7 +233,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				req.CreatedAt = time.Now().Unix()
 				req.UpdatedAt = time.Now().Unix()
 
-				if err := saveRequestWithCollectionGuard(db, &req); err != nil {
+				if err := saveRequestWithCollectionGuard(c, db, &req); err != nil {
 					return fmt.Errorf("failed to save request: %w", err)
 				}
 
@@ -261,7 +261,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 			}
 			applyFlowMetadata(req, extracts, c.String("pre-script"), c.String("post-script"))
 
-			if err := saveRequestWithCollectionGuard(db, req); err != nil {
+			if err := saveRequestWithCollectionGuard(c, db, req); err != nil {
 				return fmt.Errorf("failed to save request: %w", err)
 			}
 
@@ -271,7 +271,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 	}
 }
 
-func saveRequestWithCollectionGuard(db storage.DB, req *types.SavedRequest) error {
+func saveRequestWithCollectionGuard(c *cli.Command, db storage.DB, req *types.SavedRequest) error {
 	if req == nil || strings.TrimSpace(req.Collection) == "" {
 		return db.SaveRequest(req)
 	}
@@ -284,14 +284,14 @@ func saveRequestWithCollectionGuard(db storage.DB, req *types.SavedRequest) erro
 		return err
 	}
 
-	if err := confirmCreateCollection(db, req.Collection); err != nil {
+	if err := confirmCreateCollection(c, db, req.Collection); err != nil {
 		return err
 	}
 	return db.SaveRequest(req)
 }
 
-func confirmCreateCollection(store storage.CollectionStore, name string) error {
-	if !saveCollectionIsInteractive() {
+func confirmCreateCollection(c *cli.Command, store storage.CollectionStore, name string) error {
+	if !canPrompt(c, saveCollectionIsInteractive) {
 		return fmt.Errorf("collection %q does not exist; create it first with 'gurl collection create %s'", name, name)
 	}
 

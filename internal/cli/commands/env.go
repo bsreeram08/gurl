@@ -77,7 +77,7 @@ func EnvCommand(db env.Store) *cli.Command {
 						Usage: "Output as JSON",
 					},
 				},
-				Action: func(ctx context.Context, c *cli.Command) error {
+				Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
 					envs, err := db.ListEnvs()
 					if err != nil {
 						return fmt.Errorf("failed to list environments: %w", err)
@@ -85,7 +85,7 @@ func EnvCommand(db env.Store) *cli.Command {
 
 					activeEnv, _ := db.GetActiveEnv()
 
-					if c.Bool("json") {
+					if jsonOutput(c) {
 						type envSummary struct {
 							Name      string `json:"name"`
 							Active    bool   `json:"active"`
@@ -123,7 +123,7 @@ func EnvCommand(db env.Store) *cli.Command {
 
 					fmt.Println("└──────────────────────────────────────────────────────────┘")
 					return nil
-				},
+				}),
 			},
 			{
 				Name:    "switch",
@@ -193,7 +193,7 @@ func EnvCommand(db env.Store) *cli.Command {
 						Usage: "Show secret values instead of masking them",
 					},
 				},
-				Action: func(ctx context.Context, c *cli.Command) error {
+				Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
 					args := c.Args()
 					if args.Len() < 1 {
 						return fmt.Errorf("environment name argument is required")
@@ -208,8 +208,14 @@ func EnvCommand(db env.Store) *cli.Command {
 						return fmt.Errorf("environment '%s' not found", name)
 					}
 
+					if err := rejectReveal(c); err != nil {
+						return err
+					}
 					reveal := c.Bool("reveal")
-					if c.Bool("json") {
+					// Agent mode also masks sensitively named values that
+					// are not marked secret.
+					strict := agentMode(c)
+					if jsonOutput(c) {
 						out := struct {
 							Name      string            `json:"name"`
 							ID        string            `json:"id"`
@@ -222,6 +228,9 @@ func EnvCommand(db env.Store) *cli.Command {
 								if !reveal {
 									v = redact.Mask
 								}
+							}
+							if strict && redact.SensitiveName(k) && v != "" {
+								v = redact.Mask
 							}
 							out.Variables[k] = v
 						}
@@ -248,7 +257,7 @@ func EnvCommand(db env.Store) *cli.Command {
 						}
 					}
 					return nil
-				},
+				}),
 			},
 			{
 				Name:  "set",
@@ -470,7 +479,7 @@ func parseVarAssignments(c *cli.Command, pairs []string) ([][2]string, error) {
 		return out, nil
 	}
 
-	value, err := readStdinValue(commandReader(c), stdinKey)
+	value, err := readStdinValue(commandReader(c), stdinKey, !noInput(c))
 	if err != nil {
 		return nil, err
 	}
@@ -490,10 +499,13 @@ func commandReader(c *cli.Command) io.Reader {
 }
 
 // readStdinValue reads a single value for key. On a terminal it prompts on
-// stderr without echo; otherwise it reads all input and trims one trailing
-// newline.
-func readStdinValue(r io.Reader, key string) (string, error) {
+// stderr without echo, or fails when prompt is false (non-interactive mode);
+// otherwise it reads all input and trims one trailing newline.
+func readStdinValue(r io.Reader, key string, prompt bool) (string, error) {
 	if f, ok := r.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		if !prompt {
+			return "", fmt.Errorf("value for %s must be piped on stdin with --no-input (e.g. printf %%s \"$VALUE\" | gurl env set <env> %s=-)", key, key)
+		}
 		fmt.Fprintf(os.Stderr, "Value for %s: ", key)
 		b, err := term.ReadPassword(int(f.Fd()))
 		fmt.Fprintln(os.Stderr)

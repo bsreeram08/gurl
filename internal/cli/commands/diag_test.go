@@ -80,7 +80,7 @@ func diagGurl(t *testing.T, db storage.DB, args ...string) string {
 	t.Helper()
 	var err error
 	stdout, _ := captureStreams(t, func() {
-		err = DiagCommand(db).Run(context.Background(), append([]string{"diag"}, args...))
+		err = DiagCommand(db, env.NewMemoryStore()).Run(context.Background(), append([]string{"diag"}, args...))
 	})
 	if err != nil {
 		t.Fatalf("diag %v: %v", args, err)

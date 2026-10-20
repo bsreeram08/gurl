@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `gurl docs`: one compact reference of every command, subcommand, argument and flag (type, default, aliases), generated from the command tree at runtime, plus short sections on placeholders, scope precedence, extract rules, `--persist`, agent mode, the `run --json` shape, exit codes, `exec` and `diag`. `gurl docs <command>` narrows it to one command; `--json` returns `{commands, sections}`.
+- Agent mode: `--agent` (any position), `GURL_AGENT=1`, or running the binary as `agentgurl` (e.g. a symlink). It turns on `--json` wherever supported and `--no-input`, refuses `--reveal`, `paste` and `codegen --clipboard`, and also masks secrets in response bodies, response headers and errors (`run`, `diag`, `diff`). Every error is printed on stdout as `{"ok":false,"error":"..."}`, usage errors included, and help text is not printed on a usage error.
+- `run --json`: one JSON object per execution on stdout and nothing else (NDJSON for `--chain` steps and `--data` rows). It has the id, ok, method, URL, status, duration, size, response headers, body (parsed when valid JSON), error, failure phase, structured resolution problems, assertions, extracted values and the persisted variable names. Masking matches execution records.
+- `run --dry-run --json`: the planned request with `"dry_run": true`, masked headers and body, planned extracts and structured problems.
+- `--json` on `history`, `timeline`, `diff` (structured RFC 6902 changes, or a text diff), `collection list` and `collection show` (secret and credential-looking values masked).
+- `--no-input` and `GURL_NO_INPUT=1` (implied by `--json` and `--agent`): commands never prompt. They fail and name the flag or argument to pass instead: run without a name, save into a missing collection, collection delete without `--force`, passphrases, `env set KEY=-` on a terminal. `gurl shell` refuses to start.
+- With `--json`, errors before any execution (unknown request or environment, conflicting flags) print `{"ok":false,"error":"..."}` on stdout as well as the message on stderr.
+
+### Changed
+
+- `run --json` prints no failure notice, persist summary or assertion summary on stderr; the JSON object carries them.
+- `diag --json` no longer escapes `<`, `>` and `&` as `\u003c`-style sequences, and neither do the new JSON outputs. The output is still valid JSON.
+
 ## [v0.6.0] - 2026-10-20
 
 ### Added
