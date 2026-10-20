@@ -63,10 +63,10 @@ docker run --rm ghcr.io/bsreeram08/gurl:latest --version
 docker run --rm -v "$PWD:/work" -w /work ghcr.io/bsreeram08/gurl:latest list
 ```
 
-Use a version tag for reproducible runs:
+Images are published automatically for every release (`linux/amd64` and `linux/arm64`). `latest` tracks the newest stable release; each release is also tagged with its version (for example `v0.7.0`, matching the [GitHub release](https://github.com/bsreeram08/gurl/releases) tag). Pin a version tag for reproducible runs:
 
 ```bash
-docker run --rm ghcr.io/bsreeram08/gurl:v0.4.0 --version
+docker run --rm ghcr.io/bsreeram08/gurl:<version> --version   # e.g. ghcr.io/bsreeram08/gurl:v0.7.0
 ```
 
 To keep gurl's local database, project files, and encrypted key material across container runs, mount the relevant host directories:
