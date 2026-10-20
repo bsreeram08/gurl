@@ -9,6 +9,8 @@
 package redact
 
 import (
+	"encoding/json"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -69,13 +71,23 @@ func Replace(s string, secrets []string) string {
 	return s
 }
 
+// encodedForms returns s plus the URL- and JSON-escaped spellings it can take
+// in a URL, error message or body, so masking doesn't miss an encoded copy.
+func encodedForms(s string) []string {
+	forms := []string{s, url.QueryEscape(s), url.PathEscape(s)}
+	if b, err := json.Marshal(s); err == nil {
+		forms = append(forms, string(b[1:len(b)-1]))
+	}
+	return forms
+}
+
 func bySize(secrets []string) []string {
 	out := make([]string, 0, len(secrets))
 	for _, s := range secrets {
 		// ponytail: values shorter than minSecretLen are not replaced; they
 		// would garble unrelated text and reveal themselves by the gaps.
 		if len(s) >= minSecretLen {
-			out = append(out, s)
+			out = append(out, encodedForms(s)...)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return len(out[i]) > len(out[j]) })

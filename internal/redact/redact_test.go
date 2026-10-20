@@ -187,3 +187,14 @@ func TestExecutionMasksRequestVarsAndResponseHeaders(t *testing.T) {
 		t.Errorf("response body must be stored as received, got %q", rec.Response)
 	}
 }
+
+func TestReplaceMasksEncodedSecrets(t *testing.T) {
+	secret := `sk+live/a b"c`
+	in := "q=sk%2Blive%2Fa+b%22c path=sk+live%2Fa%20b%22c json=sk+live/a b\"c esc=sk+live/a b\\\"c"
+	got := Replace(in, []string{secret})
+	for _, leak := range []string{"sk%2Blive", "sk+live", "live/a"} {
+		if strings.Contains(got, leak) {
+			t.Fatalf("encoded secret leaked (%q): %s", leak, got)
+		}
+	}
+}
