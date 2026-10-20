@@ -11,137 +11,157 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: '1.26.3'
-          
+
       - name: Download modules
         run: go mod download
 
       - name: Run Hound Review
         id: review
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
 
-          # Get base ref safely (handle detached head or missing origin)
-          BASE_REF="${{ github.base_ref }}"
+          # Append a line (with a real newline) to the review body.
+          REVIEW_OUTPUT=""
+          add() { REVIEW_OUTPUT+="$1"$'\n'; }
+          fence() { add '```'; add "$1"; add '```'; add ""; }
+
+          # Fall back to master if the base ref is not available locally.
           if ! git rev-parse "origin/$BASE_REF" &>/dev/null; then
             BASE_REF="master"
           fi
 
-          # Get changed Go files (non-test)
-          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD -- '*.go' 2>/dev/null | grep -v '_test.go' || echo "")
+          # Changed Go files (non-test)
+          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD -- '*.go' 2>/dev/null | grep -v '_test.go' || true)
 
-          # Initialize review output
-          REVIEW_OUTPUT="## 🐕 Hound Code Review\n\n"
-          REVIEW_OUTPUT+="**Pull Request:** #${{ github.event.pull_request.number }}\n\n"
-          REVIEW_OUTPUT+="**Go Version:** $(go version)\n\n"
+          add "**Pull Request:** #${PR_NUMBER}"
+          add ""
+          add "**Go Version:** $(go version)"
+          add ""
 
           ISSUES_FOUND=false
 
-          # --- Security Checks on changed files only ---
+          # --- Security checks on changed files only ---
           if [[ -n "$CHANGED_FILES" ]]; then
-            # Shell=True risk (Shell=true in exec is dangerous)
-            SHELL_TRUE=$(echo "$CHANGED_FILES" | xargs grep -rn 'Shell[[:space:]]*[:=][[:space:]]*true' 2>/dev/null || true)
+            # Shell=true enables shell interpretation
+            SHELL_TRUE=$(echo "$CHANGED_FILES" | xargs grep -n 'Shell[[:space:]]*[:=][[:space:]]*true' 2>/dev/null || true)
             if [[ -n "$SHELL_TRUE" ]]; then
               ISSUES_FOUND=true
-              REVIEW_OUTPUT+="⚠️ **Shell=True Risk** — \`Shell=true\` enables shell interpretation:\n\n"
-              REVIEW_OUTPUT+="\`\`\`\n$SHELL_TRUE\n\`\`\`\n\n"
+              # shellcheck disable=SC2016 # literal backticks for markdown
+              add '⚠️ **Shell=True Risk** — `Shell=true` enables shell interpretation:'
+              add ""
+              fence "$SHELL_TRUE"
             fi
 
-            # Template injection in os/exec (data-dependent command construction)
-            TEMPLATE_INJECT=$(echo "$CHANGED_FILES" | xargs grep -rn 'exec\.Command(' 2>/dev/null | grep -v '_test.go' | grep -v 'shellJoin\|fieldQuote' || true)
-            if [[ -n "$TEMPLATE_INJECT" ]]; then
-              TEMPLATE_CONCAT=$(echo "$TEMPLATE_INJECT" | grep -E '\+ |fmt\.Sprintf|`|\$\{?' 2>/dev/null || true)
-              if [[ -n "$TEMPLATE_CONCAT" ]]; then
+            # exec.Command with data-dependent command construction
+            EXEC_CALLS=$(echo "$CHANGED_FILES" | xargs grep -n 'exec\.Command(' 2>/dev/null | grep -v '_test.go' | grep -v 'shellJoin\|fieldQuote' || true)
+            if [[ -n "$EXEC_CALLS" ]]; then
+              EXEC_CONCAT=$(echo "$EXEC_CALLS" | grep -E '\+ |fmt\.Sprintf|`|\$\{?' 2>/dev/null || true)
+              if [[ -n "$EXEC_CONCAT" ]]; then
                 ISSUES_FOUND=true
-                REVIEW_OUTPUT+="⚠️ **Potential Shell Injection** — \`exec.Command\` with dynamic string building:\n\n"
-                REVIEW_OUTPUT+="\`\`\`\n$TEMPLATE_CONCAT\n\`\`\`\n\n"
+                # shellcheck disable=SC2016 # literal backticks for markdown
+                add '⚠️ **Potential Shell Injection** — `exec.Command` with dynamic string building:'
+                add ""
+                fence "$EXEC_CONCAT"
               fi
             fi
           fi
 
-          # --- Go vet ---
-          if ! go vet ./... 2>&1; then
+          # --- go vet ---
+          if ! VET_OUTPUT=$(go vet ./... 2>&1); then
             ISSUES_FOUND=true
-            VET_OUTPUT=$(go vet ./... 2>&1)
-            REVIEW_OUTPUT+="⚠️ **Go Vet Warnings:**\n\`\`\`\n$VET_OUTPUT\n\`\`\`\n\n"
+            add "⚠️ **Go Vet Warnings:**"
+            fence "$VET_OUTPUT"
           fi
 
           # --- Build ---
-          if ! go build -o /dev/null ./cmd/gurl 2>&1; then
+          if ! BUILD_OUTPUT=$(go build -o /dev/null ./cmd/gurl 2>&1); then
             ISSUES_FOUND=true
-            BUILD_OUTPUT=$(go build -o /dev/null ./cmd/gurl 2>&1)
-            REVIEW_OUTPUT+="❌ **Build Failed:**\n\`\`\`\n$BUILD_OUTPUT\n\`\`\`\n\n"
+            add "❌ **Build Failed:**"
+            fence "$BUILD_OUTPUT"
           fi
 
           # --- Tests ---
-          # GURL_TLS_INSECURE_OK must be set for TLS verification disable tests
-          if ! go test ./... 2>&1; then
+          if ! TEST_OUTPUT=$(go test ./... 2>&1); then
             ISSUES_FOUND=true
-            TEST_OUTPUT=$(go test ./... 2>&1)
-            REVIEW_OUTPUT+="❌ **Tests Failed:**\n\`\`\`\n$TEST_OUTPUT\n\`\`\`\n\n"
+            add "❌ **Tests Failed:**"
+            fence "$TEST_OUTPUT"
           fi
 
-          # Compile final review
           if $ISSUES_FOUND; then
-            REVIEW_OUTPUT+="### 🔴 Issues Found\n\nSee above for details.\n"
+            add "### 🔴 Issues Found"
+            add ""
+            add "See above for details."
           else
-            REVIEW_OUTPUT+="### 🟢 No Issues Found\n\nHound found no security, build, vet, or test issues.\n"
+            add "### 🟢 No Issues Found"
+            add ""
+            add "Hound found no security, build, vet, or test issues."
           fi
 
-          echo "review<<EOF" >> $GITHUB_OUTPUT
-          printf '%s' "$REVIEW_OUTPUT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Multiline output with a random delimiter so tool output cannot end it early.
+          DELIM="HOUND_$(openssl rand -hex 16)"
+          {
+            echo "review<<${DELIM}"
+            printf '%s\n' "$REVIEW_OUTPUT"
+            echo "${DELIM}"
+          } >> "$GITHUB_OUTPUT"
 
+          printf '%s\n' "$REVIEW_OUTPUT"
           if $ISSUES_FOUND; then
-            echo "$REVIEW_OUTPUT"
             exit 1
           fi
-          
+
       - name: Post Review Comment
         if: always()
         uses: actions/github-script@v7
+        env:
+          # Passed via env, never interpolated into the script source.
+          REVIEW: ${{ steps.review.outputs.review }}
         with:
           script: |
-            const review = `${{ steps.review.outputs.review }}`;
-            
-            const body = `## 🐕 Hound Code Review
-              
-**Files changed:** ${context.payload.pull_request.changed_files}
-              
-${review || 'No issues found.'}
-            `;
-            
-            // Get existing comments
-            const comments = await github.rest.issues.listComments({
+            const review = process.env.REVIEW || '';
+
+            const body = [
+              '## 🐕 Hound Code Review',
+              '',
+              `**Files changed:** ${context.payload.pull_request.changed_files}`,
+              '',
+              review || 'Hound review produced no output; check the workflow logs.',
+            ].join('\n');
+
+            // Remove previous Hound comments so only one remains.
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number
+              issue_number: context.issue.number,
+              per_page: 100,
             });
-            
-            // Delete old Hound comments
-            for (const comment of comments.data) {
+
+            for (const comment of comments) {
               if (comment.user.login === 'github-actions[bot]' && comment.body.includes('🐕 Hound')) {
                 await github.rest.issues.deleteComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  comment_id: comment.id
+                  comment_id: comment.id,
                 });
               }
             }
-            
-            // Post new comment
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: body
+              body,
             });

@@ -129,13 +129,72 @@ jobs:
           cat SHA256SUMS
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             gurl-*
             SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tags
+        id: meta
+        env:
+          VERSION: ${{ github.ref_name }}
+          IMAGE: ghcr.io/${{ github.repository }}
+        run: |
+          image="${IMAGE,,}"
+          tags="${image}:${VERSION}"
+          # Pre-release tags (e.g. v1.0.0-rc.1) do not move :latest.
+          if [[ "$VERSION" != *-* ]]; then
+            tags+=",${image}:latest"
+          fi
+          {
+            echo "version=${VERSION}"
+            echo "tags=${tags}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Smart curl saver and API companion for the terminal
+            org.opencontainers.image.licenses=MIT
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   homebrew:
     needs: release
@@ -155,9 +214,9 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "VERSION=$INPUT_TAG" >> $GITHUB_ENV
+            echo "VERSION=$INPUT_TAG" >> "$GITHUB_ENV"
           else
-            echo "VERSION=$REF_NAME" >> $GITHUB_ENV
+            echo "VERSION=$REF_NAME" >> "$GITHUB_ENV"
           fi
 
       - name: Download release tarballs
@@ -168,9 +227,11 @@ jobs:
 
       - name: Compute checksums
         run: |
-          echo "SHA_DARWIN_ARM64=$(sha256sum gurl-darwin-arm64.tar.gz | cut -d' ' -f1)" >> $GITHUB_ENV
-          echo "SHA_LINUX_AMD64=$(sha256sum gurl-linux-amd64.tar.gz | cut -d' ' -f1)" >> $GITHUB_ENV
-          echo "SHA_LINUX_ARM64=$(sha256sum gurl-linux-arm64.tar.gz | cut -d' ' -f1)" >> $GITHUB_ENV
+          {
+            echo "SHA_DARWIN_ARM64=$(sha256sum gurl-darwin-arm64.tar.gz | cut -d' ' -f1)"
+            echo "SHA_LINUX_AMD64=$(sha256sum gurl-linux-amd64.tar.gz | cut -d' ' -f1)"
+            echo "SHA_LINUX_ARM64=$(sha256sum gurl-linux-arm64.tar.gz | cut -d' ' -f1)"
+          } >> "$GITHUB_ENV"
 
       - name: Update formula
         run: |
