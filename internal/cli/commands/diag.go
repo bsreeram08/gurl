@@ -65,6 +65,9 @@ func DiagCommand(db storage.DB, envs env.Store) *cli.Command {
 			}
 			if agentMode(c) {
 				secrets := currentSecrets(db, envs, rec)
+				if base != nil { // the baseline may have run in another environment
+					secrets = append(secrets, currentSecrets(db, envs, base)...)
+				}
 				rec, base = maskedRecord(rec, secrets), maskedRecord(base, secrets)
 			}
 			cmp := compareExecutions(base, rec)

@@ -110,6 +110,10 @@ func RunCommand(db storage.DB, envStorage env.Store) *cli.Command {
 			},
 		},
 		Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
+			if agentMode(c) && c.String("output") != "" {
+				// The file would hold the unmasked body outside agent-mode redaction.
+				return cli.Exit("--output is not allowed in agent mode", 2)
+			}
 			args := c.Args()
 			var name string
 			if args.Len() < 1 {

@@ -59,7 +59,8 @@ func DiffCommand(db storage.DB, envs env.Store) *cli.Command {
 			if jsonOutput(c) {
 				before, after := histB, histA
 				if agentMode(c) {
-					secrets := currentSecrets(db, envs, histA)
+					// each side may have run in a different environment
+					secrets := append(currentSecrets(db, envs, histA), currentSecrets(db, envs, histB)...)
 					before, after = maskedRecord(before, secrets), maskedRecord(after, secrets)
 				}
 				return writeJSON(os.Stdout, diffReport{

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -684,5 +685,26 @@ func TestDocsSectionsNameEveryProblemKindAndFailurePhase(t *testing.T) {
 		if !strings.Contains(runJSON, name) {
 			t.Errorf("docs run_json section does not name %q", name)
 		}
+	}
+}
+
+func TestExecAgentModeMasksChildOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh")
+	}
+	store := env.NewMemoryStore()
+	e := env.NewEnvironment("dev", "")
+	e.SetSecretVariable("API_KEY", "sk_live_exec_secret")
+	if err := store.SaveEnv(e); err != nil {
+		t.Fatal(err)
+	}
+	cmd := &cli.Command{Name: "gurl", Flags: []cli.Flag{&cli.BoolFlag{Name: "agent"}}, Commands: []*cli.Command{ExecCommand(store)}}
+	output := captureStdoutAndStderr(t, func() {
+		if err := cmd.Run(context.Background(), []string{"gurl", "--agent", "exec", "--env", "dev", "--", "sh", "-c", `echo "key=$API_KEY"; echo "err=$API_KEY" >&2`}); err != nil {
+			t.Fatalf("exec failed: %v", err)
+		}
+	})
+	if strings.Contains(output, "sk_live_exec_secret") || !strings.Contains(output, "key=*****") || !strings.Contains(output, "err=*****") {
+		t.Fatalf("expected masked child output, got:\n%s", output)
 	}
 }
