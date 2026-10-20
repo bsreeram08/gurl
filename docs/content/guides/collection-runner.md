@@ -1,249 +1,122 @@
 ---
-title: "Collection Runner"
-description: "Run entire API test suites with data-driven testing"
+title: "Collections & data-driven runs"
+description: "Run a group of requests in order, feed CSV/JSON rows, and produce CI reports."
 weight: 4
 ---
 
-# Collection Runner
+A collection groups saved requests and carries its own variables and secrets. `gurl collection run` executes its requests in order, once per iteration or data row, and reports pass/fail for each.
 
-The collection runner executes multiple requests in sequence, supporting data-driven testing and various output formats for CI integration.
-
-## Running a Collection
-
-Run all requests in a collection:
+## Build a collection
 
 ```bash
-gurl collection run "my-api"
+gurl collection create "checkout" --var CURRENCY=EUR --secret API_KEY=sk-test-...
+gurl save "create-order" '{{BASE_URL}}/orders' -X POST -c checkout \
+  --extract 'orderId=jsonpath:$.id'
+gurl save "capture-payment" '{{BASE_URL}}/orders/{{orderId}}/capture' -X POST -c checkout
+gurl collection show "checkout"          # requests and variables (secrets masked)
 ```
 
-Run a specific request from a collection:
+Collection variables sit between environment and data-row values in [scope precedence]({{< relref "/guides/variables#where-values-come-from-scopes" >}}), and may reference environment keys (`API_URL={{BASE_URL}}/v1`).
+
+## Set the order
 
 ```bash
-gurl collection run "my-api" --request "get-users"
+gurl sequence set "create-order" 1
+gurl sequence set "capture-payment" 2
+gurl sequence list "checkout"
 ```
 
-## Sequencing Requests
-
-By default, requests run in the order they were saved. Control execution order explicitly:
+## Preview, then run
 
 ```bash
-gurl sequence set "login" 1
-gurl sequence set "get-users" 2
-gurl sequence set "update-user" 3
-gurl sequence set "logout" 4
+gurl collection run "checkout" --env staging --dry-run
+gurl collection run "checkout" --env staging
 ```
 
-View the current sequence:
+A dry run prints the request order and each resolved request without sending anything, running post-response scripts, recording history, writing reports or persisting variables.
+
+A failed request prints its execution id on stderr, ready for [`gurl diag`]({{< relref "/cli/diag" >}}):
+
+```text
+  [FAIL] capture-payment: HTTP 500 (id: 01dda65f) — inspect with: gurl diag 01dda65f
+```
+
+`gurl collection run` exits 1 when any request fails.
+
+## Flow variables across requests
+
+Extraction rules and scripts share one map of runtime values. A value extracted by one request is available to later requests' placeholders, assertions, scripts and `run-if` checks:
 
 ```bash
-gurl sequence list "my-api"
-```
-
-### Conditional Execution
-
-Skip requests based on conditions:
-
-```bash
-gurl collection run "my-api" --skip "update-user" --skip-if "SKIP_WRITES=true"
-```
-
-Saved requests can also carry a `run-if` expression:
-
-```bash
-gurl edit "update-user" --run-if "SKIP_WRITES != true"
-```
-
-`run-if` supports simple `VAR == VALUE` and `VAR != VALUE` checks. Missing variables are treated as empty strings.
-
-## Request Chaining and Flow Variables
-
-Post-response scripts can route the next request in a collection:
-
-```javascript
-var data = response.json();
-gurl.setVariable("orderId", data.id);
-gurl.setNextRequest("capture-payment");
-```
-
-Extraction rules and scripts share the same flow variable map. A value extracted by one request can be used by later request templates, assertions, scripts, and `run-if` checks.
-
-```bash
-gurl save "create-order" https://api.example.com/orders \
-  --extract orderId=jsonpath:$.id \
-  --post-script "gurl.setNextRequest('capture-payment')"
-
+gurl edit "create-order" --post-script "gurl.setNextRequest('capture-payment')"
 gurl edit "capture-payment" --run-if "orderId != ''"
 ```
 
-Persist only the extracted or script-set values back to the selected environment:
+Write them back to their variable origin at the end of the run with `--persist` (not combinable with `--dry-run`):
 
 ```bash
-gurl collection run "checkout-flow" --env staging --persist
+gurl collection run "checkout" --env staging --persist
 ```
 
-CLI variables, environment inputs, and data-row values are not written back unless extraction or a script changes the same key.
+See [Chaining & extraction]({{< relref "/guides/chaining" >}}).
 
-## File-Backed Reloads
+## Data-driven runs
 
-When a project uses file-backed collections, long-running collection runs watch the collection files while the run is active. Changes are debounced before reload so partially written files are not read.
-
-The active iteration always uses a stable snapshot. If request files, collection variables, or sequence order change during an iteration, the current iteration continues with the snapshot it started with. Future iterations, including future data rows in a data-driven run, reload the collection after the debounced change event. Added, removed, renamed, or reordered requests affect only those later iterations.
-
-## Dry Run
-
-Preview a collection flow without sending requests:
-
-```bash
-gurl collection run "checkout-flow" --env staging --dry-run
-```
-
-Dry runs print request order, planned extraction sources, variable sources from earlier steps, and unresolved placeholders. They do not send HTTP requests, run post-response scripts, save history, write reports, or persist variables.
-
-## Data-Driven Testing
-
-Run a request with data from a CSV or JSON file. Each row iteration substitutes variables and runs the request.
-
-### CSV Format
-
-Create a `users.csv` file:
+Feed rows from CSV or JSON; each row is one iteration, and its columns become data-row variables:
 
 ```csv
-email,name,role
-alice@example.com,Alice,admin
-bob@example.com,Bob,viewer
-charlie@example.com,Charlie,editor
+email,name
+alice@example.com,Alice
+bob@example.com,Bob
 ```
-
-Run with data:
 
 ```bash
-gurl run "create-user" --data users.csv
+gurl collection run "signup" --data users.csv --env staging
+gurl run "create-user" --data users.json      # a single request works too
 ```
 
-This runs `create-user` three times, once for each row.
+JSON data is an array of objects: `[{"email": "alice@example.com", "name": "Alice"}]`.
 
-### JSON Dataset
+Repeat without data using `--iterations 3`, and pace requests with `--delay 200ms`.
 
-Create a `users.json` file:
+## Stop early
 
-```json
-[
-  {"email": "alice@example.com", "name": "Alice", "role": "admin"},
-  {"email": "bob@example.com", "name": "Bob", "role": "viewer"}
-]
-```
+| Flag | Effect |
+|------|--------|
+| `--bail` | Stop on the first failure of any kind; remaining requests are skipped |
+| `--assert-bail` | Stop on the first failed assertion only |
+| `--ci` | CI mode: treat skipped requests as failures (exit 1) |
 
-Run with data:
+## Reports for CI
+
+Reporters are `console`, `junit`, `json` and `html`; repeat `--reporter` for several. Files go to `--reporter-output DIR` (as `report.xml`, `report.json`, …). Create the directory first:
 
 ```bash
-gurl run "create-user" --data users.json
+mkdir -p reports
+gurl collection run "api-tests" --env ci --reporter junit --reporter json --reporter-output reports --ci
 ```
-
-## Reporters
-
-Gurl supports multiple reporter formats for different use cases.
-
-### Console Reporter (Default)
-
-Human-readable output with color coding:
-
-```
-PASS  get-users       200 OK  45ms
-PASS  create-user     201 Created  120ms
-FAIL  update-user     400 Bad Request  32ms
-```
-
-### JUnit XML Reporter
-
-For CI integration with GitHub Actions, Jenkins, etc.:
-
-```bash
-gurl collection run "my-api" --reporter junit --output test-results.xml
-```
-
-Generates JUnit-compatible XML:
-
-```xml
-<testsuite name="my-api" tests="3" failures="1">
-  <testcase name="get-users" classname="my-api" time="0.045"/>
-  <testcase name="create-user" classname="my-api" time="0.120"/>
-  <testcase name="update-user" classname="my-api" time="0.032">
-    <failure message="expected 200, got 400"/>
-  </testcase>
-</testsuite>
-```
-
-### JSON Reporter
-
-Machine-readable output for custom tooling:
-
-```bash
-gurl collection run "my-api" --reporter json --output results.json
-```
-
-### HTML Reporter
-
-Visual HTML report with timing charts:
-
-```bash
-gurl collection run "my-api" --reporter html --output report.html
-```
-
-## CI Integration
-
-### GitHub Actions
 
 ```yaml
-- name: Run API Tests
+# GitHub Actions
+- name: Run API tests
   run: |
-    gurl collection run "api-tests" --reporter junit --output results.xml --bail
-  env:
-    CI: true
-
-- name: Publish Test Results
+    mkdir -p reports
+    gurl collection run "api-tests" --env ci --reporter junit --reporter-output reports --bail
+- name: Publish test results
   uses: dorny/test-reporter@v1
   with:
-    name: API Tests
-    path: results.xml
+    name: API tests
+    path: reports/report.xml
     reporter: java-junit
 ```
 
-### Bail Mode
+Add `--verbose` to print request and response headers and bodies for each request.
 
-Stop on first failure:
+## File-backed reloads
 
-```bash
-gurl collection run "my-api" --bail
-```
+For project-backed collections (`gurl init`, `gurl collection migrate`), a long collection run watches the collection files. The current iteration always uses the snapshot it started with; changes (debounced) apply from the next iteration or data row.
 
-This is useful in CI to fail fast and avoid unnecessary API calls.
+## See also
 
-### Assertion Bail Mode
-
-Stop only when an assertion fails:
-
-```bash
-gurl collection run "my-api" --assert-bail
-```
-
-This lets the run continue through transport or HTTP failures while still stopping on the first failed assertion.
-
-### Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | All requests passed |
-| 1 | One or more assertions failed |
-| 2 | Error (network, parsing, etc.) |
-
-## Report Generation
-
-Generate a report after a collection run:
-
-```bash
-gurl collection run "my-api" --reporter html --output report.html
-open report.html
-```
-
-> [!TIP]
-> Use environment variables to switch between staging and production endpoints in CI: `gurl env switch $TARGET_ENV && gurl collection run "api-tests"`.
+- [`gurl collection`]({{< relref "/cli/collection" >}}) — every subcommand and flag, including sharing collections through git with passphrase-encrypted secrets
+- [`gurl sequence`]({{< relref "/cli/sequence" >}})

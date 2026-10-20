@@ -3,39 +3,34 @@ title: "gurl edit"
 description: "Edit a saved request"
 ---
 
-# gurl edit
 
-Edit a saved request using your default editor or command-line flags.
+Change fields of a saved request from the command line. Only the fields you pass are changed; gurl prints the list of changes.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl edit [name] [flags]
+gurl edit <name> [flags]
 ```
-
-## Description
-
-The `edit` command modifies a saved request. Without flags, it opens the request in your default editor. With flags, it updates specific fields directly.
 
 ## Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--method` | `-X` | none | HTTP method |
-| `--url` | `-u` | none | Request URL |
-| `--header` | `-H` | none | Add HTTP header |
-| `--remove-header` | | none | Remove a header by name |
-| `--body` | `-d` | none | Request body |
-| `--collection` | `-c` | none | Move to collection |
-| `--tag` | `-t` | none | Add a tag |
-| `--pre-script` | | none | Script to run before request |
-| `--post-script` | | none | Script to run after request |
-| `--run-if` | | none | Conditional expression for running this request |
-| `--extract` | | none | Add or replace extraction rule as `VAR_NAME=METHOD:EXPRESSION` |
-| `--remove-extract` | | none | Remove extraction rule by variable name |
-| `--assert` | `-a` | none | Add an assertion |
-| `--auth` | | none | Authentication type: `basic`, `bearer`, `apikey`, `oauth1`, `oauth2`, `awsv4`, `digest`, `ntlm`, or `none` |
-| `--auth-param` | | none | Authentication parameter as `key=value` (can be specified multiple times) |
+| `--method` | `-X` | none | Change the HTTP method |
+| `--url` | `-u` | none | Change the request URL |
+| `--header` | `-H` | none | Add a header `'Key: Value'` (repeatable) |
+| `--remove-header` | `--rm-header` | none | Remove a header by key (repeatable) |
+| `--body`, `--data` | `-d` | none | Change the request body |
+| `--collection` | `-c` | none | Move to a collection |
+| `--tag` | `-t` | none | Add a tag (repeatable) |
+| `--pre-script` | `--pre` | none | Set the pre-request script |
+| `--post-script` | `--post` | none | Set the post-response script |
+| `--run-if` | | none | Set a conditional run expression (`VAR == VALUE` or `VAR != VALUE`) |
+| `--extract` | | none | Add or replace an extraction rule `VAR=METHOD:EXPR` (repeatable) |
+| `--remove-extract` | | none | Remove an extraction rule by variable name (repeatable) |
+| `--assert` | `-a` | none | Add an assertion `field=op=value` (repeatable) |
+| `--auth` | | none | Auth type: `basic`, `bearer`, `apikey`, `oauth1`, `oauth2`, `awsv4`, `digest`, `ntlm`, `none` |
+| `--auth-param` | | none | Auth parameter `KEY=VALUE` (repeatable) |
 
 ## Aliases
 
@@ -43,70 +38,33 @@ The `edit` command modifies a saved request. Without flags, it opens the request
 
 ## Examples
 
-### Edit in default editor
+### Point a request at a new URL
 
 ```bash
-gurl edit "my-request"
+gurl edit "list-users" --url '{{BASE_URL}}/v2/users'
 ```
 
-Opens "my-request" in your default editor.
-
-### Change URL
-
-```bash
-gurl edit "my-request" --url https://api.new-example.com/users
-```
-
-Updates the URL for the request.
-
-### Update method and headers
-
-```bash
-gurl edit "api-users" -X POST -H "Authorization: Bearer new-token"
-```
-
-Changes the method to POST and updates the Authorization header.
-
-### Add pre-script
-
-```bash
-gurl edit "auth-request" --pre-script "./auth-script.sh"
-```
-
-Adds a pre-request script to the "auth-request".
-
-### Add flow metadata
+### Add flow metadata for chaining
 
 ```bash
 gurl edit "get-profile" \
   --run-if "token != ''" \
-  --extract userId=jsonpath:$.id \
+  --extract userId=jsonpath:'$.id' \
   --post-script "gurl.setVariable('seenProfile', 'true')"
 ```
 
-Adds a run condition, an extraction rule, and a post-response script. `run-if` supports simple `VAR == VALUE` and `VAR != VALUE` checks.
-
-### Update saved auth
+### Replace or clear saved auth
 
 ```bash
-gurl edit "profile" \
-  --auth bearer \
-  --auth-param token='{{token}}'
-```
-
-Replaces the request's saved auth config with bearer auth. Each `--auth-param` must be a `key=value` pair and may be repeated.
-
-### Clear saved auth
-
-```bash
+gurl edit "profile" --auth bearer --auth-param token='{{token}}'
 gurl edit "profile" --auth none
 ```
 
-Clears the request's saved auth config. `--auth none` cannot be combined with `--auth-param`.
+`--auth none` clears auth and cannot be combined with `--auth-param`.
 
-## See also
+## Related commands
 
-- [`gurl save`](save) - Save a new request
-- [`gurl run`](run) - Execute a request
-- [`gurl auth`](auth) - Discover auth handlers and parameters
-- [`gurl list`](list) - List saved requests
+- [`gurl show`]({{< relref "/cli/show" >}}) - See what is saved
+- [`gurl save`]({{< relref "/cli/save" >}}) - Save a new request
+- [`gurl extract`]({{< relref "/cli/extract" >}}) - Test extraction rules
+- [Chaining and extraction]({{< relref "/guides/chaining" >}}) - Guide

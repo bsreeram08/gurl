@@ -1,10 +1,9 @@
 ---
-title: "Plugin System"
+title: "Plugin system"
 description: "Extensible middleware, output, command, and auth plugins"
-weight: 2
+weight: 1
 ---
 
-# Plugin System
 
 Gurl's plugin system lets you extend functionality through middleware, output, command, and auth plugin interfaces. Go plugins are discovered from `~/.config/gurl/plugins/` and loaded into the plugin registry on startup.
 

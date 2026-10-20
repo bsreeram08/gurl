@@ -1,104 +1,94 @@
 ---
-title: "Environments"
-description: "Manage variables and secrets across deployment stages"
+title: "Environments & secrets"
+description: "Keep hosts and credentials out of saved requests and switch between dev, staging and prod."
 weight: 1
 ---
 
-# Environments
+An environment is a named set of variables, such as `BASE_URL` and `API_KEY`, that fills the `{{placeholders}}` in saved requests at send time. Keep one environment per stage and the same saved requests work against all of them.
 
-Environments let you manage variables and secrets for different deployment stages. Each environment contains a set of key-value pairs that are substituted into requests at runtime.
-
-## Creating Environments
-
-Create an environment with `gurl env create`:
+## Create an environment
 
 ```bash
-gurl env create dev --var "BASE_URL=https://dev.api.com" --var "TIMEOUT=30"
-gurl env create staging --var "BASE_URL=https://staging.api.com" --var "TIMEOUT=60"
-gurl env create prod --var "BASE_URL=https://api.example.com" --var "TIMEOUT=120"
+gurl env create dev --var BASE_URL=https://dev.api.example.com --var TIMEOUT=30
+gurl env create prod --var BASE_URL=https://api.example.com
 ```
 
-For secrets, use `--secret` to encrypt the value:
+## Store a secret without typing it on the command line
+
+Mark a variable secret with `--secret KEY`. Pass the value as `KEY=-` to read it from stdin; on a terminal gurl prompts without echo, so the value never lands in shell history:
 
 ```bash
-gurl env create prod --secret "API_KEY=sk-live-xxxxx" --secret "WEBHOOK_SECRET=whsec_xxxxx"
+gurl env create prod --var BASE_URL=https://api.example.com --var API_KEY=- --secret API_KEY
+# or later:
+gurl env set prod API_KEY=- --secret API_KEY
+printf '%s' "$PROD_KEY" | gurl env set prod API_KEY=- --secret API_KEY
 ```
 
-## Switching Environments
+`gurl env set prod KEY -` (a lone `-`) is rejected: use `KEY=-`.
 
-Set the active environment with `gurl env switch`:
+Secret values are encrypted at rest with AES-256-GCM (see [Credential storage]({{< relref "/security/credential-storage" >}})) and shown as `*****`:
 
 ```bash
-gurl env switch staging
+gurl env show prod            # secrets masked
+gurl env show prod --json     # {"name","id","variables":{...},"secrets":[...]}, masked
+gurl env show prod --reveal   # plaintext; refused in agent mode
+gurl env list --json          # [{"name","active","variables"}]
 ```
 
-List all environments:
+{{< callout type="warning" >}}
+`--reveal` prints secrets in plaintext to your terminal and its scrollback. Don't use it while screen-sharing, in CI logs, or in a session an AI agent can read. It is refused in [agent mode]({{< relref "/ai/agent-mode" >}}).
+{{< /callout >}}
+
+## Use an environment
+
+Reference variables as `{{NAME}}` in the URL, headers, body or auth params of a saved request:
 
 ```bash
-gurl env list
-# dev
-# staging (active)
-# prod
+gurl save "list-charges" '{{BASE_URL}}/v1/charges' -H 'Authorization: Bearer {{API_KEY}}'
+
+gurl run "list-charges" --env prod     # one run
+gurl env switch prod                   # make prod the active environment
+gurl run "list-charges"
 ```
 
-## Using Environments in Requests
+`--env` with an unknown name is an error; gurl never silently runs without variables.
 
-Reference variables in your TOML request files using template syntax:
+## Alias keys across environments
 
-```toml
-# requests/user.toml
-[request]
-method = "GET"
-url = "{{BASE_URL}}/users"
-
-[headers]
-Authorization = "Bearer {{API_KEY}}"
-X-Request-Timeout = "{{TIMEOUT}}"
-```
-
-Run with a specific environment:
+Two environments may name the same credential differently. An alias is an environment value that refers to another key of the same environment:
 
 ```bash
-gurl run "user" --env dev
+gurl env set nets-beta 'API_KEY={{SA_KEY}}'
 ```
 
-Variable substitution replaces `{{VAR_NAME}}` with the corresponding value from the active environment.
+Requests that use `{{API_KEY}}` now get the value of `SA_KEY` in `nets-beta`. Aliases resolve one level only (no re-expansion). When a request uses the alias, the resolved value is masked like the secret it points to.
 
-## Variable Precedence
+## Hand an environment to another tool
 
-Variables are resolved in this order (highest to lowest):
-
-| Source | Example | Override Flag |
-|--------|---------|---------------|
-| CLI variables | `--var "BASE_URL=https://custom.com"` | `--var` |
-| Active environment | `gurl env switch prod` | `--env` |
-| Template defaults | `{{BASE_URL default "https://api.com"}}` | none |
-
-## Importing from .env Files
-
-Import variables from a `.env` file:
+[`gurl exec`]({{< relref "/cli/exec" >}}) runs a command with the environment's variables in its process environment, without printing them:
 
 ```bash
-gurl env import --file .env.production
-gurl env import --file .env.staging --env staging
+gurl exec --env prod -- node e2e.mjs
+gurl exec --env prod -- sh -c 'curl -H "Authorization: Bearer $API_KEY" "$BASE_URL/v1/charges"'
 ```
 
-The import command reads key-value pairs from the file and adds them to the specified environment (or creates a new one).
+## Import from a .env file
 
-## Secret Encryption
+```bash
+gurl env import prod --file .env.production
+```
 
-Secrets are encrypted at rest using AES-256-GCM. The encryption key is derived from your machine's credentials via the keychain.
-
-> [!WARNING]
-> Secrets are decrypted only when needed and only in memory. Never share your `gurl.db` file, as it contains encrypted secrets that could be brute-forced given sufficient time.
-
-## Environment Management Commands
+## Environment commands
 
 | Command | Description |
 |---------|-------------|
-| `gurl env create <name>` | Create a new environment |
-| `gurl env list` | List all environments |
-| `gurl env switch <name>` | Switch active environment |
+| `gurl env create <name>` | Create an environment (`--var KEY=VALUE`, `--var KEY=-`, `--secret KEY`) |
+| `gurl env list` | List environments (`--json`) |
+| `gurl env show <name>` | Show variables, secrets masked (`--json`, `--reveal`) |
+| `gurl env set <name> KEY=VALUE` | Set variables (`KEY=-` reads stdin) |
+| `gurl env unset <name> --var KEY` | Remove a variable |
+| `gurl env switch <name>` | Make an environment active |
+| `gurl env import <name> --file .env` | Import a `.env` file |
 | `gurl env delete <name>` | Delete an environment |
-| `gurl env import --file <path>` | Import from .env file |
-| `gurl env set <env> KEY=VALUE` | Set a variable in an environment |
+
+Full flags: [`gurl env`]({{< relref "/cli/env" >}}). Next: [Variables & placeholders]({{< relref "/guides/variables" >}}) explains how environment values combine with collection, data-row and `--var` values.

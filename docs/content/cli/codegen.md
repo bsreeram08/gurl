@@ -1,28 +1,28 @@
 ---
 title: "gurl codegen"
-description: "Generate code from a saved request"
+description: "Generate client code from a saved request"
 ---
 
-# gurl codegen
 
-Generate code in various programming languages from a saved request.
+Turn a saved request into Go, Python, JavaScript or curl code. Literal secrets are masked by default.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl codegen [name] [flags]
+gurl codegen <name> --lang <go|python|javascript|curl> [flags]
 ```
 
-## Description
+Literal secret header values, sensitive query parameters and secret auth params are masked as `*****`. With `--reveal` they are included, except `Authorization`, which always becomes a placeholder (`<your-token-here>`). `-l curl` quotes each header as one argument: `-H 'Content-Type: application/json'`.
 
-The `codegen` command converts a saved request into code for various languages. This helps you integrate API calls into your codebase without manual translation.
+`--clipboard` and `--reveal` are refused in [agent mode]({{< relref "/ai/agent-mode" >}}); there, codegen prints masked code to stdout.
 
 ## Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--lang` | `-l` | none | Target language: `go`, `python`, `javascript`, or `curl` |
-| `--clipboard` | `-c` | `false` | Copy output to clipboard instead of printing |
+| `--lang` | `-l` | none | Language to generate: `go`, `python`, `javascript`, `curl` |
+| `--clipboard` | `-c` | `false` | Copy the output to the clipboard instead of printing it |
+| `--reveal` | | `false` | Include secret header and auth values instead of masking them (Authorization always becomes a placeholder) |
 
 ## Aliases
 
@@ -30,40 +30,30 @@ The `codegen` command converts a saved request into code for various languages. 
 
 ## Examples
 
-### Generate Go code
+### Python client code
 
 ```bash
-gurl codegen "my-request" --lang go
+gurl codegen "create-order" --lang python
 ```
 
-Generates Go code for the request.
-
-### Generate Python code
+### A curl command with secrets masked
 
 ```bash
-gurl codegen "api-users" --lang python
+gurl codegen literal -l curl
 ```
 
-Generates Python requests library code.
+```text
+curl -X 'GET' -H 'Authorization: <your-token-here>' 'http://127.0.0.1:18731/x?token=*****'
+```
 
-### Generate JavaScript code
+### Copy JavaScript to the clipboard
 
 ```bash
-gurl codegen "create-user" --lang javascript
+gurl codegen "create-order" -l javascript --clipboard
 ```
 
-Generates JavaScript fetch code.
+## Related commands
 
-### Copy to clipboard
-
-```bash
-gurl codegen "my-request" --lang curl --clipboard
-```
-
-Generates curl command and copies to clipboard.
-
-## See also
-
-- [`gurl paste`](paste) - Copy as curl to clipboard
-- [`gurl save`](save) - Save a new request
-- [`gurl export`](export) - Export requests to file
+- [`gurl paste`]({{< relref "/cli/paste" >}}) - Copy a request as curl
+- [`gurl show`]({{< relref "/cli/show" >}}) - Show a saved request
+- [`gurl export`]({{< relref "/cli/export" >}}) - Export requests to a file

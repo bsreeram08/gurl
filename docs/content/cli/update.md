@@ -1,25 +1,20 @@
 ---
 title: "gurl update"
-description: "Update gurl to latest version"
+description: "Update gurl to the latest release"
 ---
 
-# gurl update
 
-Update gurl to the latest version available.
+Replace the running binary with the latest GitHub release for your OS and CPU.
 
-## Usage
+## Synopsis
 
 ```bash
 gurl update
 ```
 
-## Description
+The updater validates the latest release metadata before choosing an asset; releases publish macOS and Linux downloads for amd64 and arm64 (tarballs, raw binaries and `SHA256SUMS`). If the metadata is missing a usable version or platform asset, it exits with an error instead of downloading an invalid URL. If GitHub's release API is temporarily unavailable, it falls back to the public latest-release redirect and can still report `Already up to date!`.
 
-The `update` command checks for and installs the latest version of gurl. It handles downloading and replacing the current binary.
-
-The updater validates the latest release metadata before choosing an asset. Current releases publish complete macOS and Linux downloads for amd64 and arm64, including tarballs, raw binaries, and `SHA256SUMS`.
-
-If GitHub's release metadata API is temporarily unavailable, the updater falls back to the public latest-release redirect to confirm the current version before showing an error.
+If you installed with Homebrew, use `brew upgrade gurl` instead; for the container image, pull a newer tag.
 
 ## Flags
 
@@ -27,18 +22,24 @@ None.
 
 ## Examples
 
-### Update gurl
+### Update in place
 
 ```bash
 gurl update
 ```
 
-Checks for and installs the latest version.
+### Check the installed version
 
-If the release metadata is missing a usable version or platform asset, the command exits with an error instead of downloading an invalid URL.
+```bash
+gurl --version
+```
 
-If release metadata is temporarily unavailable but the installed version is already current, the command can still report `Already up to date!` by checking GitHub's public latest-release redirect.
+### Homebrew installs
 
-## See also
+```bash
+brew upgrade gurl
+```
 
-- [Gurl GitHub Repository](https://github.com/bsreeram08/gurl) - Release notes and version information
+## Related commands
+
+- [`gurl docs`]({{< relref "/cli/docs" >}}) - Reference for the installed version

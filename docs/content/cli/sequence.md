@@ -1,64 +1,80 @@
 ---
 title: "gurl sequence"
-description: "Manage request sequences"
+description: "Manage request execution order in a collection"
 ---
 
-# gurl sequence
 
-Manage sequences for chaining multiple requests together.
+Set the order in which `gurl collection run` executes a collection's requests.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl sequence [subcommand] [flags]
+gurl sequence <subcommand> [arguments]
 ```
-
-## Description
-
-Sequences allow you to define an ordered list of requests that run in sequence. The output of one request can be used as input for the next, enabling complex workflows and data-driven testing.
 
 ## Subcommands
 
 ### set
 
-Add a request to a sequence.
+Set the execution order number for a request (`0` or higher; `0` means automatic).
 
 ```bash
-gurl sequence set [sequence-name] [request-names...]
+gurl sequence set <request> <order>
 ```
+
+None.
 
 Aliases: `s`
 
 ### list
 
-List all sequences.
+List a collection's requests in execution order.
 
 ```bash
-gurl sequence list
+gurl sequence list <collection>
 ```
+
+None.
 
 Aliases: `ls`, `l`
 
+## Aliases
+
+- `seq`
+
 ## Examples
 
-### Create a sequence
+### Order a checkout flow
 
 ```bash
-gurl sequence set "user-workflow" "login" "get-profile" "get-orders"
+gurl sequence set create-order 1
+gurl sequence set capture-payment 2
+gurl sequence set get-receipt 3
 ```
 
-Creates a sequence called "user-workflow" that runs login, get-profile, and get-orders in order.
-
-### List sequences
+### Check the order
 
 ```bash
-gurl sequence list
+gurl sequence list checkout-flow
 ```
 
-Shows all sequences and their requests.
+```text
+┌─ checkout-flow Sequence ───────────────────────────┐
+│  #   REQUEST                    ORDER                │
+├─────────────────────────────────────────────────────┤
+│  1   create-order             1
+│  2   capture-payment          2
+│  3   get-receipt              3
+└─────────────────────────────────────────────────────┘
+```
 
-## See also
+### Run the flow in that order
 
-- [`gurl run`](run) - Run a sequence
-- [`gurl save`](save) - Save requests
-- [`gurl env`](env) - Manage environments
+```bash
+gurl collection run checkout-flow --env staging
+```
+
+## Related commands
+
+- [`gurl collection`]({{< relref "/cli/collection" >}}) - `collection run`
+- [Collections and data-driven runs]({{< relref "/guides/collection-runner" >}}) - Guide

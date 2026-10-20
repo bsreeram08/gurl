@@ -1,0 +1,56 @@
+/* gurl docs: brand accent and the version selector. Keep this file small. */
+
+:root {
+  /* Hextra derives its primary palette from these (teal accent). */
+  --primary-hue: 172deg;
+  --primary-saturation: 70%;
+  --primary-lightness: 38%;
+}
+
+.dark {
+  --primary-lightness: 52%;
+}
+
+/* Landing page install snippet: never wider than the viewport; scroll inside. */
+.gurl-hero-code {
+  max-width: min(42rem, 100%);
+  min-width: 0;
+}
+
+.gurl-hero-code pre {
+  overflow-x: auto;
+}
+
+.gurl-version-selector {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid rgb(0 0 0 / 0.12);
+  border-radius: 0.375rem;
+  background: #fff;
+  color: #374151;
+  font-size: 0.75rem;
+}
+
+.dark .gurl-version-selector {
+  border-color: rgb(255 255 255 / 0.12);
+  background: #111;
+  color: #d4d4d4;
+}
+
+.gurl-version-selector[hidden] {
+  display: none;
+}
+
+.gurl-version-selector select {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}

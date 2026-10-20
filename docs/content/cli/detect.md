@@ -1,63 +1,52 @@
 ---
 title: "gurl detect"
-description: "Parse curl from stdin or file"
+description: "Parse a curl command from stdin or a file"
 ---
 
-# gurl detect
 
-Parse curl command syntax from stdin or a file and convert it to a saved request.
+Parse a curl command from stdin or a file and save it as a named request.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl detect [flags]
+gurl detect [--file <path>] [--name <name>] [--collection <name>]
 ```
-
-## Description
-
-The `detect` command reads a curl command from stdin or a file and parses it into a saved request. This is useful when you have curl commands from other sources and want to save them in gurl.
 
 ## Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--file` | `-f` | none | Path to file containing curl command |
-| `--name` | `-n` | none | Name for the saved request |
-| `--collection` | `-c` | none | Collection to assign the request to |
+| `--file` | `-f` | stdin | Read the curl command from a file instead of stdin |
+| `--name` | `-n` | none | Name for the detected request |
+| `--collection` | `-c` | none | Assign to a collection |
 
 ## Aliases
 
 - `parse`
-- `d`
 
 ## Examples
 
-### Parse from stdin
+### Parse a curl command from stdin
 
 ```bash
-curl -s https://api.example.com/users | gurl detect
+echo 'curl -X POST https://api.example.com/orders -H "Content-Type: application/json" -d "{}"' \
+  | gurl detect --name create-order
 ```
 
-Parses curl output from stdin and prompts for a name.
-
-### Parse from file
+### Parse a command saved in a file
 
 ```bash
-gurl detect --file ./curl-commands.txt
+gurl detect --file ./request.txt --name "my-request" --collection api
 ```
 
-Reads curl commands from a file and saves them.
-
-### Parse and assign collection
+### Paste from the clipboard (macOS)
 
 ```bash
-cat ./request.txt | gurl detect --name "my-request" --collection "api"
+pbpaste | gurl detect --name from-browser
 ```
 
-Parses stdin and saves as "my-request" in the "api" collection.
+## Related commands
 
-## See also
-
-- [`gurl save`](save) - Save a new request
-- [`gurl edit`](edit) - Edit a saved request
-- [`gurl import`](import) - Import from external formats
+- [`gurl save`]({{< relref "/cli/save" >}}) - Save a request from flags or `--curl`
+- [`gurl import`]({{< relref "/cli/import" >}}) - Import whole collections
+- [`gurl edit`]({{< relref "/cli/edit" >}}) - Edit the saved request

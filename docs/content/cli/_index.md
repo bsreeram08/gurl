@@ -1,76 +1,61 @@
 ---
-title: "CLI Reference"
-description: "Complete reference for all gurl commands"
+title: "CLI reference"
+description: "Every gurl command, its flags and examples"
+aliases: ["/cli/tui/"]
+weight: 4
 ---
 
-# Gurl CLI Reference
-
-Gurl is a command-line HTTP client for saving, organizing, and executing curl requests.
+One page per command, in alphabetical order. Every page has the same layout: synopsis, flags, aliases, examples and related commands. Flag tables are checked against `gurl docs --json` from the binary; run [`gurl docs`]({{< relref "/cli/docs" >}}) for the reference that matches your installed version.
 
 ## Commands
 
-### Core
+| Command | What it does |
+|---------|--------------|
+| [`auth`]({{< relref "/cli/auth" >}}) | List auth handlers and their parameters |
+| [`codegen`]({{< relref "/cli/codegen" >}}) | Generate Go, Python, JavaScript or curl code from a request |
+| [`collection`]({{< relref "/cli/collection" >}}) | Manage collections, their variables, and collection runs |
+| [`cookies`]({{< relref "/cli/cookies" >}}) | List, delete and clear stored cookies |
+| [`delete`]({{< relref "/cli/delete" >}}) | Remove a saved request |
+| [`detect`]({{< relref "/cli/detect" >}}) | Parse a curl command from stdin or a file |
+| [`diag`]({{< relref "/cli/diag" >}}) | Inspect one recorded execution |
+| [`diff`]({{< relref "/cli/diff" >}}) | Compare the latest responses of a request |
+| [`docs`]({{< relref "/cli/docs" >}}) | Print a compact reference of every command and concept |
+| [`edit`]({{< relref "/cli/edit" >}}) | Change fields of a saved request |
+| [`env`]({{< relref "/cli/env" >}}) | Manage environments and their variables |
+| [`exec`]({{< relref "/cli/exec" >}}) | Run a command with an environment's variables injected |
+| [`export`]({{< relref "/cli/export" >}}) | Export requests to a file |
+| [`extract`]({{< relref "/cli/extract" >}}) | Test extraction rules against a sample response |
+| [`graphql`]({{< relref "/cli/graphql" >}}) | Execute a GraphQL query |
+| [`grpc`]({{< relref "/cli/grpc" >}}) | Execute a gRPC request |
+| [`history`]({{< relref "/cli/history" >}}) | Show execution history for a request |
+| [`import`]({{< relref "/cli/import" >}}) | Import from OpenAPI, Insomnia, Bruno, Postman, HAR or gurl exports |
+| [`init`]({{< relref "/cli/init" >}}) | Initialize a project (`.gurl/`) |
+| [`list`]({{< relref "/cli/list" >}}) | List saved requests |
+| [`paste`]({{< relref "/cli/paste" >}}) | Copy a request as curl to the clipboard |
+| [`rename`]({{< relref "/cli/rename" >}}) | Rename a saved request |
+| [`run`]({{< relref "/cli/run" >}}) | Execute a saved request |
+| [`save`]({{< relref "/cli/save" >}}) | Save a request under a name |
+| [`sequence`]({{< relref "/cli/sequence" >}}) | Set execution order within a collection |
+| [`shell`]({{< relref "/cli/shell" >}}) | Launch the typed interactive shell |
+| [`show`]({{< relref "/cli/show" >}}) | Show a saved request |
+| [`sse`]({{< relref "/cli/sse" >}}) | Connect to a Server-Sent Events endpoint |
+| [`timeline`]({{< relref "/cli/timeline" >}}) | Show executions across all requests |
+| [`update`]({{< relref "/cli/update" >}}) | Update gurl to the latest release |
+| [`ws`]({{< relref "/cli/ws" >}}) | Open a WebSocket connection |
 
-| Command | Description |
-|---------|-------------|
-| [`save`](save) | Save a curl request with a name |
-| [`run`](run) | Execute a saved request |
-| [`list`](list) | List saved requests |
-| [`auth`](auth) | Discover supported authentication types |
-| [`edit`](edit) | Edit a saved request |
-| [`delete`](delete) | Remove a saved request |
-| [`rename`](rename) | Rename a saved request |
+`gurl tui` is a hidden, non-functional stub; use `gurl shell` for interactive use.
 
-### Data
+## Global flags
 
-| Command | Description |
-|---------|-------------|
-| [`history`](history) | Show execution history for a request |
-| [`timeline`](timeline) | Show global execution timeline |
-| [`diff`](diff) | Compare responses for a request |
-| [`detect`](detect) | Parse curl from stdin or file |
+These work with every command, in any position.
 
-### Organization
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--agent` | | JSON output, no prompts, strict masking (or `GURL_AGENT=1`, or run the binary as `agentgurl`). See [Agent mode]({{< relref "/ai/agent-mode" >}}). |
+| `--no-input` | | Never prompt; fail and name what to pass instead (or `GURL_NO_INPUT=1`) |
+| `--project-dir` | | Project root containing `.gurl` file storage (or `GURL_PROJECT_DIR`) |
+| `--version` | `-v` | Print the version |
 
-| Command | Description |
-|---------|-------------|
-| [`collection`](collection) | Manage request collections |
-| [`env`](env) | Manage environment variables |
-| [`sequence`](sequence) | Manage request sequences |
+## Exit codes
 
-### Import/Export
-
-| Command | Description |
-|---------|-------------|
-| [`import`](import) | Import from external formats |
-| [`export`](export) | Export requests to file |
-| [`paste`](paste) | Copy request as curl to clipboard |
-| [`codegen`](codegen) | Generate code from a request |
-
-### Interface
-
-| Command | Description |
-|---------|-------------|
-| [`tui`](tui) | Launch interactive TUI (not functional yet) |
-| [`graphql`](graphql) | Execute a GraphQL query |
-| [`show`](show) | Show details of a saved request |
-| [`update`](update) | Update gurl to latest version |
-
-## Quick Start
-
-```bash
-# Save your first request
-gurl save "my-request" https://api.example.com/users
-
-# Run it
-gurl run "my-request"
-
-# List all saved requests
-gurl list
-
-# Edit in your default editor
-gurl edit "my-request"
-
-# See available auth handlers
-gurl auth list
-```
+`0` success, `1` error, `2` usage error; `gurl exec` exits with its command's code. Details and the JSON error shape are in [JSON output]({{< relref "/ai/json-output" >}}).

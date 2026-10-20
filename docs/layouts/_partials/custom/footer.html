@@ -1,6 +1,8 @@
-{{ with .Site.Params.gurl_version }}
-<div class="gurl-version-selector" id="gurlVersionSelector" style="display:none">
-  <label for="gurlVersionSelect">Version:</label>
+{{- /* Versioned-docs selector. The docs workflow publishes each release under
+       /gurl/<version>/ plus /gurl/latest/, and lists versions in /gurl/versions.json. */ -}}
+{{ with site.Params.gurl_version }}
+<div class="gurl-version-selector" id="gurlVersionSelector" hidden>
+  <label for="gurlVersionSelect">Version</label>
   <select id="gurlVersionSelect" aria-label="Select documentation version"></select>
 </div>
 
@@ -9,12 +11,10 @@
   var current = {{ . | jsonify }};
   var base = "https://bsreeram08.github.io/gurl/";
 
-  // Derive the path after the version prefix so we can attempt to preserve it.
-  // e.g. /gurl/v0.3.1/cli/run/ → cli/run/
+  // Path after the version prefix, so switching keeps the current page.
+  // e.g. /gurl/v0.7.0/cli/run/ -> cli/run/
   function currentRelPath() {
-    var path = window.location.pathname;
-    // Strip the base /gurl/<version>/ prefix
-    var m = path.match(/^\/gurl\/[^/]+\/(.*)/);
+    var m = window.location.pathname.match(/^\/gurl\/[^/]+\/(.*)/);
     return m ? m[1] : "";
   }
 
@@ -22,15 +22,11 @@
     .then(function (r) { return r.ok ? r.json() : []; })
     .then(function (versions) {
       if (!versions || versions.length === 0) return;
-
       var selector = document.getElementById("gurlVersionSelector");
       var select = document.getElementById("gurlVersionSelect");
       var relPath = currentRelPath();
 
-      // Always include "latest" as the first option.
-      var options = ["latest"].concat(versions);
-
-      options.forEach(function (v) {
+      ["latest"].concat(versions).forEach(function (v) {
         var opt = document.createElement("option");
         opt.value = v;
         opt.textContent = v;
@@ -42,9 +38,9 @@
         window.location.href = base + select.value + "/" + relPath;
       });
 
-      selector.style.display = "flex";
+      selector.hidden = false;
     })
-    .catch(function () { /* versions.json not present yet — silently skip */ });
+    .catch(function () { /* versions.json not published yet */ });
 }());
 </script>
 {{ end }}

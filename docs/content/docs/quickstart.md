@@ -1,163 +1,93 @@
 ---
-title: "Quick Start"
+title: "Quickstart"
+description: "Save a request, run it, move its values into an environment, and group it in a collection."
 weight: 2
+aliases: ["/docs/quick-start/"]
 ---
 
-Get started with Gurl in 5 minutes. This guide walks through the core workflow: saving a request, running it, and generating code.
+Five minutes, five steps: save → run → environment → collection → inspect. Every command below works against the public `jsonplaceholder.typicode.com` API.
 
-## Step 1: Save a Request
+{{% steps %}}
 
-Save your first request with the `save` command:
-
-```bash
-gurl save "users" https://jsonplaceholder.typicode.com/users
-```
-
-This saves a GET request to the users endpoint. Gurl creates the collection automatically if it does not exist.
-
-You can also save requests with common options inline:
+### Save a request
 
 ```bash
-gurl save "user-by-id" https://jsonplaceholder.typicode.com/users/1
+gurl save "list-users" https://jsonplaceholder.typicode.com/users
 ```
 
-## Step 2: Run the Request
-
-Execute the saved request with the `run` command:
+A saved request has a name, a method, a URL, and optional headers, body, auth and extraction rules. You can also paste a curl command:
 
 ```bash
-gurl run "users"
+gurl save "create-user" --curl "curl -X POST -H 'Content-Type: application/json' -d '{\"name\":\"Ada\"}' https://jsonplaceholder.typicode.com/users"
 ```
 
-Gurl sends the request and displays the response with status code, headers, and body.
-
-To run with verbose output:
-
-```bash
-gurl run "users" -v
-```
-
-## Step 3: Save with curl Syntax
-
-Import an existing curl command directly:
-
-```bash
-gurl save "create-user" --curl "curl -X POST -H 'Content-Type: application/json' -d '{\"name\":\"John\"}' https://jsonplaceholder.typicode.com/users"
-```
-
-Gurl parses the curl syntax and saves it as a proper request.
-
-## Step 4: List Saved Requests
-
-See all saved requests:
+Check what you saved:
 
 ```bash
 gurl list
+gurl show "create-user"
 ```
 
-Output shows request name, method, URL, and which environment is active.
-
-To list requests in a specific collection:
+### Run it
 
 ```bash
-gurl list --collection "my-api"
+gurl run "list-users"
 ```
 
-## Step 5: Use Environments
-
-Environments let you swap variables between contexts (local, dev, staging, prod).
-
-Create an environment:
+The response body goes to stdout; status lines and notes go to stderr, so piping works:
 
 ```bash
-gurl env create dev --var "BASE_URL=https://dev.api.com" --secret "API_KEY=sk-test-123"
+gurl run "list-users" | jq '.[0].email'
 ```
 
-Run a request with an environment:
+Add assertions, or make non-2xx responses fail the command:
 
 ```bash
-gurl run "users" --env dev
+gurl run "list-users" --assert "status=200" --fail
 ```
 
-Variables in the URL are substituted automatically:
+### Move values into an environment
+
+Hard-coded hosts and tokens don't belong in saved requests. Use `{{placeholders}}` and put the values in an environment:
 
 ```bash
-gurl save "users" "{{.BASE_URL}}/users"
-gurl run "users" --env dev
+gurl env create dev \
+  --var BASE_URL=https://jsonplaceholder.typicode.com \
+  --var API_KEY=- --secret API_KEY          # KEY=- reads the value from stdin, without echo
+
+gurl save "get-user" '{{BASE_URL}}/users/{{id}}' -H 'Authorization: Bearer {{API_KEY}}'
+
+gurl run "get-user" --env dev --var id=1
 ```
 
-> [!TIP]
-> Secrets are encrypted with AES-256-GCM and never appear in logs or generated code.
+Secret values are encrypted at rest and shown as `*****` by `gurl env show dev`. If a placeholder can't be filled, gurl refuses to send the request and names every missing variable. See [Variables & placeholders]({{< relref "/guides/variables" >}}).
 
-List all environments:
+### Group requests in a collection
 
 ```bash
-gurl env list
+gurl collection create "users-api" --var id=1
+gurl edit "get-user" --collection users-api
+gurl edit "list-users" --collection users-api
+
+gurl collection run "users-api" --env dev
 ```
 
-Show environment variables:
+Collection variables sit above environment variables and below `--var`. A collection run executes its requests in order (see [`gurl sequence`]({{< relref "/cli/sequence" >}})).
+
+### Inspect what happened
+
+Every run is recorded, including failures:
 
 ```bash
-gurl env show dev
+gurl history "get-user"          # short ids, status, duration
+gurl diag <id>                   # request as sent, variable origins, response, changes since last success
 ```
 
-## Step 6: Generate Code
+{{% /steps %}}
 
-Generate client code from any saved request:
+## Next steps
 
-```bash
-gurl codegen "users" --lang python
-```
-
-Supported languages:
-
-- `python` - requests library
-- `javascript` - fetch API
-- `go` - net/http package
-- `curl` - shell curl command
-
-Add the request to the generated code:
-
-```bash
-gurl codegen "create-user" --lang python --output api_client.py
-```
-
-## Common Workflows
-
-### Chain Requests with Scripts
-
-Add a pre-request script to inject dynamic values:
-
-```bash
-gurl edit "auth" --script "
-request.headers['X-Request-ID'] = uuid()
-"
-```
-
-### Run a Collection
-
-Execute all requests in a collection:
-
-```bash
-gurl collection run "my-api" --env staging
-```
-
-### Export and Import
-
-Export a collection to share:
-
-```bash
-gurl export "my-api" --format json --output my-api.json
-```
-
-Import elsewhere:
-
-```bash
-gurl import my-api.json
-```
-
-## Next Steps
-
-- Explore [all CLI commands](/cli/) for advanced usage
-- Learn about [authentication](/cli/auth/) with `gurl auth list` and `gurl auth info <type>`
-- Read about the [plugin system](/architecture/plugin-system/) for extending gurl
+- [Environments & secrets]({{< relref "/guides/environments" >}}) and [Variables & placeholders]({{< relref "/guides/variables" >}})
+- [Chaining & extraction]({{< relref "/guides/chaining" >}}) — log in once, reuse the token
+- [Agent mode]({{< relref "/ai/agent-mode" >}}) — let an AI agent run your requests without seeing secrets
+- [CLI reference]({{< relref "/cli" >}}) — every command and flag

@@ -1,53 +1,69 @@
 ---
 title: "Installation"
+description: "Homebrew, install script, container image, pre-built binaries, or build from source."
 weight: 1
 ---
 
-## Prerequisites
+gurl ships as a single static binary with no runtime dependencies. Pick one install method, then [verify](#verify-installation) and continue to the [Quickstart]({{< relref "/docs/quickstart" >}}).
 
-Gurl requires no runtime dependencies — it ships as a single static binary. Go is only needed if you are building from source (Go 1.25.0+, with Go 1.26.3 recommended as the development toolchain).
+## Install
 
-## Homebrew (macOS / Linux)
+{{< tabs >}}
+
+{{< tab name="Homebrew" >}}
+
+macOS and Linux:
 
 ```bash
 brew tap bsreeram08/gurl https://github.com/bsreeram08/gurl
 brew install gurl
 ```
 
-Update with:
+{{< /tab >}}
 
-```bash
-brew upgrade gurl
-```
-
-## One-liner Install
+{{< tab name="Script" >}}
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/install.sh | bash
 ```
 
-This detects your platform, downloads the correct binary from the [latest release](https://github.com/bsreeram08/gurl/releases/latest), and installs it to `/usr/local/bin`.
+Detects your platform, downloads the matching binary from the [latest release](https://github.com/bsreeram08/gurl/releases/latest), and installs it to `/usr/local/bin`.
 
-## Container Image
+{{< /tab >}}
+
+{{< tab name="Binary" >}}
+
+Download from [GitHub Releases](https://github.com/bsreeram08/gurl/releases/latest):
+
+```bash
+# macOS (Apple Silicon)
+curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-darwin-arm64.tar.gz
+tar -xzf gurl-darwin-arm64.tar.gz && sudo mv gurl /usr/local/bin/gurl
+
+# Linux (x86_64)
+curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-amd64.tar.gz
+tar -xzf gurl-linux-amd64.tar.gz && sudo mv gurl /usr/local/bin/gurl
+
+# Linux (ARM64)
+curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-arm64.tar.gz
+tar -xzf gurl-linux-arm64.tar.gz && sudo mv gurl /usr/local/bin/gurl
+```
+
+Each release also includes raw binaries and `SHA256SUMS`.
+
+{{< /tab >}}
+
+{{< tab name="Docker" >}}
+
+Every release tag publishes a multi-arch image (`linux/amd64`, `linux/arm64`) to GitHub Container Registry: `ghcr.io/bsreeram08/gurl:latest` (newest stable release; pre-releases don't move it) and one tag per release, matching the [GitHub release](https://github.com/bsreeram08/gurl/releases) tag, e.g. `v0.7.0`.
 
 ```bash
 docker run --rm ghcr.io/bsreeram08/gurl:latest --version
 docker run --rm -v "$PWD:/work" -w /work ghcr.io/bsreeram08/gurl:latest list
+docker run --rm ghcr.io/bsreeram08/gurl:v0.7.0 --version     # pinned, reproducible
 ```
 
-Use a version tag for reproducible runs:
-
-```bash
-docker run --rm ghcr.io/bsreeram08/gurl:v0.4.0 --version
-```
-
-Public GHCR packages can be pulled without authentication. If GitHub still shows the package as private, log in first with a token that has `read:packages`:
-
-```bash
-echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
-```
-
-To keep gurl's local database, project files, and encrypted key material across container runs, mount the relevant host directories:
+Keep the database, project files and key material across runs by mounting the host directories:
 
 ```bash
 docker run --rm \
@@ -58,45 +74,13 @@ docker run --rm \
   ghcr.io/bsreeram08/gurl:latest list
 ```
 
-## Pre-built Binaries
+The package is public. If GitHub still shows it as private, log in with a token that has `read:packages`: `echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin`.
 
-Download directly from [GitHub Releases](https://github.com/bsreeram08/gurl/releases/latest):
+{{< /tab >}}
 
-### macOS (Apple Silicon)
+{{< tab name="Source" >}}
 
-```bash
-curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-darwin-arm64.tar.gz
-tar -xzf gurl-darwin-arm64.tar.gz
-sudo mv gurl /usr/local/bin/gurl
-```
-
-### Linux (x86_64)
-
-```bash
-curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-amd64.tar.gz
-tar -xzf gurl-linux-amd64.tar.gz
-sudo mv gurl /usr/local/bin/gurl
-```
-
-### Linux (ARM64)
-
-```bash
-curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-arm64.tar.gz
-tar -xzf gurl-linux-arm64.tar.gz
-sudo mv gurl /usr/local/bin/gurl
-```
-
-## Install via Go
-
-For users with Go 1.25.0+ installed:
-
-```bash
-go install github.com/sreeram/gurl/cmd/gurl@latest
-```
-
-This installs the `gurl` binary to `$GOPATH/bin` or `$HOME/go/bin`.
-
-## Build from Source
+Requires Go 1.25.0+.
 
 ```bash
 git clone https://github.com/bsreeram08/gurl.git
@@ -105,55 +89,44 @@ go build -o gurl ./cmd/gurl
 sudo mv gurl /usr/local/bin/gurl
 ```
 
-## Shell Completion
+{{< /tab >}}
 
-Enable tab completion for faster command entry.
+{{< /tabs >}}
 
-### Bash
-
-Add to your `~/.bashrc`:
+## Verify installation
 
 ```bash
+gurl --version
+gurl docs run      # prints the flags of `gurl run`
+```
+
+## Shell completion
+
+```bash
+# Bash (~/.bashrc)
 source <(gurl completion bash)
-```
 
-### Zsh
-
-Add to your `~/.zshrc`:
-
-```bash
+# Zsh (~/.zshrc)
 source <(gurl completion zsh)
-```
 
-### Fish
-
-Add to your `~/.config/fish/config.fish`:
-
-```bash
+# Fish (~/.config/fish/config.fish)
 gurl completion fish | source
 ```
 
-## First-run Setup
+## Where gurl keeps data
 
-On first launch, Gurl creates the local data directory:
+| Path | Contents |
+|------|----------|
+| `~/.local/share/gurl/gurl.db` | Saved requests, environments, collections and execution records (LevelDB) |
+| `~/.local/share/gurl/.secret-key` | Machine key for encrypted secrets (mode 0600) |
+| `.gurl/` in a project | Project-backed collections and environments, created by `gurl init` |
 
-```
-~/.local/share/gurl/
-```
-
-This stores:
-
-- `gurl.db` — Request collections, environments, and history (LevelDB)
-- `plugins/` — Custom middleware and formatters
-
-Configuration is loaded from the first file found in this order:
+Configuration is loaded from the first file found:
 
 1. Path set in `$GURL_CONFIG_PATH`
 2. `.gurlrc` (current directory)
 3. `~/.gurlrc`
 4. `~/.config/gurl/config.toml`
-
-Example config file:
 
 ```toml
 [general]
@@ -167,24 +140,17 @@ syntax_highlight = true
 json_pretty = true
 ```
 
-## Verify Installation
-
-```bash
-gurl --version
-```
-
-You should see the version number and build information.
-
 ## Update
 
-Gurl can self-update to the latest release:
+| Installed with | Update with |
+|----------------|-------------|
+| Homebrew | `brew upgrade gurl` |
+| Install script or pre-built binary | `gurl update` |
+| Container image | `docker pull ghcr.io/bsreeram08/gurl:latest` (or bump your pinned tag) |
+| Source | `git pull && go build -o gurl ./cmd/gurl` |
 
-```bash
-gurl update
-```
+`gurl update` checks the latest release metadata and replaces the binary with the matching macOS or Linux asset for your CPU architecture. See [`gurl update`]({{< relref "/cli/update" >}}).
 
-The updater checks the latest release metadata and picks the matching macOS or Linux asset for your CPU architecture. Release downloads include raw binaries, tarballs, and `SHA256SUMS`.
+## Next steps
 
-## Next Steps
-
-Continue to the [Quick Start guide](/docs/quickstart/) to save and run your first request.
+Continue to the [Quickstart]({{< relref "/docs/quickstart" >}}). AI agents should run `gurl docs` first; see [Agent mode]({{< relref "/ai/agent-mode" >}}).

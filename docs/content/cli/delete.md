@@ -3,19 +3,14 @@ title: "gurl delete"
 description: "Remove a saved request"
 ---
 
-# gurl delete
 
-Remove a saved request from gurl's storage.
+Permanently remove a saved request. This cannot be undone.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl delete [name]
+gurl delete <name>
 ```
-
-## Description
-
-The `delete` command permanently removes a saved request. This action cannot be undone.
 
 ## Flags
 
@@ -25,7 +20,6 @@ None.
 
 - `rm`
 - `del`
-- `d`
 
 ## Examples
 
@@ -35,10 +29,15 @@ None.
 gurl delete "old-request"
 ```
 
-Removes the request named "old-request".
+### Check the name first
 
-## See also
+```bash
+gurl list --pattern old
+gurl delete "old-request"
+```
 
-- [`gurl save`](save) - Save a new request
-- [`gurl list`](list) - List saved requests
-- [`gurl rename`](rename) - Rename a request
+## Related commands
+
+- [`gurl rename`]({{< relref "/cli/rename" >}}) - Rename a request instead
+- [`gurl list`]({{< relref "/cli/list" >}}) - List saved requests
+- [`gurl collection`]({{< relref "/cli/collection" >}}) - `collection delete` removes a whole collection

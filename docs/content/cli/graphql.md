@@ -3,30 +3,27 @@ title: "gurl graphql"
 description: "Execute a GraphQL query"
 ---
 
-# gurl graphql
 
-Execute a GraphQL query against an endpoint.
+Send a GraphQL query or mutation to an endpoint, inline or from a file.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl graphql [flags]
+gurl graphql <endpoint> (--query <query> | --query-file <file>) [flags]
 ```
 
-## Description
-
-The `graphql` command sends GraphQL queries to an endpoint. You can provide the query inline, from a file, with variables, and control output formatting.
+The endpoint argument is required, and so is one of `--query` or `--query-file`.
 
 ## Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--query` | `-q` | none | GraphQL query string |
-| `--query-file` | `-f` | none | Path to file containing GraphQL query |
-| `--vars` | `-v` | none | Variables as JSON |
-| `--operation-name` | | none | GraphQL operation name |
-| `--format` | | `auto` | Output format: `auto`, `json`, or `table` |
-| `--color` | `-c` | `true` | Enable colored output |
+| `--query-file` | `-f` | none | Path to a `.graphql` file containing the query |
+| `--vars` | `-v` | none | JSON object with query variables (e.g., `'{"limit": 10}'`) |
+| `--operation-name` | `--op` | none | GraphQL operation name |
+| `--format` | `--fmt` | `auto` | Output format: `auto`, `json`, `table` |
+| `--color` | `-c` | `false` | Enable syntax highlighting |
 
 ## Aliases
 
@@ -34,40 +31,29 @@ The `graphql` command sends GraphQL queries to an endpoint. You can provide the 
 
 ## Examples
 
-### Simple query
+### Inline query
 
 ```bash
-gurl graphql --query "{ users { id name } }" https://api.example.com/graphql
+gurl graphql https://api.example.com/graphql --query '{ users { id name } }'
 ```
-
-Sends a simple GraphQL query.
-
-### Query from file
-
-```bash
-gurl graphql --query-file ./query.gql https://api.example.com/graphql
-```
-
-Reads the query from a file.
 
 ### Query with variables
 
 ```bash
-gurl graphql -q "query($id: ID!) { user(id: $id) { name } }" --vars '{"id":"123"}' https://api.example.com/graphql
+gurl graphql https://api.example.com/graphql \
+  -q 'query($id: ID!) { user(id: $id) { name } }' \
+  --vars '{"id":"123"}'
 ```
 
-Sends a query with variables.
-
-### Named operation
+### Named operation from a file
 
 ```bash
-gurl graphql --query-file ./queries.gql --operation-name "GetUser" https://api.example.com/graphql
+gurl graphql https://api.example.com/graphql --query-file ./queries.graphql --op GetUser
 ```
 
-Executes a specific named operation from a file with multiple queries.
+## Related commands
 
-## See also
-
-- [`gurl run`](run) - Execute a saved request
-- [`gurl save`](save) - Save a new request
-- [`gurl import`](import) - Import from OpenAPI
+- [`gurl grpc`]({{< relref "/cli/grpc" >}}) - gRPC requests
+- [`gurl ws`]({{< relref "/cli/ws" >}}) - WebSocket connections
+- [`gurl sse`]({{< relref "/cli/sse" >}}) - Server-Sent Events
+- [`gurl save`]({{< relref "/cli/save" >}}) - Save an HTTP request (GraphQL over POST works as a saved request too)

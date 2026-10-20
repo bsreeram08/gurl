@@ -1,77 +1,95 @@
 baseURL = 'https://bsreeram08.github.io/gurl/'
-languageCode = 'en-us'
+locale = 'en-us'
 title = 'gurl'
-theme = 'PaperMod'
+theme = 'hextra'
+enableRobotsTXT = true
+
+# Fail the build on a broken {{< ref >}} / {{< relref >}}.
+refLinksErrorLevel = "ERROR"
+
+[outputs]
+home = ["HTML", "llms"]
+page = ["HTML"]
+section = ["HTML"]
+
+[markup]
+[markup.highlight]
+noClasses = false
+[markup.goldmark.renderer]
+unsafe = true
+# Keep "--flag" literal in prose and headings (no en/em-dash substitution).
+[markup.goldmark.extensions.typographer]
+enDash = "--"
+emDash = "---"
 
 [params]
 gurl_version = "dev"
 description = "CLI API workbench — save, run, and manage HTTP requests from the terminal"
-author = "Sreeram"
-defaultTheme = "dark"
-ShowReadingTime = false
-ShowShareButtons = false
-ShowPostNavLinks = false
-ShowBreadCrumbs = true
-ShowCodeCopyButtons = true
-ShowToc = true
-TocOpen = false
+externalLinkDecoration = true
+displayUpdatedDate = false
 
-[params.homeInfoParams]
-Title = "gurl"
-Content = """
-**CLI API workbench.** Save, run, and manage HTTP requests from the terminal.
+[params.navbar]
+displayTitle = true
+displayLogo = false
+width = "wide"
 
-8 auth handlers, 5 protocol clients, JavaScript scripting, collection runner, code generation, and a plugin system.
+[params.page]
+width = "normal"
 
-Status: early (v0.4.x). The CLI works. The TUI exists in code but is not functional yet.
-"""
+[params.theme]
+default = "system"
+displayToggle = true
 
-[[params.socialIcons]]
-name = "github"
-url = "https://github.com/bsreeram08/gurl"
+[params.footer]
+enable = true
+displayCopyright = false
+displayPoweredBy = true
 
-[params.assets]
-favicon = "/favicon.ico"
+[params.search]
+enable = true
+type = "flexsearch"
+[params.search.flexsearch]
+index = "content"
+tokenize = "forward"
 
-[markup]
-[markup.highlight]
-style = "dracula"
-lineNos = false
-codeFences = true
+[params.highlight.copy]
+enable = true
+display = "hover"
 
+[params.editURL]
+enable = true
+base = "https://github.com/bsreeram08/gurl/edit/master/docs/content"
+
+# Navbar. The sidebar is built from the content tree (sections ordered by
+# `weight` in each _index.md), because the home page has `type: docs`.
 [menus]
 [[menus.main]]
 identifier = "docs"
 name = "Docs"
-url = "/docs/"
-weight = 10
+pageRef = "/docs"
+weight = 1
 
 [[menus.main]]
 identifier = "cli"
-name = "CLI Reference"
-url = "/cli/"
-weight = 20
+name = "CLI reference"
+pageRef = "/cli"
+weight = 2
 
 [[menus.main]]
-identifier = "guides"
-name = "Guides"
-url = "/guides/"
-weight = 30
+name = "Search"
+weight = 3
+[menus.main.params]
+type = "search"
 
 [[menus.main]]
-identifier = "security"
-name = "Security"
-url = "/security/"
-weight = 40
+name = "GitHub"
+weight = 4
+url = "https://github.com/bsreeram08/gurl"
+[menus.main.params]
+icon = "github"
 
 [[menus.main]]
-identifier = "ai"
-name = "AI Integration"
-url = "/ai/"
-weight = 50
-
-[[menus.main]]
-identifier = "arch"
-name = "Architecture"
-url = "/architecture/"
-weight = 60
+name = "Theme"
+weight = 5
+[menus.main.params]
+type = "theme-toggle"

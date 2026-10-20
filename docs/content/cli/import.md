@@ -1,30 +1,36 @@
 ---
 title: "gurl import"
-description: "Import from external formats"
+description: "Import requests from OpenAPI, Insomnia, Bruno, Postman, HAR or gurl exports"
 ---
 
-# gurl import
 
-Import requests from external formats including HAR, OpenAPI, and common collection formats.
+Import requests from OpenAPI, Insomnia, Bruno, Postman, HAR or a native gurl export. The format is detected from the file unless you force it.
 
-## Usage
+## Synopsis
 
 ```bash
-gurl import [flags]
+gurl import <path> [flags]
+gurl import --list
 ```
 
-## Description
+Supported inputs (`gurl import --list`):
 
-The `import` command converts requests from common API formats into gurl's format. It supports HAR files, OpenAPI specifications, and several collection formats.
+| Extension | Format |
+|-----------|--------|
+| `.yaml`, `.yml` | OpenAPI/Swagger 3.x |
+| `.json` | Insomnia, Postman, OpenAPI, HAR |
+| `.bru` | Bruno |
+| `.har` | HAR (HTTP Archive) |
+| `.gurl` | Native gurl request or collection export |
 
 ## Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--force` | `-f` | `false` | Overwrite existing requests with the same name |
-| `--format` | | none | Specify format explicitly (har, openapi, insomnia, postman, bruno) |
-| `--list` | `-l` | `false` | List available collections/requests before importing |
-| `--passphrase` | | none | Decrypt native collection exports with encrypted secrets |
+| `--format` | `--fmt` | auto-detected | Force a specific format |
+| `--list` | `-l` | `false` | List all supported formats |
+| `--passphrase` | | none | Passphrase for decrypting native collection exports (or set `GURL_IMPORT_PASSPHRASE`) |
 
 ## Aliases
 
@@ -32,49 +38,26 @@ The `import` command converts requests from common API formats into gurl's forma
 
 ## Examples
 
-### Import from file
+### Import an OpenAPI spec
 
 ```bash
-gurl import --format openapi ./api.yaml
+gurl import ./api.yaml
 ```
 
-Imports all endpoints from an OpenAPI spec.
-
-### Import with overwrite
+### Re-import a Postman collection, overwriting existing requests
 
 ```bash
-gurl import --format har ./requests.har --force
+gurl import ./my-collection.json --force
 ```
 
-Imports and overwrites existing requests with the same names.
-
-### List before importing
-
-```bash
-gurl import --format openapi ./api.yaml --list
-```
-
-Lists all endpoints in the OpenAPI file before importing.
-
-### Import HAR file
-
-```bash
-gurl import --format har ./requests.har
-```
-
-Imports all requests from a HAR file.
-
-### Import native collection export
+### Import a teammate's collection export
 
 ```bash
 gurl import ./payments.gurl --passphrase "$TEAM_SECRET"
 ```
 
-Native collection exports preserve collection variables, secrets, and request membership.
+## Related commands
 
-## See also
-
-- [`gurl export`](export) - Export requests to file
-- [`gurl collection`](collection) - Manage collection variables and exports
-- [`gurl save`](save) - Save a new request
-- [`gurl detect`](detect) - Parse curl commands
+- [`gurl export`]({{< relref "/cli/export" >}}) - Export requests
+- [`gurl collection`]({{< relref "/cli/collection" >}}) - `collection import` for collection directories and `.env` files
+- [`gurl detect`]({{< relref "/cli/detect" >}}) - Parse a single curl command
