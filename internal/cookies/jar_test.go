@@ -1005,3 +1005,200 @@ func TestLMDBCookieDB_Open_CreatesDirIfNeeded(t *testing.T) {
 		t.Errorf("expected database file to exist: %v", err)
 	}
 }
+
+// TestCookieJar_ReloadsHostOnlyCookieForHostWithPort checks that a cookie set
+// by a host with a port is sent again after the jar is reloaded from the
+// database, i.e. by a later gurl process.
+func TestCookieJar_ReloadsHostOnlyCookieForHostWithPort(t *testing.T) {
+	for _, rawURL := range []string{
+		"http://127.0.0.1:18452/login",
+		"http://localhost:8080/login",
+		"http://[::1]:9000/login",
+		"https://api.example.com:8443/login",
+		"https://api.example.com/login",
+	} {
+		t.Run(rawURL, func(t *testing.T) {
+			db := newMockCookieDB()
+			jar1, err := NewCookieJar(db)
+			if err != nil {
+				t.Fatalf("failed to create jar1: %v", err)
+			}
+			u, err := url.Parse(rawURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			jar1.SetCookies(u, []*http.Cookie{{Name: "session", Value: "sess-test-1", Path: "/"}})
+
+			jar2, err := NewCookieJar(db)
+			if err != nil {
+				t.Fatalf("failed to create jar2: %v", err)
+			}
+			next := *u
+			next.Path = "/me"
+			got := jar2.Cookies(&next)
+			if len(got) != 1 || got[0].Value != "sess-test-1" {
+				t.Fatalf("reloaded jar sends %v to %s, want session=sess-test-1", got, next.String())
+			}
+		})
+	}
+}
+
+// sentTo returns the value of the "sid" cookie the jar sends to rawURL, or ""
+// when it sends none.
+func sentTo(t *testing.T, jar *CookieJar, rawURL string) string {
+	t.Helper()
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range jar.Cookies(u) {
+		if c.Name == "sid" {
+			return c.Value
+		}
+	}
+	return ""
+}
+
+// TestCookieJar_ScopeSurvivesReload sets one cookie from a response, then
+// checks where the jar sends it, both in the same process and after loading
+// the jar again from the database, and what was persisted.
+func TestCookieJar_ScopeSurvivesReload(t *testing.T) {
+	const value = "sid-test-1"
+	tests := []struct {
+		name          string
+		from          string // URL of the response that sets the cookie
+		domain        string // Domain attribute
+		sentTo        []string
+		notSentTo     []string
+		wantPersisted bool
+		wantDomain    string
+		wantDomainCk  bool
+	}{
+		{
+			name:          "host-only cookie stays host-only",
+			from:          "https://a.example.test/login",
+			sentTo:        []string{"https://a.example.test/me"},
+			notSentTo:     []string{"https://sub.a.example.test/me", "https://example.test/me", "https://b.example.test/me"},
+			wantPersisted: true,
+			wantDomain:    "a.example.test",
+		},
+		{
+			name:          "host-only cookie on a port stays host-only",
+			from:          "http://a.example.test:8080/login",
+			sentTo:        []string{"http://a.example.test:8080/me"},
+			notSentTo:     []string{"http://sub.a.example.test:8080/me"},
+			wantPersisted: true,
+			wantDomain:    "a.example.test:8080",
+		},
+		{
+			name:          "domain cookie applies to subdomains",
+			from:          "https://a.example.test/login",
+			domain:        ".example.test",
+			sentTo:        []string{"https://a.example.test/me", "https://b.example.test/me", "https://example.test/me"},
+			notSentTo:     []string{"https://other.test/me"},
+			wantPersisted: true,
+			wantDomain:    "example.test",
+			wantDomainCk:  true,
+		},
+		{
+			name:      "cookie for another site is rejected",
+			from:      "https://evil.test/login",
+			domain:    "other.test",
+			notSentTo: []string{"https://other.test/me", "https://evil.test/me"},
+		},
+		{
+			name:      "cookie for a parent of another site is rejected",
+			from:      "https://evil.example/login",
+			domain:    "bank.example",
+			notSentTo: []string{"https://bank.example/me", "https://www.bank.example/me"},
+		},
+		{
+			name:      "public suffix domain is rejected",
+			from:      "https://evil.com/login",
+			domain:    ".com",
+			notSentTo: []string{"https://bank.com/me", "https://evil.com/me"},
+		},
+		{
+			name:      "multi-label public suffix domain is rejected",
+			from:      "https://evil.co.uk/login",
+			domain:    "co.uk",
+			notSentTo: []string{"https://bank.co.uk/me"},
+		},
+		{
+			name:      "other IP as domain is rejected",
+			from:      "http://127.0.0.1:9000/login",
+			domain:    "10.0.0.1",
+			notSentTo: []string{"http://10.0.0.1:9000/me", "http://127.0.0.1:9000/me"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := newMockCookieDB()
+			jar, err := NewCookieJar(db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			from, err := url.Parse(tt.from)
+			if err != nil {
+				t.Fatal(err)
+			}
+			jar.SetCookies(from, []*http.Cookie{{Name: "sid", Value: value, Path: "/", Domain: tt.domain}})
+
+			reloaded, err := NewCookieJar(db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, j := range []struct {
+				name string
+				jar  *CookieJar
+			}{{"same process", jar}, {"after reload", reloaded}} {
+				for _, u := range tt.sentTo {
+					if got := sentTo(t, j.jar, u); got != value {
+						t.Errorf("%s: cookie not sent to %s", j.name, u)
+					}
+				}
+				for _, u := range tt.notSentTo {
+					if got := sentTo(t, j.jar, u); got != "" {
+						t.Errorf("%s: cookie sent to %s", j.name, u)
+					}
+				}
+			}
+
+			saved, err := db.GetAllCookies()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !tt.wantPersisted {
+				if len(saved) != 0 {
+					t.Fatalf("rejected cookie was persisted: %+v", saved[0])
+				}
+				return
+			}
+			if len(saved) != 1 {
+				t.Fatalf("expected 1 persisted cookie, got %d", len(saved))
+			}
+			if saved[0].Domain != tt.wantDomain || saved[0].DomainCookie != tt.wantDomainCk {
+				t.Errorf("persisted domain=%q domain_cookie=%v, want %q %v", saved[0].Domain, saved[0].DomainCookie, tt.wantDomain, tt.wantDomainCk)
+			}
+		})
+	}
+}
+
+// TestCookieJar_LegacyEntryLoadsHostOnly checks that an entry written before
+// domain_cookie existed is treated as host-only on reload.
+func TestCookieJar_LegacyEntryLoadsHostOnly(t *testing.T) {
+	db := newMockCookieDB()
+	db.data[cookieKeyPrefix+"a.example.test:/:sid"] = []byte(`{"name":"sid","value":"legacy-1","domain":"a.example.test","path":"/","secure":false,"http_only":false,"expires":0}`)
+
+	jar, err := NewCookieJar(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sentTo(t, jar, "https://a.example.test/"); got != "legacy-1" {
+		t.Fatalf("legacy cookie not sent to its host, got %q", got)
+	}
+	if got := sentTo(t, jar, "https://sub.a.example.test/"); got != "" {
+		t.Fatalf("legacy cookie sent to a subdomain: %q", got)
+	}
+}

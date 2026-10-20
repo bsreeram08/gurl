@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `run` (single, `--chain`, `--data`) and `collection run` store response cookies in the shared cookie jar and send them on later requests to the same host, so `cookies list` shows them (masked). Before, the runner used its own client without a jar and dropped every `Set-Cookie`.
+- Stored cookies from a host with a port (`localhost:8080`, `127.0.0.1:3000`) are sent again by later gurl invocations. The jar rejected them when reloading from disk.
+- The persistent cookie jar keeps each cookie's scope: a cookie set without a `Domain` attribute stays host-only after a reload instead of being sent to every subdomain, and cookies the jar rejects (a `Domain` of another site, or a public suffix such as `com` or `co.uk`) are no longer saved to disk and replayed later. Cookies saved by older versions load as host-only.
+- `go test ./...` no longer overwrites the developer's clipboard. `paste` and `codegen --clipboard` write through one clipboard function that tests replace with a fake; the tests now check the copied text (including masking) and never run `pbcopy`, `xclip` or `wl-copy`.
+
 ## [v0.7.1] - 2026-10-21
 
 ### Fixed

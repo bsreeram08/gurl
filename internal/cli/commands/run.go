@@ -41,7 +41,9 @@ func SetPluginRegistry(r *plugins.Registry) {
 	}
 }
 
-func RunCommand(db storage.DB, envStorage env.Store) *cli.Command {
+// RunCommand creates the run command. runnerOpts configure the runner that
+// sends the requests, e.g. runner.WithCookieJar for the shared cookie jar.
+func RunCommand(db storage.DB, envStorage env.Store, runnerOpts ...runner.Option) *cli.Command {
 	return &cli.Command{
 		Name:    "run",
 		Aliases: []string{"r", "execute"},
@@ -185,14 +187,14 @@ func RunCommand(db storage.DB, envStorage env.Store) *cli.Command {
 			}
 
 			if dataFile != "" {
-				return executeDataDriven(ctx, db, envStorage, name, runEnv, cliVars, c, persistEnvName)
+				return executeDataDriven(ctx, db, envStorage, name, runEnv, cliVars, c, persistEnvName, runnerOpts)
 			}
 
 			if enableChain {
-				return executeChain(ctx, db, envStorage, name, runEnv, cliVars, c, persistEnvName)
+				return executeChain(ctx, db, envStorage, name, runEnv, cliVars, c, persistEnvName, runnerOpts)
 			}
 
-			return executeSingleRequest(ctx, db, envStorage, name, runEnv, cliVars, c, persistEnvName)
+			return executeSingleRequest(ctx, db, envStorage, name, runEnv, cliVars, c, persistEnvName, runnerOpts)
 		}),
 	}
 }
@@ -206,10 +208,10 @@ func sortedStringKeys(values map[string]string) []string {
 	return keys
 }
 
-func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
+func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string, runnerOpts []runner.Option) error {
 	currentName := name
 	visited := make(map[string]bool)
-	singleRunner := runner.NewRunner(db, envStorage)
+	singleRunner := runner.NewRunner(db, envStorage, runnerOpts...)
 	var chainAssertionErr error
 	dirtyForPersist := make(map[string]string)
 	dirtyOriginsForPersist := make(map[string]resolve.Origin)
@@ -370,7 +372,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name
 	return finish(fmt.Errorf("max iterations (%d) reached", maxChainIterations))
 }
 
-func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Store, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
+func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Store, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string, runnerOpts []runner.Option) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
@@ -386,7 +388,7 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Sto
 	}
 
 	scopes := runner.ScopesFor(db, runEnv, req.Collection, cliVars)
-	execution := runner.NewRunner(db, envStorage).RunSavedRequestInScopes(ctx, req, scopes)
+	execution := runner.NewRunner(db, envStorage, runnerOpts...).RunSavedRequestInScopes(ctx, req, scopes)
 	jsonOut, strict := jsonOutput(c), agentMode(c)
 	reported := func(err error) error {
 		if jsonOut {
@@ -739,7 +741,7 @@ func assertionVarsFromResult(result *runner.RequestResult) map[string]string {
 	return vars
 }
 
-func executeDataDriven(ctx context.Context, db storage.DB, envStorage env.Store, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
+func executeDataDriven(ctx context.Context, db storage.DB, envStorage env.Store, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string, runnerOpts []runner.Option) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
@@ -772,7 +774,7 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage env.Store,
 	rowNum := 0
 	dirtyForPersist := make(map[string]string)
 	dirtyOriginsForPersist := make(map[string]resolve.Origin)
-	singleRunner := runner.NewRunner(db, envStorage)
+	singleRunner := runner.NewRunner(db, envStorage, runnerOpts...)
 	// In JSON mode each row is one line; the persist summary goes on the
 	// last one.
 	jsonOut, strict := jsonOutput(c), agentMode(c)

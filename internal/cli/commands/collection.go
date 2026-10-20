@@ -40,13 +40,13 @@ var readCollectionPassphrase = func(prompt string) (string, error) {
 }
 
 // CollectionCommand creates the collection command.
-func CollectionCommand(db storage.DB, envStorage env.Store) *cli.Command {
+func CollectionCommand(db storage.DB, envStorage env.Store, runnerOpts ...runner.Option) *cli.Command {
 	return &cli.Command{
 		Name:    "collection",
 		Aliases: []string{"collections", "col", "c"},
 		Usage:   "Manage collections",
 		Commands: []*cli.Command{
-			runner.CollectionRunCommand(db, envStorage),
+			runner.CollectionRunCommand(db, envStorage, runnerOpts...),
 			collectionShowCommand(db),
 			collectionListCommand(db),
 			collectionCreateCommand(db),
