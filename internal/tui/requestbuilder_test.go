@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sreeram/gurl/internal/resolve"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
@@ -23,7 +24,7 @@ func TestRequestBuilderCollectVarAwareRequestAppliesAPIKeyQueryAuth(t *testing.T
 		},
 	})
 
-	clientReq, err := rb.collectVarAwareRequest(map[string]string{"api_key": "secret value"})
+	clientReq, err := rb.collectVarAwareRequest(resolve.Scopes{CLI: map[string]string{"api_key": "secret value"}})
 	if err != nil {
 		t.Fatalf("collectVarAwareRequest returned error: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestRequestBuilderCollectVarAwareRequestUnknownAuthReturnsError(t *testing.
 		},
 	})
 
-	_, err := rb.collectVarAwareRequest(nil)
+	_, err := rb.collectVarAwareRequest(resolve.Scopes{})
 	if err == nil {
 		t.Fatal("expected unknown auth type error")
 	}

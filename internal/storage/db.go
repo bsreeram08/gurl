@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,7 +15,14 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/opt"
 )
 
-// DB represents the database interface
+// ErrNotSupported is returned by adapters for operations their backing store
+// cannot perform, e.g. unlocking a passphrase-protected collection without
+// project file storage.
+var ErrNotSupported = errors.New("operation not supported by this storage backend")
+
+// DB is the storage seam: saved requests, execution history, folders and
+// collections. Every adapter implements all of it; an operation an adapter
+// cannot perform returns ErrNotSupported rather than being left out.
 type DB interface {
 	Open() error
 	Close() error
@@ -30,6 +38,26 @@ type DB interface {
 	ListFolderRecursive(path string) ([]*types.SavedRequest, error)
 	DeleteFolder(path string) error
 	GetAllFolders() ([]string, error)
+
+	CollectionStore
+
+	// GetRawCollectionByName returns a collection as stored, without
+	// decrypting its secrets, so a locked collection can still be identified
+	// (ID, CreatedAt) and overwritten.
+	GetRawCollectionByName(name string) (*types.Collection, error)
+	// SaveCollectionAllowLocked saves collection even when the stored
+	// collection it replaces is locked.
+	SaveCollectionAllowLocked(collection *types.Collection) error
+	// UnlockCollection binds a passphrase-protected collection locally.
+	UnlockCollection(name string, passphrase string) error
+	// MigrateCollectionToFiles copies a DB-backed collection and its requests
+	// into project file storage, returning the number of requests copied and
+	// the collection directory.
+	MigrateCollectionToFiles(name string) (int, string, error)
+
+	// CollectionWatcherStore methods return a nil watcher (and no error)
+	// when the adapter has no collection files to watch.
+	CollectionWatcherStore
 }
 
 // ListOptions defines filtering options for listing requests

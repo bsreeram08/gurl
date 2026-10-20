@@ -17,10 +17,14 @@ import (
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/project"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/internal/storage/memstore"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
+// mockDB keeps requests and history in maps tests inspect directly;
+// collections and the rest of storage.DB come from the memory adapter.
 type mockDB struct {
+	memstore.DB
 	requests map[string]*types.SavedRequest
 	names    map[string]string
 	history  []*types.ExecutionHistory
@@ -107,49 +111,9 @@ func (m *mockDB) ListFolderRecursive(path string) ([]*types.SavedRequest, error)
 func (m *mockDB) DeleteFolder(path string) error                                 { return nil }
 func (m *mockDB) GetAllFolders() ([]string, error)                               { return nil, nil }
 
-type mockEnvStorage struct {
-	envs map[string]*env.Environment
-}
-
-func newMockEnvStorage() *mockEnvStorage {
-	return &mockEnvStorage{
-		envs: make(map[string]*env.Environment),
-	}
-}
-
-func (m *mockEnvStorage) GetEnvByName(name string) (*env.Environment, error) {
-	e, ok := m.envs[name]
-	if !ok {
-		return nil, errors.New("environment not found: " + name)
-	}
-	return e, nil
-}
-
-func (m *mockEnvStorage) GetActiveEnv() (string, error) {
-	return "", nil
-}
-
-func (m *mockEnvStorage) SaveEnv(e *env.Environment) error {
-	m.envs[e.Name] = e
-	return nil
-}
-
-func (m *mockEnvStorage) ListEnvs() ([]*env.Environment, error) {
-	var result []*env.Environment
-	for _, e := range m.envs {
-		result = append(result, e)
-	}
-	return result, nil
-}
-
-func (m *mockEnvStorage) DeleteEnv(name string) error {
-	delete(m.envs, name)
-	return nil
-}
-
 func TestRunner_RunCollection(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -232,7 +196,7 @@ func TestRunnerReloadsFileBackedCollectionBetweenIterations(t *testing.T) {
 		_ = db.SaveRequest(req)
 	})
 
-	runner := NewRunner(db, newMockEnvStorage())
+	runner := NewRunner(db, env.NewMemoryStore())
 	results, err := runner.Run(context.Background(), RunConfig{
 		CollectionName: "watched",
 		Iterations:     2,
@@ -255,7 +219,7 @@ func TestRunnerReloadsFileBackedCollectionBetweenIterations(t *testing.T) {
 
 func TestRunnerRunCollectionAppliesSavedBearerAuth(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	serverSawAuth := false
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -305,7 +269,7 @@ func TestRunnerRunCollectionAppliesSavedBearerAuth(t *testing.T) {
 
 func TestRunnerRunSavedRequestAppliesSavedAPIKeyAuth(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	serverSawAuth := false
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -348,7 +312,7 @@ func TestRunnerRunSavedRequestAppliesSavedAPIKeyAuth(t *testing.T) {
 
 func TestRunnerUnknownAuthTypeFailsDuringRequestBuild(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	serverCalled := false
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -513,7 +477,7 @@ func TestRequestResultLifecycleMetadataNames(t *testing.T) {
 
 func TestRunner_PreScriptVariablesAvailableForTemplates(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	var gotPath string
 	var gotTenantHeader string
@@ -572,7 +536,7 @@ func TestRunner_PreScriptVariablesAvailableForTemplates(t *testing.T) {
 
 func TestRunner_PreScriptDirtyVarsSurviveExtractionError(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	requestCount := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -612,7 +576,7 @@ func TestRunner_PreScriptDirtyVarsSurviveExtractionError(t *testing.T) {
 
 func TestRunner_PostScriptVariablesAvailableForNextRequestAndExtractAssertion(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	var gotAuthorization string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -678,7 +642,7 @@ func TestRunner_PostScriptVariablesAvailableForNextRequestAndExtractAssertion(t 
 
 func TestRunner_SkipRequestIsNeutralAndAvoidsHTTP(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	requestCount := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -724,7 +688,7 @@ func TestRunner_SkipRequestIsNeutralAndAvoidsHTTP(t *testing.T) {
 func TestRunner_ScriptErrorFailurePhases(t *testing.T) {
 	t.Run("pre script error fails before HTTP", func(t *testing.T) {
 		db := newMockDB()
-		envStorage := newMockEnvStorage()
+		envStorage := env.NewMemoryStore()
 
 		requestCount := 0
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -761,7 +725,7 @@ func TestRunner_ScriptErrorFailurePhases(t *testing.T) {
 
 	t.Run("post script error fails after HTTP", func(t *testing.T) {
 		db := newMockDB()
-		envStorage := newMockEnvStorage()
+		envStorage := env.NewMemoryStore()
 
 		requestCount := 0
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -812,7 +776,7 @@ func assertStringMap(t *testing.T, name string, got, want map[string]string) {
 
 func TestRunner_RunWithOrder(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -867,7 +831,7 @@ func TestRunner_RunWithOrder(t *testing.T) {
 
 func TestRunner_ContinueOnError(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -933,7 +897,7 @@ func TestRunner_ContinueOnError(t *testing.T) {
 
 func TestRunner_StopOnError(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1002,7 +966,7 @@ func TestRunner_StopOnError(t *testing.T) {
 
 func TestRunner_BailMarksRemainingRequestsWithBailSkipReason(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1035,7 +999,7 @@ func TestRunner_BailMarksRemainingRequestsWithBailSkipReason(t *testing.T) {
 
 func TestRunner_BailStopsBeforeValidNextRequestOverride(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1103,7 +1067,7 @@ func TestRunner_BailStopsBeforeValidNextRequestOverride(t *testing.T) {
 
 func TestRunner_AssertBailStopsOnlyAfterAssertionFailure(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1152,7 +1116,7 @@ func TestRunner_AssertBailStopsOnlyAfterAssertionFailure(t *testing.T) {
 
 func TestRunner_AssertBailDoesNotStopOnSkippedRequest(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1181,7 +1145,7 @@ func TestRunner_AssertBailDoesNotStopOnSkippedRequest(t *testing.T) {
 
 func TestRunner_AssertBailHonorsNextRequestOverrideBeforeStopping(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1250,7 +1214,7 @@ func TestRunner_AssertBailHonorsNextRequestOverrideBeforeStopping(t *testing.T) 
 
 func TestRunner_Summary(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1313,7 +1277,7 @@ func TestRunner_Summary(t *testing.T) {
 
 func TestRunner_Variables(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1360,7 +1324,7 @@ func TestRunner_Variables(t *testing.T) {
 
 func TestRunner_Iterations(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	count := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1409,7 +1373,7 @@ func TestRunner_Iterations(t *testing.T) {
 
 func TestRunner_Delay(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	start := time.Now()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1458,7 +1422,7 @@ func TestRunner_Delay(t *testing.T) {
 
 func TestRunner_EmptyCollection(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	runner := NewRunner(db, envStorage)
 	config := RunConfig{
@@ -1474,7 +1438,7 @@ func TestRunner_EmptyCollection(t *testing.T) {
 
 func TestRunner_SubstitutesHeadersAndBody(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	var gotHeader string
 	var gotBody map[string]string
@@ -1569,7 +1533,7 @@ func TestRunner_ConvertAssertions_Nil(t *testing.T) {
 
 func TestRunner_RunWithDataFile(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	tmpDir := t.TempDir()
 	jsonPath := filepath.Join(tmpDir, "test_data.json")
@@ -1609,7 +1573,7 @@ func TestRunner_RunWithDataFile(t *testing.T) {
 
 func TestRunner_RunWithDataFile_CSV(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	tmpDir := t.TempDir()
 	csvPath := filepath.Join(tmpDir, "test_data.csv")
@@ -1649,7 +1613,7 @@ func TestRunner_RunWithDataFile_CSV(t *testing.T) {
 
 func TestRunner_RunRequest_VariableSubstitutionError(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1683,7 +1647,7 @@ func TestRunner_RunRequest_VariableSubstitutionError(t *testing.T) {
 
 func TestRunner_RunRequest_Timeout(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)
@@ -1719,7 +1683,7 @@ func TestRunner_RunRequest_Timeout(t *testing.T) {
 
 func TestRunner_RunWithAssertions(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1756,7 +1720,7 @@ func TestRunner_RunWithAssertions(t *testing.T) {
 
 func TestRunner_ExtractedVarsChainIntoNextRequest(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	var paymentBody string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1818,7 +1782,7 @@ func TestRunner_ExtractedVarsChainIntoNextRequest(t *testing.T) {
 
 func TestRunner_CollectionExtractChainUsesPaymentIDStatus(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	var paymentBody string
 	var statusPath string
@@ -1911,7 +1875,7 @@ func TestRunner_CollectionExtractChainUsesPaymentIDStatus(t *testing.T) {
 
 func TestRunner_DataDrivenCollectionResetsRunningVarsPerRow(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	envObj := env.NewEnvironment("beta", "")
 	envObj.SetVariable("token", "env-token")
@@ -1977,7 +1941,7 @@ func TestRunner_DataDrivenCollectionResetsRunningVarsPerRow(t *testing.T) {
 
 func TestRunner_NextRequestOverrideExactName(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2029,7 +1993,7 @@ func TestRunner_NextRequestOverrideExactName(t *testing.T) {
 
 func TestRunner_NextRequestOverrideUnknownTargetFails(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2061,7 +2025,7 @@ func TestRunner_NextRequestOverrideUnknownTargetFails(t *testing.T) {
 
 func TestRunner_NextRequestOverrideLoopDetected(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2107,7 +2071,7 @@ func TestRunner_NextRequestOverrideLoopDetected(t *testing.T) {
 
 func TestRunner_ExtractedVarsOverrideExistingVars(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	var gotPath string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2161,7 +2125,7 @@ func TestRunner_ExtractedVarsOverrideExistingVars(t *testing.T) {
 
 func TestRunner_AssertionReceivesExtractedVars(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2200,7 +2164,7 @@ func TestRunner_AssertionReceivesExtractedVars(t *testing.T) {
 
 func TestRunner_MissingExtractionDoesNotFailRequest(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2234,7 +2198,7 @@ func TestRunner_MissingExtractionDoesNotFailRequest(t *testing.T) {
 
 func TestRunner_DryRunPlansCollectionWithoutHTTP(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	requestCount := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2308,7 +2272,7 @@ func TestRunner_DryRunPlansCollectionWithoutHTTP(t *testing.T) {
 
 func TestRunner_DryRunSkipsPostScriptsAssertionsAndHistory(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	db.SaveRequest(&types.SavedRequest{
 		ID:         "req-dry-side-effects",
@@ -2376,7 +2340,7 @@ func TestCollectDirtyVarsForPersistOnlyIncludesDirtyRequestVars(t *testing.T) {
 
 func TestRunner_MultipleIterations(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	count := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2421,7 +2385,7 @@ func TestRunner_MultipleIterations(t *testing.T) {
 
 func TestRunner_ContextCancellation(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(500 * time.Millisecond)
@@ -2459,7 +2423,7 @@ func TestRunner_ContextCancellation(t *testing.T) {
 
 func TestRunner_ContextCancellationWithDelay(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2504,7 +2468,7 @@ func TestRunner_ContextCancellationWithDelay(t *testing.T) {
 
 func TestRunner_DataFileNotFound(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	db.SaveRequest(&types.SavedRequest{
 		ID:         "req-1",
@@ -2528,7 +2492,7 @@ func TestRunner_DataFileNotFound(t *testing.T) {
 
 func TestRunner_VarsOverrideEnv(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2568,7 +2532,7 @@ func TestRunner_VarsOverrideEnv(t *testing.T) {
 
 func TestRunner_EnvNotFound(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2603,7 +2567,7 @@ func TestRunner_EnvNotFound(t *testing.T) {
 
 func TestRunner_IterationsZero(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2637,7 +2601,7 @@ func TestRunner_IterationsZero(t *testing.T) {
 
 func TestRunner_BailOnPassedSkipsRemaining(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	order := []string{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2700,7 +2664,7 @@ func TestRunner_BailOnPassedSkipsRemaining(t *testing.T) {
 
 func TestRunner_RequestExecutionError(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	db.SaveRequest(&types.SavedRequest{
 		ID:         "req-1",
@@ -2731,7 +2695,7 @@ func TestRunner_RequestExecutionError(t *testing.T) {
 
 func TestRunner_ConfigVarsMerged(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2766,7 +2730,7 @@ func TestRunner_ConfigVarsMerged(t *testing.T) {
 
 func TestRunner_DataFileWithDelay(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	tmpDir := t.TempDir()
 	jsonPath := filepath.Join(tmpDir, "delay_data.json")

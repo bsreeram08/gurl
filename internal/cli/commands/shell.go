@@ -14,26 +14,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/internal/auth"
 	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/resolve"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )
 
-type shellEnvStore interface {
-	GetEnvByName(name string) (*env.Environment, error)
-	GetActiveEnv() (string, error)
-	ListEnvs() ([]*env.Environment, error)
-	SetActiveEnv(name string) error
-}
-
 type shellSession struct {
 	db            storage.DB
-	envStorage    shellEnvStore
+	envStorage    env.Store
 	reader        *bufio.Reader
 	out           io.Writer
 	inFile        *os.File
@@ -116,7 +108,7 @@ var shellHelpTopics = []shellCommandHelp{
 	{Name: "quit", Usage: "quit", Summary: "Exit the shell", Examples: []string{"quit"}},
 }
 
-func ShellCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
+func ShellCommand(db storage.DB, envStorage env.Store) *cli.Command {
 	return &cli.Command{
 		Name:    "shell",
 		Aliases: []string{"sh", "repl"},
@@ -161,7 +153,7 @@ executing requests without fullscreen keybindings or terminal key conflicts.`,
 	}
 }
 
-func newShellSession(db storage.DB, envStorage shellEnvStore, in io.Reader, out io.Writer, outputFormat string) *shellSession {
+func newShellSession(db storage.DB, envStorage env.Store, in io.Reader, out io.Writer, outputFormat string) *shellSession {
 	session := &shellSession{
 		db:           db,
 		envStorage:   envStorage,
@@ -232,11 +224,7 @@ func (s *shellSession) Run(ctx context.Context) error {
 }
 
 func (s *shellSession) startFileWatcher(ctx context.Context) *storage.CollectionWatcher {
-	store, ok := s.db.(storage.CollectionWatcherStore)
-	if !ok {
-		return nil
-	}
-	watcher, err := store.WatchCollections(ctx, storage.CollectionWatchOptions{})
+	watcher, err := s.db.WatchCollections(ctx, storage.CollectionWatchOptions{})
 	if err != nil {
 		return nil
 	}
@@ -899,22 +887,7 @@ func (s *shellSession) handleSend(rest string) error {
 		return err
 	}
 
-	vars := collectRequestDefaults(req)
-	for k, v := range s.collectEnvVars() {
-		vars[k] = v
-	}
-	for k, v := range overrides {
-		vars[k] = v
-	}
-
-	missing := missingTemplateVars(req, vars)
-	if len(missing) > 0 {
-		if err := s.promptForMissingVars(vars, missing); err != nil {
-			return err
-		}
-	}
-
-	clientReq, err := buildClientRequestFromSavedRequest(req, vars)
+	clientReq, err := s.resolveForSend(req, overrides)
 	if err != nil {
 		return err
 	}
@@ -1031,21 +1004,64 @@ func (s *shellSession) unknownHelpTopicMessage(topic string) string {
 	return message + "."
 }
 
-func (s *shellSession) collectEnvVars() map[string]string {
-	vars := make(map[string]string)
+// envScope returns the active environment's alias-resolved variables and its
+// secret keys.
+func (s *shellSession) envScope() (map[string]string, map[string]bool) {
 	if s.envStorage == nil || s.activeEnvName == "" {
-		return vars
+		return nil, nil
 	}
-
 	envObj, err := s.envStorage.GetEnvByName(s.activeEnvName)
 	if err != nil || envObj == nil {
-		return vars
+		return nil, nil
+	}
+	return envObj.ResolvedVariables(), envObj.SecretKeys
+}
+
+// resolveForSend resolves req into the request to send. The request's
+// variable defaults sit under the active environment; overrides are the CLI
+// scope. When the only problems are missing variables, the user is asked for
+// them and resolution is retried.
+func (s *shellSession) resolveForSend(req *types.SavedRequest, overrides map[string]string) (client.Request, error) {
+	if req == nil {
+		return client.Request{}, fmt.Errorf("no request is open")
+	}
+	execReq := cloneRequest(req)
+	execReq.Method = strings.ToUpper(strings.TrimSpace(execReq.Method))
+
+	envVars, envSecrets := s.envScope()
+	scopes := resolve.Scopes{
+		Env:        collectRequestDefaults(req),
+		EnvSecrets: envSecrets,
+		CLI:        make(map[string]string, len(overrides)),
+	}
+	for k, v := range envVars {
+		scopes.Env[k] = v
+	}
+	for k, v := range overrides {
+		scopes.CLI[k] = v
 	}
 
-	for k, v := range envObj.ResolvedVariables() {
-		vars[k] = v
+	opts := resolve.Options{Interactive: true}
+	resolved, problems := resolve.Resolve(execReq, scopes, opts)
+	if missing := problems.Missing(); len(missing) > 0 && len(problems.Others()) == 0 {
+		if err := s.promptForMissingVars(scopes.CLI, missing); err != nil {
+			return client.Request{}, err
+		}
+		resolved, problems = resolve.Resolve(execReq, scopes, opts)
 	}
-	return vars
+	if err := problems.Err(); err != nil {
+		return client.Request{}, err
+	}
+
+	clientReq := resolved.Request
+	if execReq.Timeout != "" {
+		timeout, err := time.ParseDuration(execReq.Timeout)
+		if err != nil {
+			return client.Request{}, fmt.Errorf("invalid timeout %q: %w", execReq.Timeout, err)
+		}
+		clientReq.Timeout = timeout
+	}
+	return clientReq, nil
 }
 
 func (s *shellSession) selectRequest(requests []*types.SavedRequest, prompt string) (string, error) {
@@ -1328,128 +1344,6 @@ func collectRequestDefaults(req *types.SavedRequest) map[string]string {
 	}
 
 	return vars
-}
-
-func missingTemplateVars(req *types.SavedRequest, provided map[string]string) []string {
-	if req == nil {
-		return nil
-	}
-
-	seen := make(map[string]bool)
-	ordered := make([]string, 0)
-
-	add := func(name string) {
-		if name == "" || seen[name] {
-			return
-		}
-		seen[name] = true
-		ordered = append(ordered, name)
-	}
-
-	appendNames := func(values []string) {
-		for _, name := range values {
-			add(name)
-		}
-	}
-
-	appendNames(template.ExtractVarNames(req.URL))
-	appendNames(template.ExtractVarNames(req.Body))
-	for _, header := range req.Headers {
-		appendNames(template.ExtractVarNames(header.Key))
-		appendNames(template.ExtractVarNames(header.Value))
-	}
-
-	if req.AuthConfig != nil {
-		for _, value := range req.AuthConfig.Params {
-			appendNames(template.ExtractVarNames(value))
-		}
-	}
-
-	for _, item := range req.PathParams {
-		add(item.Name)
-	}
-
-	if len(ordered) == 0 {
-		for _, item := range template.GetVariablesFromRequest(req) {
-			add(item.Name)
-		}
-	}
-
-	missing := make([]string, 0, len(ordered))
-	for _, name := range ordered {
-		if value, ok := provided[name]; !ok || strings.TrimSpace(value) == "" {
-			missing = append(missing, name)
-		}
-	}
-	return missing
-}
-
-func buildClientRequestFromSavedRequest(req *types.SavedRequest, provided map[string]string) (client.Request, error) {
-	if req == nil {
-		return client.Request{}, fmt.Errorf("no request is open")
-	}
-
-	execReq := cloneRequest(req)
-	for i, item := range execReq.PathParams {
-		if value, ok := provided[item.Name]; ok {
-			execReq.PathParams[i].Example = value
-		}
-	}
-
-	if err := template.ResolvePathParamsInRequest(execReq); err != nil {
-		return client.Request{}, fmt.Errorf("failed to resolve path params: %w", err)
-	}
-
-	resolvedURL, err := template.Substitute(execReq.URL, provided)
-	if err != nil {
-		return client.Request{}, fmt.Errorf("failed to substitute URL: %w", err)
-	}
-
-	resolvedBody := execReq.Body
-	if resolvedBody != "" {
-		resolvedBody, err = template.Substitute(resolvedBody, provided)
-		if err != nil {
-			return client.Request{}, fmt.Errorf("failed to substitute body: %w", err)
-		}
-	}
-
-	headers := make([]client.Header, 0, len(execReq.Headers)+1)
-	for _, header := range execReq.Headers {
-		key, err := template.Substitute(header.Key, provided)
-		if err != nil {
-			return client.Request{}, fmt.Errorf("failed to substitute header key: %w", err)
-		}
-		value, err := template.Substitute(header.Value, provided)
-		if err != nil {
-			return client.Request{}, fmt.Errorf("failed to substitute header value: %w", err)
-		}
-		headers = append(headers, client.Header{Key: key, Value: value})
-	}
-
-	method := strings.ToUpper(strings.TrimSpace(execReq.Method))
-	if method == "" {
-		method = "GET"
-	}
-
-	clientReq := client.Request{
-		Method:  method,
-		URL:     resolvedURL,
-		Headers: headers,
-		Body:    resolvedBody,
-	}
-	if err := auth.ApplyAuth(auth.BuiltinRegistry(), execReq.AuthConfig, &clientReq, provided); err != nil {
-		return client.Request{}, fmt.Errorf("failed to apply auth: %w", err)
-	}
-
-	if execReq.Timeout != "" {
-		timeout, err := time.ParseDuration(execReq.Timeout)
-		if err != nil {
-			return client.Request{}, fmt.Errorf("invalid timeout %q: %w", execReq.Timeout, err)
-		}
-		clientReq.Timeout = timeout
-	}
-
-	return clientReq, nil
 }
 
 func maskValue(value string) string {

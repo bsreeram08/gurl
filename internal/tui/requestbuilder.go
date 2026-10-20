@@ -11,9 +11,8 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/sreeram/gurl/internal/auth"
 	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/core/template"
+	"github.com/sreeram/gurl/internal/resolve"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 )
@@ -920,72 +919,24 @@ func (rb *RequestBuilder) isQueryRowEmpty(index int) bool {
 	return strings.TrimSpace(row.keyInput.Value()) == "" && strings.TrimSpace(row.valueInput.Value()) == ""
 }
 
-// collectVarAwareRequest builds a request for execution, resolving template variables.
-func (rb *RequestBuilder) collectVarAwareRequest(vars map[string]string) (client.Request, error) {
+// collectVarAwareRequest resolves the request being edited against scopes.
+func (rb *RequestBuilder) collectVarAwareRequest(scopes resolve.Scopes) (client.Request, error) {
 	rb.syncEditingFromForm()
 	if rb.editing == nil {
 		return client.Request{}, fmt.Errorf("no request loaded")
 	}
 
-	execReq := *rb.editing
-	execReq.PathParams = append([]types.Var{}, rb.editing.PathParams...)
-	for i, p := range execReq.PathParams {
-		if value, ok := vars[p.Name]; ok {
-			execReq.PathParams[i].Example = value
-		}
+	resolved, problems := resolve.Resolve(rb.editing, scopes, resolve.Options{Interactive: true})
+	if err := problems.Err(); err != nil {
+		return client.Request{}, err
 	}
-
-	if err := template.ResolvePathParamsInRequest(&execReq); err != nil {
-		return client.Request{}, fmt.Errorf("failed to resolve path params: %w", err)
-	}
-
-	resolvedURL, err := template.Substitute(execReq.URL, vars)
-	if err != nil {
-		return client.Request{}, fmt.Errorf("failed to substitute URL: %w", err)
-	}
-
-	headers := make([]client.Header, 0, len(execReq.Headers)+1)
-	for _, h := range execReq.Headers {
-		resolvedKey, err := template.Substitute(h.Key, vars)
-		if err != nil {
-			return client.Request{}, fmt.Errorf("failed to substitute header key: %w", err)
-		}
-		resolvedValue, err := template.Substitute(h.Value, vars)
-		if err != nil {
-			return client.Request{}, fmt.Errorf("failed to substitute header value: %w", err)
-		}
-		headers = append(headers, client.Header{Key: resolvedKey, Value: resolvedValue})
-	}
-
-	resolvedBody := execReq.Body
-	if execReq.Body != "" {
-		resolvedBody, err = template.Substitute(execReq.Body, vars)
-		if err != nil {
-			return client.Request{}, fmt.Errorf("failed to substitute body: %w", err)
-		}
-	}
-
-	authRequest := client.Request{
-		Method:  execReq.Method,
-		URL:     resolvedURL,
-		Headers: headers,
-		Body:    resolvedBody,
-	}
-
-	if authRequest.Method == "" {
-		authRequest.Method = "GET"
-	}
-	if err := auth.ApplyAuth(auth.BuiltinRegistry(), execReq.AuthConfig, &authRequest, vars); err != nil {
-		return client.Request{}, fmt.Errorf("failed to apply auth: %w", err)
-	}
-
-	return authRequest, nil
+	return resolved.Request, nil
 }
 
-// sendRequestWithVars sends the HTTP request asynchronously via a tea.Cmd.
-func (rb *RequestBuilder) sendRequestWithVars(vars map[string]string) tea.Cmd {
+// sendRequestWithScopes sends the HTTP request asynchronously via a tea.Cmd.
+func (rb *RequestBuilder) sendRequestWithScopes(scopes resolve.Scopes) tea.Cmd {
 	rb.sending = true
-	clientReq, err := rb.collectVarAwareRequest(vars)
+	clientReq, err := rb.collectVarAwareRequest(scopes)
 	if err != nil {
 		rb.sending = false
 		return func() tea.Msg {
@@ -1098,37 +1049,6 @@ func (rb *RequestBuilder) syncEditingFromForm() {
 	}
 
 	rb.editing.UpdatedAt = time.Now().Unix()
-}
-
-// buildClientRequest builds a client.Request from the form data
-func (rb *RequestBuilder) buildClientRequest() client.Request {
-	req, _ := rb.buildClientRequestWithAuth()
-	return req
-}
-
-func (rb *RequestBuilder) buildClientRequestWithAuth() (client.Request, error) {
-	rb.syncEditingFromForm()
-
-	req := client.Request{
-		Method:  rb.editing.Method,
-		URL:     rb.editing.URL,
-		Headers: []client.Header{},
-		Body:    rb.editing.Body,
-	}
-
-	// Add headers
-	for _, h := range rb.editing.Headers {
-		req.Headers = append(req.Headers, client.Header{
-			Key:   h.Key,
-			Value: h.Value,
-		})
-	}
-
-	if err := auth.ApplyAuth(auth.BuiltinRegistry(), rb.editing.AuthConfig, &req, nil); err != nil {
-		return client.Request{}, fmt.Errorf("failed to apply auth: %w", err)
-	}
-
-	return req, nil
 }
 
 // basicAuth generates a Basic auth header value

@@ -1,17 +1,12 @@
 package env
 
-import "fmt"
+import (
+	"fmt"
 
-type PersistStore interface {
-	GetEnvByName(name string) (*Environment, error)
-	SaveEnv(env *Environment) error
-}
+	"github.com/sreeram/gurl/internal/secrets"
+)
 
-type ActiveEnvStore interface {
-	GetActiveEnv() (string, error)
-}
-
-func ResolvePersistEnvironmentName(store ActiveEnvStore, explicitName string) (string, error) {
+func ResolvePersistEnvironmentName(store Store, explicitName string) (string, error) {
 	if explicitName != "" {
 		return explicitName, nil
 	}
@@ -28,7 +23,7 @@ func ResolvePersistEnvironmentName(store ActiveEnvStore, explicitName string) (s
 	return activeName, nil
 }
 
-func ResolveOptionalPersistEnvironmentName(store ActiveEnvStore, explicitName string) (string, error) {
+func ResolveOptionalPersistEnvironmentName(store Store, explicitName string) (string, error) {
 	if explicitName != "" {
 		return explicitName, nil
 	}
@@ -42,7 +37,7 @@ func ResolveOptionalPersistEnvironmentName(store ActiveEnvStore, explicitName st
 	return activeName, nil
 }
 
-func PersistVariables(store PersistStore, envName string, vars map[string]string) (map[string]string, error) {
+func PersistVariables(store Store, envName string, vars map[string]string) (map[string]string, error) {
 	if envName == "" {
 		return nil, fmt.Errorf("--persist requires --env or an active environment")
 	}
@@ -92,7 +87,7 @@ func CloneEnvironment(source *Environment) *Environment {
 
 func MaskedValue(environment *Environment, key string, value string) string {
 	if environment != nil && environment.IsSecret(key) {
-		return MaskSecret(value)
+		return secrets.Mask(value)
 	}
 	return value
 }

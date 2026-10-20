@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/sreeram/gurl/internal/secrets"
 )
 
 func TestEncryptDecryptRoundTrip(t *testing.T) {
@@ -43,7 +45,7 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 			}
 
 			// Encrypt
-			ciphertext, err := EncryptSecret(key, tc.plaintext)
+			ciphertext, err := secrets.Encrypt(key, tc.plaintext)
 			if err != nil {
 				t.Fatalf("EncryptSecret failed: %v", err)
 			}
@@ -54,7 +56,7 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 			}
 
 			// Decrypt
-			decrypted, err := DecryptSecret(key, ciphertext)
+			decrypted, err := secrets.Decrypt(key, ciphertext)
 			if err != nil {
 				t.Fatalf("DecryptSecret failed: %v", err)
 			}
@@ -76,12 +78,12 @@ func TestEncryptSecretProducesDifferentOutput(t *testing.T) {
 
 	plaintext := "same-secret"
 
-	ciphertext1, err := EncryptSecret(key, plaintext)
+	ciphertext1, err := secrets.Encrypt(key, plaintext)
 	if err != nil {
 		t.Fatalf("EncryptSecret failed: %v", err)
 	}
 
-	ciphertext2, err := EncryptSecret(key, plaintext)
+	ciphertext2, err := secrets.Encrypt(key, plaintext)
 	if err != nil {
 		t.Fatalf("EncryptSecret failed: %v", err)
 	}
@@ -92,11 +94,11 @@ func TestEncryptSecretProducesDifferentOutput(t *testing.T) {
 	}
 
 	// But both should decrypt to same value
-	decrypted1, err := DecryptSecret(key, ciphertext1)
+	decrypted1, err := secrets.Decrypt(key, ciphertext1)
 	if err != nil {
 		t.Fatalf("DecryptSecret failed: %v", err)
 	}
-	decrypted2, err := DecryptSecret(key, ciphertext2)
+	decrypted2, err := secrets.Decrypt(key, ciphertext2)
 	if err != nil {
 		t.Fatalf("DecryptSecret failed: %v", err)
 	}
@@ -162,9 +164,9 @@ func TestMaskSecret(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := MaskSecret(tc.input)
+			result := secrets.Mask(tc.input)
 			if result != tc.expected {
-				t.Errorf("MaskSecret(%q) = %q, want %q", tc.input, result, tc.expected)
+				t.Errorf("secrets.Mask(%q) = %q, want %q", tc.input, result, tc.expected)
 			}
 		})
 	}
@@ -175,13 +177,13 @@ func TestIsEncryptedValue(t *testing.T) {
 	// Encrypted values with AES-GCM have a specific format: nonce (12 bytes) + ciphertext + tag (16 bytes)
 
 	key, _ := GetOrCreateMachineKey()
-	ciphertext, _ := EncryptSecret(key, "secret")
+	ciphertext, _ := secrets.Encrypt(key, "secret")
 
-	if !IsEncryptedValue(ciphertext) {
+	if !secrets.IsEncryptedValue(ciphertext) {
 		t.Error("encrypted value should be detected as encrypted")
 	}
 
-	if IsEncryptedValue("plain-text-value") {
+	if secrets.IsEncryptedValue("plain-text-value") {
 		t.Error("plain text should not be detected as encrypted")
 	}
 }
@@ -201,19 +203,19 @@ func TestEncryptDecryptWithDifferentKeys(t *testing.T) {
 
 	// Encrypt with key1
 	plaintext := "secret-message"
-	ciphertext, err := EncryptSecret(key1, plaintext)
+	ciphertext, err := secrets.Encrypt(key1, plaintext)
 	if err != nil {
 		t.Fatalf("EncryptSecret failed: %v", err)
 	}
 
 	// Decrypting with wrong key should fail
-	_, err = DecryptSecret(key2, ciphertext)
+	_, err = secrets.Decrypt(key2, ciphertext)
 	if err == nil {
 		t.Error("decrypting with wrong key should fail")
 	}
 
 	// But decrypting with correct key should work
-	decrypted, err := DecryptSecret(key1, ciphertext)
+	decrypted, err := secrets.Decrypt(key1, ciphertext)
 	if err != nil {
 		t.Fatalf("DecryptSecret with correct key failed: %v", err)
 	}

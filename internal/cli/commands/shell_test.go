@@ -135,7 +135,7 @@ func TestShellSessionPromptForMissingVars(t *testing.T) {
 	}
 }
 
-func TestMissingTemplateVarsIncludesRegistryBackedAuthParams(t *testing.T) {
+func TestShellResolveForSendReportsMissingAuthParams(t *testing.T) {
 	req := &types.SavedRequest{
 		URL: "https://api.example.com/orders",
 		AuthConfig: &types.AuthConfig{
@@ -149,22 +149,21 @@ func TestMissingTemplateVarsIncludesRegistryBackedAuthParams(t *testing.T) {
 		},
 	}
 
-	missing := missingTemplateVars(req, map[string]string{
+	session := newShellSession(newMockDB(), nil, strings.NewReader(""), &bytes.Buffer{}, "auto")
+	_, err := session.resolveForSend(req, map[string]string{
 		"consumer_key": "ck_123",
 	})
-
-	missingSet := map[string]bool{}
-	for _, name := range missing {
-		missingSet[name] = true
+	if err == nil {
+		t.Fatal("expected missing auth variables error")
 	}
 
 	for _, name := range []string{"consumer_secret", "oauth_token"} {
-		if !missingSet[name] {
-			t.Fatalf("expected missing auth variable %q in %#v", name, missing)
+		if !strings.Contains(err.Error(), name) {
+			t.Fatalf("expected missing auth variable %q in %v", name, err)
 		}
 	}
-	if missingSet["consumer_key"] {
-		t.Fatalf("did not expect provided auth variable consumer_key in %#v", missing)
+	if strings.Contains(err.Error(), "consumer_key") {
+		t.Fatalf("did not expect provided auth variable consumer_key in %v", err)
 	}
 }
 
@@ -192,7 +191,7 @@ func TestShellSessionHelpTopic(t *testing.T) {
 	}
 }
 
-func TestBuildClientRequestFromSavedRequestResolvesTemplatesAndAuth(t *testing.T) {
+func TestShellResolveForSendResolvesTemplatesAndAuth(t *testing.T) {
 	req := &types.SavedRequest{
 		Name:   "templated",
 		Method: "POST",
@@ -213,14 +212,14 @@ func TestBuildClientRequestFromSavedRequestResolvesTemplatesAndAuth(t *testing.T
 		Timeout: "3s",
 	}
 
-	clientReq, err := buildClientRequestFromSavedRequest(req, map[string]string{
+	clientReq, err := newShellSession(newMockDB(), nil, strings.NewReader(""), &bytes.Buffer{}, "auto").resolveForSend(req, map[string]string{
 		"id":     "42",
 		"tenant": "acme",
 		"name":   "sreeram",
 		"token":  "abc123",
 	})
 	if err != nil {
-		t.Fatalf("buildClientRequestFromSavedRequest returned error: %v", err)
+		t.Fatalf("resolveForSend returned error: %v", err)
 	}
 
 	if clientReq.URL != "https://api.example.com/users/42" {
@@ -237,7 +236,7 @@ func TestBuildClientRequestFromSavedRequestResolvesTemplatesAndAuth(t *testing.T
 	}
 }
 
-func TestBuildClientRequestFromSavedRequestAppliesAPIKeyQueryAuth(t *testing.T) {
+func TestShellResolveForSendAppliesAPIKeyQueryAuth(t *testing.T) {
 	req := &types.SavedRequest{
 		Name:   "query-auth",
 		Method: "GET",
@@ -252,9 +251,9 @@ func TestBuildClientRequestFromSavedRequestAppliesAPIKeyQueryAuth(t *testing.T) 
 		},
 	}
 
-	clientReq, err := buildClientRequestFromSavedRequest(req, map[string]string{"api_key": "secret value"})
+	clientReq, err := newShellSession(newMockDB(), nil, strings.NewReader(""), &bytes.Buffer{}, "auto").resolveForSend(req, map[string]string{"api_key": "secret value"})
 	if err != nil {
-		t.Fatalf("buildClientRequestFromSavedRequest returned error: %v", err)
+		t.Fatalf("resolveForSend returned error: %v", err)
 	}
 
 	if clientReq.URL != "https://api.example.com/widgets?fixed=1&access_token=secret+value" {
@@ -267,7 +266,7 @@ func TestBuildClientRequestFromSavedRequestAppliesAPIKeyQueryAuth(t *testing.T) 
 	}
 }
 
-func TestBuildClientRequestFromSavedRequestUnknownAuthReturnsError(t *testing.T) {
+func TestShellResolveForSendUnknownAuthReturnsError(t *testing.T) {
 	req := &types.SavedRequest{
 		Name:   "unknown-auth",
 		Method: "GET",
@@ -278,11 +277,27 @@ func TestBuildClientRequestFromSavedRequestUnknownAuthReturnsError(t *testing.T)
 		},
 	}
 
-	_, err := buildClientRequestFromSavedRequest(req, nil)
+	_, err := newShellSession(newMockDB(), nil, strings.NewReader(""), &bytes.Buffer{}, "auto").resolveForSend(req, nil)
 	if err == nil {
 		t.Fatal("expected unknown auth type error")
 	}
 	if !strings.Contains(err.Error(), `unknown auth type "made-up"`) {
 		t.Fatalf("expected unknown auth type error, got %v", err)
+	}
+}
+
+func TestShellResolveForSendResolvesDynamicFunctions(t *testing.T) {
+	req := &types.SavedRequest{
+		Name:    "dynamic",
+		URL:     "https://api.example.com/orders/{{$uuid}}",
+		Headers: []types.Header{{Key: "Idempotency-Key", Value: "{{$randomString(8)}}"}},
+	}
+
+	clientReq, err := newShellSession(newMockDB(), nil, strings.NewReader(""), &bytes.Buffer{}, "auto").resolveForSend(req, nil)
+	if err != nil {
+		t.Fatalf("resolveForSend returned error: %v", err)
+	}
+	if strings.Contains(clientReq.URL, "{{") || len(clientReq.Headers[0].Value) != 8 {
+		t.Fatalf("dynamic functions not resolved: %+v", clientReq)
 	}
 }

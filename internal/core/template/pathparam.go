@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strings"
 )
 
 // pathParamRegexp matches :param and {param} in URLs
@@ -124,4 +125,71 @@ func extractPathParamNamesFiltered(urlStr string) []string {
 	}
 
 	return names
+}
+
+// pathParamMatches returns the index pairs of :name and {name} path
+// parameters in urlStr that are not part of a {{...}} placeholder (such as
+// {{base}} or the ":num" suffix of {{amount:num}}).
+func pathParamMatches(urlStr string) [][]int {
+	placeholders := templatePattern.FindAllStringIndex(urlStr, -1)
+	var out [][]int
+	for _, m := range pathParamRegexp.FindAllStringIndex(urlStr, -1) {
+		inside := false
+		for _, p := range placeholders {
+			if m[0] < p[1] && p[0] < m[1] {
+				inside = true
+				break
+			}
+		}
+		if !inside {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func pathParamName(match string) string {
+	name := match[1:]
+	if name[len(name)-1] == '}' {
+		name = name[:len(name)-1]
+	}
+	return name
+}
+
+// PathParamNames returns the :name and {name} path parameter names of urlStr
+// in order of appearance, without duplicates, ignoring {{...}} placeholders.
+func PathParamNames(urlStr string) []string {
+	var names []string
+	seen := make(map[string]bool)
+	for _, m := range pathParamMatches(urlStr) {
+		name := pathParamName(urlStr[m[0]:m[1]])
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// FillPathParams replaces each :name and {name} path parameter of urlStr
+// that has a value in params with the URL path-escaped value. Parameters
+// without a value and {{...}} placeholders are left as written.
+func FillPathParams(urlStr string, params map[string]string) string {
+	matches := pathParamMatches(urlStr)
+	if len(matches) == 0 {
+		return urlStr
+	}
+	var b strings.Builder
+	last := 0
+	for _, m := range matches {
+		val, ok := params[pathParamName(urlStr[m[0]:m[1]])]
+		if !ok {
+			continue
+		}
+		b.WriteString(urlStr[last:m[0]])
+		b.WriteString(url.PathEscape(val))
+		last = m[1]
+	}
+	b.WriteString(urlStr[last:])
+	return b.String()
 }

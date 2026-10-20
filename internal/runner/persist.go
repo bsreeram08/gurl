@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/resolve"
+	"github.com/sreeram/gurl/internal/secrets"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 )
@@ -25,11 +27,11 @@ type CollectionPersistSummary struct {
 	Collection *types.Collection
 }
 
-func PersistDirtyVariables(envStorage *env.EnvStorage, collectionStore storage.CollectionStore, envName string, collectionName string, vars map[string]string, origins map[string]VarOrigin) (*PersistSummary, error) {
+func PersistDirtyVariables(envStorage env.Store, collectionStore storage.CollectionStore, envName string, collectionName string, vars map[string]string, origins map[string]resolve.Origin) (*PersistSummary, error) {
 	return PersistDirtyVariablesWithCollectionTargets(envStorage, collectionStore, envName, collectionName, vars, origins, nil)
 }
 
-func PersistDirtyVariablesWithCollectionTargets(envStorage *env.EnvStorage, collectionStore storage.CollectionStore, envName string, defaultCollectionName string, vars map[string]string, origins map[string]VarOrigin, collectionTargets map[string]string) (*PersistSummary, error) {
+func PersistDirtyVariablesWithCollectionTargets(envStorage env.Store, collectionStore storage.CollectionStore, envName string, defaultCollectionName string, vars map[string]string, origins map[string]resolve.Origin, collectionTargets map[string]string) (*PersistSummary, error) {
 	summary := &PersistSummary{
 		EnvironmentName:       envName,
 		EnvironmentVars:       make(map[string]string),
@@ -55,7 +57,7 @@ func PersistDirtyVariablesWithCollectionTargets(envStorage *env.EnvStorage, coll
 			collectionName = collectionTargets[key]
 		}
 		switch targetForOrigin(origins[key], collectionName, collectionStore != nil) {
-		case VarOriginCollection:
+		case resolve.OriginCollection:
 			if collectionVars[collectionName] == nil {
 				collectionVars[collectionName] = make(map[string]string)
 			}
@@ -88,9 +90,14 @@ func PersistDirtyVariablesWithCollectionTargets(envStorage *env.EnvStorage, coll
 				return nil, fmt.Errorf("--persist requires --env, an active environment, or a collection-backed run")
 			}
 			collection, err := collectionStore.GetCollectionByName(collectionName)
-			if err != nil || collection == nil {
+			switch {
+			case storage.IsCollectionNotFound(err) || (err == nil && collection == nil):
 				collection = types.NewCollection(collectionName)
-			} else {
+			case err != nil:
+				// A locked collection must not be replaced by a fresh one:
+				// that would drop its stored variables and secrets.
+				return nil, fmt.Errorf("failed to load collection %q for --persist: %w", collectionName, err)
+			default:
 				collection = cloneCollection(collection)
 			}
 			if collection.Variables == nil {
@@ -120,25 +127,25 @@ func PersistDirtyVariablesWithCollectionTargets(envStorage *env.EnvStorage, coll
 	return summary, nil
 }
 
-func targetForOrigin(origin VarOrigin, collectionName string, hasCollectionStore bool) VarOrigin {
+func targetForOrigin(origin resolve.Origin, collectionName string, hasCollectionStore bool) resolve.Origin {
 	switch origin {
-	case VarOriginEnvironment:
-		return VarOriginEnvironment
-	case VarOriginCollection:
+	case resolve.OriginEnvironment:
+		return resolve.OriginEnvironment
+	case resolve.OriginCollection:
 		if collectionName != "" && hasCollectionStore {
-			return VarOriginCollection
+			return resolve.OriginCollection
 		}
-		return VarOriginEnvironment
-	case VarOriginCLI, VarOriginData:
+		return resolve.OriginEnvironment
+	case resolve.OriginCLI, resolve.OriginData:
 		if collectionName != "" && hasCollectionStore {
-			return VarOriginCollection
+			return resolve.OriginCollection
 		}
-		return VarOriginEnvironment
+		return resolve.OriginEnvironment
 	default:
 		if collectionName != "" && hasCollectionStore {
-			return VarOriginCollection
+			return resolve.OriginCollection
 		}
-		return VarOriginEnvironment
+		return resolve.OriginEnvironment
 	}
 }
 
@@ -177,7 +184,7 @@ func PrintCollectionPersistSummary(out io.Writer, collectionName string, persist
 	for _, key := range keys {
 		value := persisted[key]
 		if collection != nil && collection.IsSecret(key) {
-			value = env.MaskSecret(value)
+			value = secrets.Mask(value)
 		}
 		fmt.Fprintf(out, "  %s = %s\n", key, value)
 	}

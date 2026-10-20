@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -334,4 +335,36 @@ func collectionNameIndexKey(name string) string {
 	return fmt.Sprintf("idx:collection:name:%s", name)
 }
 
-var _ CollectionStore = (*LMDB)(nil)
+// GetRawCollectionByName is not supported: DB-backed collection secrets are
+// bound to a machine-local key, and a locked one is never overwritten.
+func (db *LMDB) GetRawCollectionByName(name string) (*types.Collection, error) {
+	return nil, ErrNotSupported
+}
+
+// SaveCollectionAllowLocked is not supported; see GetRawCollectionByName.
+func (db *LMDB) SaveCollectionAllowLocked(collection *types.Collection) error {
+	return ErrNotSupported
+}
+
+// UnlockCollection is not supported: passphrase-protected collections live
+// in project file storage.
+func (db *LMDB) UnlockCollection(name string, passphrase string) error {
+	return ErrNotSupported
+}
+
+// MigrateCollectionToFiles is not supported: LMDB has no project file store.
+func (db *LMDB) MigrateCollectionToFiles(name string) (int, string, error) {
+	return 0, "", ErrNotSupported
+}
+
+// WatchCollection returns a nil watcher: LMDB has no collection files.
+func (db *LMDB) WatchCollection(ctx context.Context, name string, opts CollectionWatchOptions) (*CollectionWatcher, error) {
+	return nil, nil
+}
+
+// WatchCollections returns a nil watcher: LMDB has no collection files.
+func (db *LMDB) WatchCollections(ctx context.Context, opts CollectionWatchOptions) (*CollectionWatcher, error) {
+	return nil, nil
+}
+
+var _ DB = (*LMDB)(nil)

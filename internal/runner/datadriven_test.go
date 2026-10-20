@@ -131,35 +131,6 @@ func TestDataDriven_CSVHeaders(t *testing.T) {
 	}
 }
 
-func TestDataDriven_VariableSubstitution(t *testing.T) {
-	tmpDir := t.TempDir()
-	csvPath := filepath.Join(tmpDir, "vars.csv")
-
-	csvContent := "name,email\nAlice,alice@example.com\n"
-
-	if err := os.WriteFile(csvPath, []byte(csvContent), 0644); err != nil {
-		t.Fatalf("failed to write CSV file: %v", err)
-	}
-
-	loader, err := NewDataLoader(csvPath)
-	if err != nil {
-		t.Fatalf("NewDataLoader failed: %v", err)
-	}
-
-	rows, err := loader.ReadAll()
-	if err != nil {
-		t.Fatalf("ReadAll failed: %v", err)
-	}
-
-	template := "User {{name}} with email {{email}}"
-	expected := "User Alice with email alice@example.com"
-
-	result := substituteTemplate(template, rows[0])
-	if result != expected {
-		t.Errorf("expected %q, got %q", expected, result)
-	}
-}
-
 func TestDataDriven_Iteration(t *testing.T) {
 	tmpDir := t.TempDir()
 	csvPath := filepath.Join(tmpDir, "iter.csv")
@@ -221,43 +192,6 @@ func TestDataDriven_EmptyFile(t *testing.T) {
 
 	if len(rows) != 0 {
 		t.Errorf("expected 0 rows for empty file, got %d", len(rows))
-	}
-}
-
-func TestDataDriven_MissingColumn(t *testing.T) {
-	tmpDir := t.TempDir()
-	csvPath := filepath.Join(tmpDir, "missing.csv")
-
-	csvContent := "name,email\nAlice,alice@example.com\n"
-
-	if err := os.WriteFile(csvPath, []byte(csvContent), 0644); err != nil {
-		t.Fatalf("failed to write CSV file: %v", err)
-	}
-
-	loader, err := NewDataLoader(csvPath)
-	if err != nil {
-		t.Fatalf("NewDataLoader failed: %v", err)
-	}
-
-	rows, err := loader.ReadAll()
-	if err != nil {
-		t.Fatalf("ReadAll failed: %v", err)
-	}
-
-	template := "User {{name}} with phone {{phone}}"
-
-	_, err = SubstituteTemplateWithVars(template, nil, rows[0])
-	if err == nil {
-		t.Error("expected error for missing column, got nil")
-	}
-
-	missingErr, ok := err.(*MissingColumnError)
-	if !ok {
-		t.Fatalf("expected *MissingColumnError, got %T", err)
-	}
-
-	if missingErr.Column != "phone" {
-		t.Errorf("expected missing column 'phone', got %q", missingErr.Column)
 	}
 }
 
@@ -497,99 +431,5 @@ func TestDataDriven_IterateJSONWithIteratorError(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("expected error from iterator, got nil")
-	}
-}
-
-func TestExtractTemplateVars(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected []string
-	}{
-		{"", nil},
-		{"no vars here", nil},
-		{"{{name}}", []string{"name"}},
-		{"{{name}} and {{email}}", []string{"name", "email"}},
-		{"{{a}}{{b}}{{c}}", []string{"a", "b", "c"}},
-		{"prefix {{name}} suffix", []string{"name"}},
-		{"{{na}} and {{na}}", []string{"na", "na"}},
-		{"unclosed {{name", nil},
-		{"{{name}} extra {{email", []string{"name"}},
-	}
-
-	for _, tt := range tests {
-		result := extractTemplateVars(tt.input)
-		if len(result) != len(tt.expected) {
-			t.Errorf("extractTemplateVars(%q): expected %v, got %v", tt.input, tt.expected, result)
-			continue
-		}
-		for i, v := range result {
-			if v != tt.expected[i] {
-				t.Errorf("extractTemplateVars(%q): expected %v, got %v", tt.input, tt.expected, result)
-				break
-			}
-		}
-	}
-}
-
-func TestMissingColumnError_Error(t *testing.T) {
-	err := &MissingColumnError{Column: "missing_col", Row: 5}
-	expected := "missing column 'missing_col' in data row 5"
-	if err.Error() != expected {
-		t.Errorf("expected %q, got %q", expected, err.Error())
-	}
-}
-
-func TestSubstituteTemplateWithVars_MissingColumn(t *testing.T) {
-	template := "User {{name}} with phone {{phone}}"
-	baseVars := map[string]string{"name": "Alice"}
-	rowVars := map[string]string{}
-
-	_, err := SubstituteTemplateWithVars(template, baseVars, rowVars)
-	if err == nil {
-		t.Fatal("expected error for missing column, got nil")
-	}
-
-	missingErr, ok := err.(*MissingColumnError)
-	if !ok {
-		t.Fatalf("expected *MissingColumnError, got %T", err)
-	}
-
-	if missingErr.Column != "phone" {
-		t.Errorf("expected missing column 'phone', got %q", missingErr.Column)
-	}
-	if missingErr.Row != 0 {
-		t.Errorf("expected row 0, got %d", missingErr.Row)
-	}
-}
-
-func TestSubstituteTemplateWithVars_BothBaseAndRow(t *testing.T) {
-	template := "User {{name}} at {{domain}}"
-	baseVars := map[string]string{"domain": "example.com"}
-	rowVars := map[string]string{"name": "Alice"}
-
-	result, err := SubstituteTemplateWithVars(template, baseVars, rowVars)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	expected := "User Alice at example.com"
-	if result != expected {
-		t.Errorf("expected %q, got %q", expected, result)
-	}
-}
-
-func TestSubstituteTemplateWithVars_RowOverridesBase(t *testing.T) {
-	template := "Value: {{val}}"
-	baseVars := map[string]string{"val": "base"}
-	rowVars := map[string]string{"val": "row"}
-
-	result, err := SubstituteTemplateWithVars(template, baseVars, rowVars)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	expected := "Value: row"
-	if result != expected {
-		t.Errorf("expected %q, got %q", expected, result)
 	}
 }

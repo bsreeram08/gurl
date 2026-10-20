@@ -9,43 +9,13 @@ import (
 	"testing"
 
 	"github.com/sreeram/gurl/internal/formatter"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/sreeram/gurl/internal/storage/memstore"
 	"github.com/urfave/cli/v3"
 )
 
-type mockDB struct{}
-
-func (m *mockDB) Open() error                               { return nil }
-func (m *mockDB) Close() error                              { return nil }
-func (m *mockDB) SaveRequest(req *types.SavedRequest) error { return nil }
-func (m *mockDB) GetRequest(id string) (*types.SavedRequest, error) {
-	return nil, nil
-}
-func (m *mockDB) GetRequestByName(name string) (*types.SavedRequest, error) {
-	return nil, nil
-}
-func (m *mockDB) ListRequests(opts *storage.ListOptions) ([]*types.SavedRequest, error) {
-	return nil, nil
-}
-func (m *mockDB) DeleteRequest(id string) error               { return nil }
-func (m *mockDB) UpdateRequest(req *types.SavedRequest) error { return nil }
-func (m *mockDB) SaveHistory(history *types.ExecutionHistory) error {
-	return nil
-}
-func (m *mockDB) GetHistory(requestID string, limit int) ([]*types.ExecutionHistory, error) {
-	return nil, nil
-}
-func (m *mockDB) ListFolder(path string) ([]*types.SavedRequest, error) { return nil, nil }
-func (m *mockDB) ListFolderRecursive(path string) ([]*types.SavedRequest, error) {
-	return nil, nil
-}
-func (m *mockDB) DeleteFolder(path string) error   { return nil }
-func (m *mockDB) GetAllFolders() ([]string, error) { return nil, nil }
-
 func runGRPCCommand(t *testing.T, args []string) error {
 	t.Helper()
-	cmd := GRPCCommand(&mockDB{})
+	cmd := GRPCCommand(memstore.New())
 	root := &cli.Command{
 		Name:     "test",
 		Commands: []*cli.Command{cmd},
@@ -327,7 +297,7 @@ func TestGRPCCommandWithCACertFlag(t *testing.T) {
 }
 
 func TestGRPCCommandCreation(t *testing.T) {
-	cmd := GRPCCommand(&mockDB{})
+	cmd := GRPCCommand(memstore.New())
 	if cmd == nil {
 		t.Fatal("GRPCCommand returned nil")
 	}

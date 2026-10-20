@@ -25,7 +25,7 @@ const (
 
 // EnvSwitcher is a bubbletea sub-model for environment management
 type EnvSwitcher struct {
-	envStorage    *env.EnvStorage
+	envStorage    env.Store
 	envs          []*env.Environment
 	activeEnvID   string
 	activeEnvName string
@@ -61,7 +61,7 @@ type EnvDeletedMsg struct {
 }
 
 // NewEnvSwitcher creates a new environment switcher component
-func NewEnvSwitcher(envStorage *env.EnvStorage) *EnvSwitcher {
+func NewEnvSwitcher(envStorage env.Store) *EnvSwitcher {
 	nameInput := textinput.New()
 	nameInput.Placeholder = "Environment name"
 	nameInput.Prompt = "> "
@@ -865,7 +865,7 @@ func CreateEnvWithPrompt(name string, vars map[string]string) (*env.Environment,
 }
 
 // Getenv is a simple env getter for use outside TUI
-func Getenv(envName string, key string, envStorage *env.EnvStorage) (string, bool) {
+func Getenv(envName string, key string, envStorage env.Store) (string, bool) {
 	if envName == "" {
 		return "", false
 	}
@@ -950,7 +950,7 @@ func (es *EnvSwitcher) GetSelectedEnv() *env.Environment {
 }
 
 // ImportEnvFromFile imports an environment from a .env file path
-func ImportEnvFromFile(envStorage *env.EnvStorage, path string) (*env.Environment, error) {
+func ImportEnvFromFile(envStorage env.Store, path string) (*env.Environment, error) {
 	vars, err := env.ParseDotenvFile(path)
 	if err != nil {
 		return nil, err
@@ -977,7 +977,7 @@ func ImportEnvFromFile(envStorage *env.EnvStorage, path string) (*env.Environmen
 }
 
 // ImportEnvFromContent imports an environment from .env content string
-func ImportEnvFromContent(envStorage *env.EnvStorage, name, content string) (*env.Environment, error) {
+func ImportEnvFromContent(envStorage env.Store, name, content string) (*env.Environment, error) {
 	vars, err := env.ParseDotenv(content)
 	if err != nil {
 		return nil, err

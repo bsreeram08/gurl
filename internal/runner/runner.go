@@ -6,16 +6,14 @@ import (
 	"io"
 	"os"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/sreeram/gurl/internal/assertions"
 	"github.com/sreeram/gurl/internal/auth"
 	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/core/curl"
-	"github.com/sreeram/gurl/internal/core/template"
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/extract"
+	"github.com/sreeram/gurl/internal/resolve"
 	"github.com/sreeram/gurl/internal/scripting"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
@@ -42,21 +40,9 @@ var collectionRunWatchOptions = storage.CollectionWatchOptions{}
 
 type runCollectionState struct {
 	requests             []*types.SavedRequest
-	envVars              map[string]string
-	collectionVars       map[string]string
-	baseVars             map[string]string
-	baseOrigins          map[string]VarOrigin
-	defaultPersistOrigin VarOrigin
+	scopes               resolve.Scopes
+	defaultPersistOrigin resolve.Origin
 }
-
-type VarOrigin string
-
-const (
-	VarOriginEnvironment VarOrigin = "environment"
-	VarOriginCollection  VarOrigin = "collection"
-	VarOriginCLI         VarOrigin = "cli"
-	VarOriginData        VarOrigin = "data"
-)
 
 type RunResult struct {
 	CollectionName string
@@ -70,22 +56,25 @@ type RunResult struct {
 }
 
 type RequestResult struct {
-	RequestName         string
-	StatusCode          int
-	Passed              bool
-	Skipped             bool
-	Error               string
-	Duration            time.Duration
-	AssertionResults    []assertions.Result
-	ExtractedVars       map[string]string
-	DirtyVars           map[string]string
-	DirtyVarOrigins     map[string]VarOrigin
-	DryRun              bool
-	PlannedMethod       string
-	PlannedURL          string
-	PlannedExtracts     []types.Extract
-	PlannedVarSources   map[string]string
-	DryRunWarnings      []string
+	RequestName       string
+	StatusCode        int
+	Passed            bool
+	Skipped           bool
+	Error             string
+	Duration          time.Duration
+	AssertionResults  []assertions.Result
+	ExtractedVars     map[string]string
+	DirtyVars         map[string]string
+	DirtyVarOrigins   map[string]resolve.Origin
+	DryRun            bool
+	PlannedMethod     string
+	PlannedURL        string
+	PlannedExtracts   []types.Extract
+	PlannedVarSources map[string]string
+	DryRunWarnings    []string
+	// DryRunProblems are the resolution problems of a dry run other than
+	// missing variables (those are DryRunWarnings).
+	DryRunProblems      resolve.Problems
 	SkipReason          string
 	FailurePhase        string
 	NextRequestOverride string
@@ -111,20 +100,16 @@ const (
 	FailurePhaseNextRequest        = "next_request"
 )
 
-type EnvProvider interface {
-	GetEnvByName(name string) (*env.Environment, error)
-}
-
 type Runner struct {
 	db         storage.DB
-	envStorage EnvProvider
+	envStorage env.Store
 	client     *client.Client
 	eval       *assertions.Evaluator
 	extractor  *extract.Extractor
 	auth       *auth.Registry
 }
 
-func NewRunner(db storage.DB, envStorage EnvProvider) *Runner {
+func NewRunner(db storage.DB, envStorage env.Store) *Runner {
 	return &Runner{
 		db:         db,
 		envStorage: envStorage,
@@ -140,8 +125,8 @@ func (r *Runner) Run(ctx context.Context, config RunConfig) ([]RunResult, error)
 		config.Iterations = 1
 	}
 
-	envVars := r.loadRunEnvVars(config)
-	state, err := r.loadCollectionRunState(config, envVars)
+	runEnv := r.loadRunEnv(config)
+	state, err := r.loadCollectionRunState(config, runEnv)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +135,7 @@ func (r *Runner) Run(ctx context.Context, config RunConfig) ([]RunResult, error)
 	defer watcher.stop()
 
 	reloadState := func() error {
-		next, err := r.loadCollectionRunState(config, envVars)
+		next, err := r.loadCollectionRunState(config, runEnv)
 		if err != nil {
 			return err
 		}
@@ -181,7 +166,7 @@ func (r *Runner) Run(ctx context.Context, config RunConfig) ([]RunResult, error)
 					return results, err
 				}
 			}
-			result := r.runIteration(ctx, state.requests, state.baseVars, state.baseOrigins, state.defaultPersistOrigin, config, iter+1)
+			result := r.runIteration(ctx, state.requests, state.scopes, state.defaultPersistOrigin, config, iter+1)
 			results = append(results, result)
 
 			if config.Delay > 0 && iter < config.Iterations-1 {
@@ -205,11 +190,7 @@ func (r *Runner) startCollectionRunWatcher(ctx context.Context, collection strin
 	if collection == "" {
 		return runWatcher
 	}
-	store, ok := r.db.(storage.CollectionWatcherStore)
-	if !ok {
-		return runWatcher
-	}
-	watcher, err := store.WatchCollection(ctx, collection, collectionRunWatchOptions)
+	watcher, err := r.db.WatchCollection(ctx, collection, collectionRunWatchOptions)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: file watcher disabled for collection %q: %v\n", collection, err)
 		return runWatcher
@@ -270,23 +251,21 @@ func (w *collectionRunWatcher) wait(ctx context.Context, delay time.Duration) er
 	}
 }
 
-func (r *Runner) loadRunEnvVars(config RunConfig) map[string]string {
-	envVars := make(map[string]string)
+// loadRunEnv returns the run's environment, or nil when none is selected or
+// it cannot be loaded.
+func (r *Runner) loadRunEnv(config RunConfig) *env.Environment {
 	if config.Environment == "" || r.envStorage == nil {
-		return envVars
+		return nil
 	}
-	env, err := r.envStorage.GetEnvByName(config.Environment)
+	e, err := r.envStorage.GetEnvByName(config.Environment)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: environment %q not found: %v\n", config.Environment, err)
-		return envVars
+		return nil
 	}
-	for k, v := range env.ResolvedVariables() {
-		envVars[k] = v
-	}
-	return envVars
+	return e
 }
 
-func (r *Runner) loadCollectionRunState(config RunConfig, envVars map[string]string) (*runCollectionState, error) {
+func (r *Runner) loadCollectionRunState(config RunConfig, runEnv *env.Environment) (*runCollectionState, error) {
 	requests, err := r.db.ListRequests(&storage.ListOptions{
 		Collection: config.CollectionName,
 	})
@@ -297,31 +276,39 @@ func (r *Runner) loadCollectionRunState(config RunConfig, envVars map[string]str
 		return nil, &EmptyCollectionError{Collection: config.CollectionName}
 	}
 
-	requests = sortBySequence(requests)
-	collectionVars := r.collectionVariables(config.CollectionName, envVars)
-	baseVars := copyStringMap(envVars)
-	baseOrigins := originsFor(envVars, VarOriginEnvironment)
-	for k, v := range collectionVars {
-		baseVars[k] = v
-		baseOrigins[k] = VarOriginCollection
-	}
-	for k, v := range config.Vars {
-		baseVars[k] = v
-		baseOrigins[k] = VarOriginCLI
-	}
-	defaultPersistOrigin := VarOriginEnvironment
-	if config.CollectionName != "" {
-		defaultPersistOrigin = VarOriginCollection
-	}
-
 	return &runCollectionState{
-		requests:             requests,
-		envVars:              envVars,
-		collectionVars:       collectionVars,
-		baseVars:             baseVars,
-		baseOrigins:          baseOrigins,
-		defaultPersistOrigin: defaultPersistOrigin,
+		requests:             sortBySequence(requests),
+		scopes:               ScopesFor(r.db, runEnv, config.CollectionName, config.Vars),
+		defaultPersistOrigin: persistOriginFor(config.CollectionName),
 	}, nil
+}
+
+// ScopesFor builds the resolution scopes for running requests against e (nil
+// for no environment), the named collection (empty for none) and the
+// --var values.
+func ScopesFor(db storage.DB, e *env.Environment, collectionName string, cliVars map[string]string) resolve.Scopes {
+	s := resolve.Scopes{CLI: cliVars}
+	if e != nil {
+		s.Env = e.ResolvedVariables()
+		s.EnvSecrets = e.SecretKeys
+	}
+	if collectionName == "" {
+		return s
+	}
+	if collection, err := db.GetCollectionByName(collectionName); err == nil && collection != nil {
+		s.Collection = collection.Variables
+		s.CollectionSecrets = collection.SecretKeys
+	}
+	return s
+}
+
+// persistOriginFor is the origin given to new extracted or script variables:
+// they persist to the collection when the request belongs to one.
+func persistOriginFor(collectionName string) resolve.Origin {
+	if collectionName != "" {
+		return resolve.OriginCollection
+	}
+	return resolve.OriginEnvironment
 }
 
 func (r *Runner) runWithData(ctx context.Context, state *runCollectionState, config RunConfig, beforeIteration func() error, waitDelay func(time.Duration) error) ([]RunResult, error) {
@@ -339,24 +326,9 @@ func (r *Runner) runWithData(ctx context.Context, state *runCollectionState, con
 				return err
 			}
 		}
-		mergedVars := make(map[string]string)
-		mergedOrigins := copyOriginMap(state.baseOrigins)
-		for k, v := range state.envVars {
-			mergedVars[k] = v
-		}
-		for k, v := range state.collectionVars {
-			mergedVars[k] = v
-		}
-		for k, v := range rowVars {
-			mergedVars[k] = v
-			mergedOrigins[k] = VarOriginData
-		}
-		for k, v := range config.Vars {
-			mergedVars[k] = v
-			mergedOrigins[k] = VarOriginCLI
-		}
-
-		result := r.runIteration(ctx, state.requests, mergedVars, mergedOrigins, state.defaultPersistOrigin, config, iteration)
+		scopes := state.scopes
+		scopes.Data = rowVars
+		result := r.runIteration(ctx, state.requests, scopes, state.defaultPersistOrigin, config, iteration)
 		results = append(results, result)
 		iteration++
 
@@ -374,10 +346,9 @@ func (r *Runner) runWithData(ctx context.Context, state *runCollectionState, con
 	return results, nil
 }
 
-func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedRequest, vars map[string]string, origins map[string]VarOrigin, defaultPersistOrigin VarOrigin, config RunConfig, iteration int) RunResult {
+func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedRequest, scopes resolve.Scopes, defaultPersistOrigin resolve.Origin, config RunConfig, iteration int) RunResult {
 	start := time.Now()
-	runningVars := copyStringMap(vars)
-	runningOrigins := copyOriginMap(origins)
+	scopes.Runtime = copyRuntime(scopes.Runtime)
 	extractedVars := make(map[string]string)
 	plannedVarSources := make(map[string]string)
 	requestIndex := requestIndexByName(requests)
@@ -403,7 +374,7 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		}
 		visited[req.Name] = true
 
-		execution := r.runRequest(ctx, req, runningVars, runningOrigins, defaultPersistOrigin, extractedVars, config.DryRun, plannedVarSources)
+		execution := r.runRequestLifecycle(ctx, req, scopes, defaultPersistOrigin, extractedVars, config.DryRun, plannedVarSources)
 		reqResult := execution.Result
 		printVerboseExchange(config, execution, req.Name)
 		nextIndex := i + 1
@@ -484,10 +455,6 @@ func appendBailSkippedResults(result *RunResult, requests []*types.SavedRequest,
 	}
 }
 
-func (r *Runner) runRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string, origins map[string]VarOrigin, defaultPersistOrigin VarOrigin, extractedVars map[string]string, dryRun bool, plannedVarSources map[string]string) *SingleRequestExecution {
-	return r.runRequestLifecycle(ctx, req, vars, origins, defaultPersistOrigin, extractedVars, dryRun, plannedVarSources)
-}
-
 // printVerboseExchange writes one request/response pair when --verbose is set.
 // A dry run has nothing on the wire to show.
 func printVerboseExchange(config RunConfig, execution *SingleRequestExecution, name string) {
@@ -502,26 +469,32 @@ func printVerboseExchange(config RunConfig, execution *SingleRequestExecution, n
 	fmt.Fprint(out, FormatVerboseExchange(execution.Request, execution.Response))
 }
 
+// RunSavedRequest runs req with vars as its only (environment) scope.
 func (r *Runner) RunSavedRequest(ctx context.Context, req *types.SavedRequest, vars map[string]string) *SingleRequestExecution {
-	runningVars := copyStringMap(vars)
-	extractedVars := make(map[string]string)
-	return r.runRequestLifecycle(ctx, req, runningVars, nil, VarOriginEnvironment, extractedVars, false, nil)
+	scopes := resolve.Scopes{Env: vars, Runtime: make(map[string]resolve.Var)}
+	return r.runRequestLifecycle(ctx, req, scopes, resolve.OriginEnvironment, make(map[string]string), false, nil)
 }
 
-func (r *Runner) RunSavedRequestWithOrigins(ctx context.Context, req *types.SavedRequest, vars map[string]string, origins map[string]VarOrigin, defaultPersistOrigin VarOrigin) *SingleRequestExecution {
-	runningVars := copyStringMap(vars)
-	runningOrigins := copyOriginMap(origins)
-	extractedVars := make(map[string]string)
-	return r.runRequestLifecycle(ctx, req, runningVars, runningOrigins, defaultPersistOrigin, extractedVars, false, nil)
+// RunSavedRequestInScopes runs req resolved against scopes. Variables that
+// scripts or extractions create persist to req's collection, or to the
+// environment when req has none.
+func (r *Runner) RunSavedRequestInScopes(ctx context.Context, req *types.SavedRequest, scopes resolve.Scopes) *SingleRequestExecution {
+	scopes.Runtime = copyRuntime(scopes.Runtime)
+	return r.runRequestLifecycle(ctx, req, scopes, persistOriginFor(req.Collection), make(map[string]string), false, nil)
 }
 
-// PlanSavedRequestWithOrigins runs pre-request scripts and plans the request
-// without sending it, reporting unresolved template variables as warnings.
-func (r *Runner) PlanSavedRequestWithOrigins(ctx context.Context, req *types.SavedRequest, vars map[string]string, origins map[string]VarOrigin, defaultPersistOrigin VarOrigin) *SingleRequestExecution {
-	return r.runRequestLifecycle(ctx, req, copyStringMap(vars), copyOriginMap(origins), defaultPersistOrigin, make(map[string]string), true, nil)
+// PlanSavedRequest runs pre-request scripts and resolves the resulting request
+// as a preview without sending it. Missing variables are reported as
+// DryRunWarnings, other resolution problems as DryRunProblems, and the
+// previewed request as the execution's Request.
+func (r *Runner) PlanSavedRequest(ctx context.Context, req *types.SavedRequest, scopes resolve.Scopes) *SingleRequestExecution {
+	scopes.Runtime = copyRuntime(scopes.Runtime)
+	return r.runRequestLifecycle(ctx, req, scopes, persistOriginFor(req.Collection), make(map[string]string), true, nil)
 }
 
-func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedRequest, vars map[string]string, origins map[string]VarOrigin, defaultPersistOrigin VarOrigin, extractedVars map[string]string, dryRun bool, plannedVarSources map[string]string) *SingleRequestExecution {
+// runRequestLifecycle runs one request. scopes.Runtime must be non-nil; it is
+// updated with extracted and script variables so later requests see them.
+func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedRequest, scopes resolve.Scopes, defaultPersistOrigin resolve.Origin, extractedVars map[string]string, dryRun bool, plannedVarSources map[string]string) *SingleRequestExecution {
 	start := time.Now()
 	result := &RequestResult{
 		RequestName: req.Name,
@@ -529,11 +502,11 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	execution := &SingleRequestExecution{Result: result}
 
 	dirtyVars := make(map[string]string)
-	dirtyVarOrigins := make(map[string]VarOrigin)
+	dirtyVarOrigins := make(map[string]resolve.Origin)
 	effectiveReq := req
 
 	if req.RunIf != "" {
-		ok, err := evaluateRunIf(req.RunIf, vars)
+		ok, err := evaluateRunIf(req.RunIf, varValues(scopes))
 		if err != nil {
 			result.Error = err.Error()
 			result.FailurePhase = FailurePhaseRunIf
@@ -550,7 +523,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 
 	if req.PreScript != "" {
 		engine := scripting.NewEngine(nil)
-		engine.SetVariables(vars)
+		engine.SetVariables(varValues(scopes))
 		rawReq := &client.Request{
 			Method:  req.Method,
 			URL:     req.URL,
@@ -564,7 +537,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 			result.Duration = time.Since(start)
 			return execution
 		}
-		mergeVarsWithOrigins(vars, origins, defaultPersistOrigin, extractedVars, dirtyVars, dirtyVarOrigins, engine.DirtyVariables())
+		recordUpdates(scopes, defaultPersistOrigin, extractedVars, dirtyVars, dirtyVarOrigins, engine.DirtyVariables())
 
 		if engine.SkipRequested() {
 			result.Skipped = true
@@ -584,32 +557,30 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	}
 
 	if dryRun {
-		planned := planDryRunRequest(effectiveReq, vars, plannedVarSources)
+		preview, problems := resolve.Resolve(effectiveReq, scopes, resolve.Options{Auth: r.auth, Preview: true})
+		execution.Request = &preview.Request
 		result.DryRun = true
 		result.Passed = true
-		result.PlannedMethod = planned.method
-		result.PlannedURL = planned.url
-		result.PlannedExtracts = planned.extracts
-		result.PlannedVarSources = planned.varSources
-		result.DryRunWarnings = planned.warnings
+		result.PlannedMethod = preview.Request.Method
+		result.PlannedURL = preview.Request.URL
+		result.PlannedExtracts = append([]types.Extract(nil), effectiveReq.Extracts...)
+		result.PlannedVarSources, result.DryRunWarnings = planMissingVars(problems.Missing(), plannedVarSources)
+		result.DryRunProblems = problems.Others()
 		result.DirtyVars = nonEmptyMap(dirtyVars)
 		result.DirtyVarOrigins = nonEmptyOriginMap(dirtyVarOrigins)
 		result.Duration = time.Since(start)
 		return execution
 	}
 
-	authRegistry := r.auth
-	if authRegistry == nil {
-		authRegistry = auth.BuiltinRegistry()
-	}
-	clientReq, err := curl.BuildClientRequestWithAuth(effectiveReq, vars, authRegistry)
-	if err != nil {
+	resolved, problems := resolve.Resolve(effectiveReq, scopes, resolve.Options{Auth: r.auth})
+	if err := problems.Err(); err != nil {
 		result.Error = fmt.Sprintf("variable substitution failed: %v", err)
 		result.FailurePhase = FailurePhaseRequestBuild
 		result.DirtyVars = nonEmptyMap(dirtyVars)
 		result.DirtyVarOrigins = nonEmptyOriginMap(dirtyVarOrigins)
 		return execution
 	}
+	clientReq := resolved.Request
 	execution.Request = &clientReq
 
 	if effectiveReq.Timeout != "" {
@@ -640,12 +611,12 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 			return execution
 		}
 		result.ExtractedVars = extracted
-		mergeVarsWithOrigins(vars, origins, defaultPersistOrigin, extractedVars, dirtyVars, dirtyVarOrigins, extracted)
+		recordUpdates(scopes, defaultPersistOrigin, extractedVars, dirtyVars, dirtyVarOrigins, extracted)
 	}
 
 	if effectiveReq.PostScript != "" {
 		engine := scripting.NewEngine(nil)
-		engine.SetVariables(vars)
+		engine.SetVariables(varValues(scopes))
 		postResult, err := scripting.RunPostResponse(engine, effectiveReq.PostScript, &resp)
 		if err != nil {
 			result.Error = fmt.Sprintf("post-response script failed: %v", err)
@@ -654,7 +625,7 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 			result.DirtyVarOrigins = nonEmptyOriginMap(dirtyVarOrigins)
 			return execution
 		}
-		mergeVarsWithOrigins(vars, origins, defaultPersistOrigin, extractedVars, dirtyVars, dirtyVarOrigins, postResult.Variables)
+		recordUpdates(scopes, defaultPersistOrigin, extractedVars, dirtyVars, dirtyVarOrigins, postResult.Variables)
 		result.NextRequestOverride = engine.NextRequest()
 	}
 	result.DirtyVars = nonEmptyMap(dirtyVars)
@@ -687,60 +658,25 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	return execution
 }
 
-type dryRunPlan struct {
-	method     string
-	url        string
-	extracts   []types.Extract
-	varSources map[string]string
-	warnings   []string
-}
-
-func planDryRunRequest(req *types.SavedRequest, vars map[string]string, plannedVarSources map[string]string) dryRunPlan {
-	plan := dryRunPlan{
-		method:     req.Method,
-		url:        resolveDryRunTemplate(req.URL, vars),
-		extracts:   append([]types.Extract(nil), req.Extracts...),
-		varSources: make(map[string]string),
-	}
-	if plan.method == "" {
-		plan.method = "GET"
-	}
-
-	usedVars := extractTemplateVars(req.URL)
-	for _, header := range req.Headers {
-		usedVars = append(usedVars, extractTemplateVars(header.Value)...)
-	}
-	usedVars = append(usedVars, extractTemplateVars(req.Body)...)
-
-	warningsByVar := make(map[string]bool)
-	for _, placeholder := range usedVars {
-		name := template.BaseName(placeholder)
-		if _, ok := vars[name]; ok || strings.HasPrefix(name, "$") {
-			continue // dynamic {{$...}} functions resolve at send time
-		}
+// planMissingVars splits the missing variables of a dry-run step into those
+// an earlier step's extraction will provide (with their source) and
+// "unresolved {{name}}" warnings, sorted by name.
+func planMissingVars(missing []string, plannedVarSources map[string]string) (map[string]string, []string) {
+	sources := make(map[string]string)
+	var unresolved []string
+	for _, name := range missing {
 		if source := plannedVarSources[name]; source != "" {
-			plan.varSources[name] = source
+			sources[name] = source
 			continue
 		}
-		warningsByVar[name] = true
+		unresolved = append(unresolved, name)
 	}
-
-	if len(warningsByVar) > 0 {
-		names := make([]string, 0, len(warningsByVar))
-		for name := range warningsByVar {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			plan.warnings = append(plan.warnings, fmt.Sprintf("unresolved {{%s}}", name))
-		}
+	sort.Strings(unresolved)
+	var warnings []string
+	for _, name := range unresolved {
+		warnings = append(warnings, fmt.Sprintf("unresolved {{%s}}", name))
 	}
-
-	return plan
-}
-
-func resolveDryRunTemplate(value string, vars map[string]string) string {
-	return template.ResolveKnown(value, vars)
+	return sources, warnings
 }
 
 func requestIndexByName(requests []*types.SavedRequest) map[string]int {
@@ -758,21 +694,39 @@ func failNextRequestOverride(result *RequestResult, message string) {
 	result.FailurePhase = FailurePhaseNextRequest
 }
 
-func mergeVarsWithOrigins(vars map[string]string, origins map[string]VarOrigin, defaultPersistOrigin VarOrigin, extractedVars map[string]string, dirtyVars map[string]string, dirtyOrigins map[string]VarOrigin, updates map[string]string) {
+// recordUpdates stores extracted or script variables as runtime values. Each
+// keeps the origin of the variable it replaces, or defaultPersistOrigin when
+// it is new, so --persist writes it back where it came from.
+func recordUpdates(scopes resolve.Scopes, defaultPersistOrigin resolve.Origin, extractedVars map[string]string, dirtyVars map[string]string, dirtyOrigins map[string]resolve.Origin, updates map[string]string) {
+	current := resolve.Vars(scopes)
 	for key, value := range updates {
 		origin := defaultPersistOrigin
-		if origins != nil {
-			if existingOrigin, ok := origins[key]; ok {
-				origin = existingOrigin
-			} else {
-				origins[key] = origin
-			}
+		if existing, ok := current[key]; ok {
+			origin = existing.Origin
 		}
-		vars[key] = value
+		scopes.Runtime[key] = resolve.Var{Value: value, Origin: origin}
 		extractedVars[key] = value
 		dirtyVars[key] = value
 		dirtyOrigins[key] = origin
 	}
+}
+
+// varValues returns the merged variable values of scopes.
+func varValues(scopes resolve.Scopes) map[string]string {
+	vars := resolve.Vars(scopes)
+	values := make(map[string]string, len(vars))
+	for key, v := range vars {
+		values[key] = v.Value
+	}
+	return values
+}
+
+func copyRuntime(source map[string]resolve.Var) map[string]resolve.Var {
+	runtime := make(map[string]resolve.Var, len(source))
+	for key, v := range source {
+		runtime[key] = v
+	}
+	return runtime
 }
 
 func nonEmptyMap(source map[string]string) map[string]string {
@@ -782,11 +736,15 @@ func nonEmptyMap(source map[string]string) map[string]string {
 	return copyStringMap(source)
 }
 
-func nonEmptyOriginMap(source map[string]VarOrigin) map[string]VarOrigin {
+func nonEmptyOriginMap(source map[string]resolve.Origin) map[string]resolve.Origin {
 	if len(source) == 0 {
 		return nil
 	}
-	return copyOriginMap(source)
+	origins := make(map[string]resolve.Origin, len(source))
+	for key, origin := range source {
+		origins[key] = origin
+	}
+	return origins
 }
 
 func CollectDirtyVarsForPersist(results []RunResult) map[string]string {
@@ -801,9 +759,9 @@ func CollectDirtyVarsForPersist(results []RunResult) map[string]string {
 	return dirty
 }
 
-func CollectDirtyVarsWithOrigins(results []RunResult) (map[string]string, map[string]VarOrigin) {
+func CollectDirtyVarsWithOrigins(results []RunResult) (map[string]string, map[string]resolve.Origin) {
 	dirty := make(map[string]string)
-	origins := make(map[string]VarOrigin)
+	origins := make(map[string]resolve.Origin)
 	for _, runResult := range results {
 		for _, requestResult := range runResult.RequestResults {
 			for key, value := range requestResult.DirtyVars {
@@ -817,48 +775,8 @@ func CollectDirtyVarsWithOrigins(results []RunResult) (map[string]string, map[st
 	return dirty, origins
 }
 
-func (r *Runner) collectionVariables(collectionName string, envVars map[string]string) map[string]string {
-	vars := make(map[string]string)
-	if collectionName == "" {
-		return vars
-	}
-	store, ok := r.db.(storage.CollectionStore)
-	if !ok {
-		return vars
-	}
-	collection, err := store.GetCollectionByName(collectionName)
-	if err != nil || collection == nil {
-		return vars
-	}
-	keys := make([]string, 0, len(collection.Variables))
-	for key := range collection.Variables {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		vars[key] = env.Resolve(collection.Variables[key], envVars)
-	}
-	return vars
-}
-
 func copyStringMap(source map[string]string) map[string]string {
 	copy := make(map[string]string, len(source))
-	for key, value := range source {
-		copy[key] = value
-	}
-	return copy
-}
-
-func originsFor(vars map[string]string, origin VarOrigin) map[string]VarOrigin {
-	origins := make(map[string]VarOrigin, len(vars))
-	for key := range vars {
-		origins[key] = origin
-	}
-	return origins
-}
-
-func copyOriginMap(source map[string]VarOrigin) map[string]VarOrigin {
-	copy := make(map[string]VarOrigin, len(source))
 	for key, value := range source {
 		copy[key] = value
 	}

@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/project"
 	"github.com/sreeram/gurl/internal/runner"
+	"github.com/sreeram/gurl/internal/secrets"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
@@ -37,7 +39,7 @@ var readCollectionPassphrase = func(prompt string) (string, error) {
 }
 
 // CollectionCommand creates the collection command.
-func CollectionCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
+func CollectionCommand(db storage.DB, envStorage env.Store) *cli.Command {
 	return &cli.Command{
 		Name:    "collection",
 		Aliases: []string{"collections", "col", "c"},
@@ -72,7 +74,7 @@ func collectionShowCommand(db storage.DB) *cli.Command {
 			}
 			name := args.Get(0)
 
-			collection, _ := loadCollectionByName(db, name)
+			collection, _ := db.GetCollectionByName(name)
 			requests, err := db.ListRequests(&storage.ListOptions{Collection: name})
 			if err != nil {
 				return fmt.Errorf("failed to list collection: %w", err)
@@ -132,20 +134,18 @@ func collectionListCommand(db storage.DB) *cli.Command {
 				stats[req.Collection] = row
 			}
 
-			if store, ok := db.(storage.CollectionStore); ok {
-				collections, err := store.ListCollections()
-				if err != nil {
-					return fmt.Errorf("failed to list collections: %w", err)
+			collections, err := db.ListCollections()
+			if err != nil {
+				return fmt.Errorf("failed to list collections: %w", err)
+			}
+			for _, collection := range collections {
+				row := stats[collection.Name]
+				row.Name = collection.Name
+				row.Variables = len(collection.Variables)
+				if row.UpdatedAt == 0 || collection.UpdatedAt > row.UpdatedAt {
+					row.UpdatedAt = collection.UpdatedAt
 				}
-				for _, collection := range collections {
-					row := stats[collection.Name]
-					row.Name = collection.Name
-					row.Variables = len(collection.Variables)
-					if row.UpdatedAt == 0 || collection.UpdatedAt > row.UpdatedAt {
-						row.UpdatedAt = collection.UpdatedAt
-					}
-					stats[collection.Name] = row
-				}
+				stats[collection.Name] = row
 			}
 
 			if len(stats) == 0 {
@@ -202,12 +202,6 @@ func collectionCreateCommand(db storage.DB) *cli.Command {
 			}
 			name := args.Get(0)
 
-			store, ok := db.(storage.CollectionStore)
-			if !ok {
-				fmt.Printf("✓ Collection '%s' created (collections are created when saving requests)\n", name)
-				return nil
-			}
-
 			collection := types.NewCollection(name)
 			if err := applyCollectionVarFlags(collection, c.StringSlice("var"), false); err != nil {
 				return err
@@ -215,7 +209,7 @@ func collectionCreateCommand(db storage.DB) *cli.Command {
 			if err := applyCollectionVarFlags(collection, c.StringSlice("secret"), true); err != nil {
 				return err
 			}
-			if err := store.SaveCollection(collection); err != nil {
+			if err := db.SaveCollection(collection); err != nil {
 				return fmt.Errorf("failed to create collection: %w", err)
 			}
 
@@ -241,11 +235,7 @@ func collectionSetVarCommand(db storage.DB) *cli.Command {
 			if args.Len() < 2 {
 				return fmt.Errorf("usage: collection set-var <collection> KEY=VALUE")
 			}
-			store, ok := db.(storage.CollectionStore)
-			if !ok {
-				return fmt.Errorf("collection variables are not supported by this storage backend")
-			}
-			collection, err := store.GetCollectionByName(args.Get(0))
+			collection, err := db.GetCollectionByName(args.Get(0))
 			if err != nil {
 				return err
 			}
@@ -258,7 +248,7 @@ func collectionSetVarCommand(db storage.DB) *cli.Command {
 			} else {
 				collection.SetVariable(key, value)
 			}
-			if err := store.SaveCollection(collection); err != nil {
+			if err := db.SaveCollection(collection); err != nil {
 				return fmt.Errorf("failed to update collection: %w", err)
 			}
 			fmt.Printf("✓ Updated collection '%s'\n", collection.Name)
@@ -277,30 +267,18 @@ func collectionUnsetVarCommand(db storage.DB) *cli.Command {
 			if args.Len() < 2 {
 				return fmt.Errorf("usage: collection unset-var <collection> KEY")
 			}
-			store, ok := db.(storage.CollectionStore)
-			if !ok {
-				return fmt.Errorf("collection variables are not supported by this storage backend")
-			}
-			collection, err := store.GetCollectionByName(args.Get(0))
+			collection, err := db.GetCollectionByName(args.Get(0))
 			if err != nil {
 				return err
 			}
 			collection.DeleteVariable(args.Get(1))
-			if err := store.SaveCollection(collection); err != nil {
+			if err := db.SaveCollection(collection); err != nil {
 				return fmt.Errorf("failed to update collection: %w", err)
 			}
 			fmt.Printf("✓ Updated collection '%s'\n", collection.Name)
 			return nil
 		},
 	}
-}
-
-type collectionFileMigrator interface {
-	MigrateCollectionToFiles(name string) (int, string, error)
-}
-
-type collectionUnlocker interface {
-	UnlockCollection(name string, passphrase string) error
 }
 
 func collectionMigrateCommand(db storage.DB) *cli.Command {
@@ -325,13 +303,15 @@ func collectionMigrateCommand(db storage.DB) *cli.Command {
 			name := args.Get(0)
 
 			passphrase := collectionPassphraseValue(c)
-			if migrator, ok := db.(collectionFileMigrator); ok && passphrase == "" && projectDirFlag(c) == "" {
-				count, path, err := migrator.MigrateCollectionToFiles(name)
-				if err != nil {
+			if passphrase == "" && projectDirFlag(c) == "" {
+				count, path, err := db.MigrateCollectionToFiles(name)
+				if err == nil {
+					fmt.Printf("✓ Migrated collection '%s' to %s (%d requests)\n", name, path, count)
+					return nil
+				}
+				if !errors.Is(err, storage.ErrNotSupported) {
 					return err
 				}
-				fmt.Printf("✓ Migrated collection '%s' to %s (%d requests)\n", name, path, count)
-				return nil
 			}
 
 			count, path, err := migrateCollectionToProjectFiles(c, db, name)
@@ -359,15 +339,14 @@ func collectionUnlockCommand(db storage.DB) *cli.Command {
 			if args.Len() < 1 {
 				return fmt.Errorf("collection name argument is required")
 			}
-			unlocker, ok := db.(collectionUnlocker)
-			if !ok {
-				return fmt.Errorf("collection unlock requires project file storage")
-			}
 			passphrase, err := collectionPassphrase(c, fmt.Sprintf("Passphrase for collection %q: ", args.Get(0)))
 			if err != nil {
 				return err
 			}
-			if err := unlocker.UnlockCollection(args.Get(0), passphrase); err != nil {
+			if err := db.UnlockCollection(args.Get(0), passphrase); err != nil {
+				if errors.Is(err, storage.ErrNotSupported) {
+					return fmt.Errorf("collection unlock requires project file storage")
+				}
 				return err
 			}
 			fmt.Printf("✓ Unlocked collection '%s'\n", args.Get(0))
@@ -397,7 +376,7 @@ func collectionExportCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("collection name argument is required")
 			}
 			name := args.Get(0)
-			collection, _ := loadCollectionByName(db, name)
+			collection, _ := db.GetCollectionByName(name)
 			requests, err := db.ListRequests(&storage.ListOptions{Collection: name})
 			if err != nil {
 				return fmt.Errorf("failed to list collection: %w", err)
@@ -486,31 +465,29 @@ func collectionImportCommand(db storage.DB) *cli.Command {
 			}
 
 			allowLockedSave := false
-			if store, ok := db.(storage.CollectionStore); ok {
-				existing, err := store.GetCollectionByName(collection.Name)
-				if storage.IsCollectionLocked(err) {
-					if !c.Bool("force") {
-						return fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
-					}
-					rawStore, ok := db.(rawCollectionByNameStore)
-					if !ok {
-						return fmt.Errorf("failed to inspect locked collection %q: %w", collection.Name, err)
-					}
-					existing, err = rawStore.GetRawCollectionByName(collection.Name)
-					if err != nil {
-						return fmt.Errorf("failed to inspect locked collection %q: %w", collection.Name, err)
-					}
-					allowLockedSave = true
-				} else if err != nil && !storage.IsCollectionNotFound(err) {
-					return fmt.Errorf("failed to inspect collection %q: %w", collection.Name, err)
+			existing, err := db.GetCollectionByName(collection.Name)
+			if storage.IsCollectionLocked(err) {
+				if !c.Bool("force") {
+					return fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
 				}
-				if existing != nil {
-					if !c.Bool("force") {
-						return fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
-					}
-					collection.ID = existing.ID
-					collection.CreatedAt = existing.CreatedAt
+				raw, rawErr := db.GetRawCollectionByName(collection.Name)
+				if errors.Is(rawErr, storage.ErrNotSupported) {
+					return fmt.Errorf("failed to inspect locked collection %q: %w", collection.Name, err)
 				}
+				if rawErr != nil {
+					return fmt.Errorf("failed to inspect locked collection %q: %w", collection.Name, rawErr)
+				}
+				existing = raw
+				allowLockedSave = true
+			} else if err != nil && !storage.IsCollectionNotFound(err) {
+				return fmt.Errorf("failed to inspect collection %q: %w", collection.Name, err)
+			}
+			if existing != nil {
+				if !c.Bool("force") {
+					return fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
+				}
+				collection.ID = existing.ID
+				collection.CreatedAt = existing.CreatedAt
 			}
 			if err := saveCollectionRecord(db, collection, allowLockedSave); err != nil {
 				return err
@@ -587,11 +564,7 @@ func importCollectionVariablesFromFile(db storage.DB, name, filePath string) err
 }
 
 func loadOrCreateCollectionForVariableImport(db storage.DB, name string) (*types.Collection, error) {
-	store, ok := db.(storage.CollectionStore)
-	if !ok {
-		return nil, fmt.Errorf("collection variables are not supported by this storage backend")
-	}
-	collection, err := store.GetCollectionByName(name)
+	collection, err := db.GetCollectionByName(name)
 	if err == nil {
 		if collection != nil {
 			return collection, nil
@@ -607,32 +580,16 @@ func loadOrCreateCollectionForVariableImport(db storage.DB, name string) (*types
 	return types.NewCollection(name), nil
 }
 
-type rawCollectionByNameStore interface {
-	GetRawCollectionByName(name string) (*types.Collection, error)
-}
-
-type lockedCollectionSaver interface {
-	SaveCollectionAllowLocked(collection *types.Collection) error
-}
-
 func saveCollectionRecord(db storage.DB, collection *types.Collection, allowLocked bool) error {
 	if allowLocked {
-		saver, ok := db.(lockedCollectionSaver)
-		if !ok {
-			return fmt.Errorf("locked collection overwrite is not supported by this storage backend")
-		}
-		return saver.SaveCollectionAllowLocked(collection)
-	}
-	store, ok := db.(storage.CollectionStore)
-	if !ok {
-		return fmt.Errorf("collection variables are not supported by this storage backend")
+		return db.SaveCollectionAllowLocked(collection)
 	}
 	if collection.ID != "" {
-		if existing, err := store.GetCollection(collection.ID); err == nil && existing != nil {
-			return store.UpdateCollection(collection)
+		if existing, err := db.GetCollection(collection.ID); err == nil && existing != nil {
+			return db.UpdateCollection(collection)
 		}
 	}
-	return store.SaveCollection(collection)
+	return db.SaveCollection(collection)
 }
 
 func collectionPassphraseValue(c *cli.Command) string {
@@ -682,7 +639,7 @@ func migrateCollectionToProjectFiles(c *cli.Command, db storage.DB, name string)
 	}
 	fileStore := storage.NewFileStore(proj)
 
-	collection, _ := loadCollectionByName(db, name)
+	collection, _ := db.GetCollectionByName(name)
 	requests, err := db.ListRequests(&storage.ListOptions{Collection: name})
 	if err != nil {
 		return 0, "", fmt.Errorf("failed to list collection: %w", err)
@@ -738,11 +695,9 @@ func collectionRemoveCommand(db storage.DB) *cli.Command {
 				}
 			}
 
-			if store, ok := db.(storage.CollectionStore); ok {
-				if collection, err := store.GetCollectionByName(name); err == nil && collection != nil {
-					if err := store.DeleteCollection(collection.ID); err != nil {
-						return fmt.Errorf("failed to delete collection: %w", err)
-					}
+			if collection, err := db.GetCollectionByName(name); err == nil && collection != nil {
+				if err := db.DeleteCollection(collection.ID); err != nil {
+					return fmt.Errorf("failed to delete collection: %w", err)
 				}
 			}
 
@@ -770,7 +725,7 @@ func collectionDeleteCommand(db storage.DB) *cli.Command {
 			}
 			name := args.Get(0)
 
-			collection, _ := loadCollectionByName(db, name)
+			collection, _ := db.GetCollectionByName(name)
 			requests, err := db.ListRequests(&storage.ListOptions{Collection: name})
 			if err != nil {
 				return fmt.Errorf("failed to list collection: %w", err)
@@ -806,11 +761,7 @@ func collectionDeleteCommand(db storage.DB) *cli.Command {
 			}
 
 			if collection != nil {
-				store, ok := db.(storage.CollectionStore)
-				if !ok {
-					return fmt.Errorf("collection variables are not supported by this storage backend")
-				}
-				if err := store.DeleteCollection(collection.ID); err != nil {
+				if err := db.DeleteCollection(collection.ID); err != nil {
 					return fmt.Errorf("failed to delete collection: %w", err)
 				}
 			}
@@ -857,12 +808,10 @@ func collectionRenameCommand(db storage.DB) *cli.Command {
 			oldName := args.Get(0)
 			newName := args.Get(1)
 
-			if store, ok := db.(storage.CollectionStore); ok {
-				if collection, err := store.GetCollectionByName(oldName); err == nil && collection != nil {
-					collection.Name = newName
-					if err := store.UpdateCollection(collection); err != nil {
-						return fmt.Errorf("failed to rename collection: %w", err)
-					}
+			if collection, err := db.GetCollectionByName(oldName); err == nil && collection != nil {
+				collection.Name = newName
+				if err := db.UpdateCollection(collection); err != nil {
+					return fmt.Errorf("failed to rename collection: %w", err)
 				}
 			}
 
@@ -890,14 +839,6 @@ type collectionListRow struct {
 	UpdatedAt int64
 }
 
-func loadCollectionByName(db storage.DB, name string) (*types.Collection, error) {
-	store, ok := db.(storage.CollectionStore)
-	if !ok {
-		return nil, nil
-	}
-	return store.GetCollectionByName(name)
-}
-
 func sortRequests(requests []*types.SavedRequest) {
 	sort.SliceStable(requests, func(i, j int) bool {
 		if requests[i].SortOrder != requests[j].SortOrder {
@@ -921,7 +862,7 @@ func printCollectionVariables(collection *types.Collection) {
 	for _, key := range keys {
 		value := collection.Variables[key]
 		if collection.IsSecret(key) {
-			value = env.MaskSecret(value)
+			value = secrets.Mask(value)
 		}
 		fmt.Printf("  %s = %s\n", key, value)
 	}
