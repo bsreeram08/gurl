@@ -100,20 +100,16 @@ const (
 	FailurePhaseNextRequest        = "next_request"
 )
 
-type EnvProvider interface {
-	GetEnvByName(name string) (*env.Environment, error)
-}
-
 type Runner struct {
 	db         storage.DB
-	envStorage EnvProvider
+	envStorage env.Store
 	client     *client.Client
 	eval       *assertions.Evaluator
 	extractor  *extract.Extractor
 	auth       *auth.Registry
 }
 
-func NewRunner(db storage.DB, envStorage EnvProvider) *Runner {
+func NewRunner(db storage.DB, envStorage env.Store) *Runner {
 	return &Runner{
 		db:         db,
 		envStorage: envStorage,
@@ -194,11 +190,7 @@ func (r *Runner) startCollectionRunWatcher(ctx context.Context, collection strin
 	if collection == "" {
 		return runWatcher
 	}
-	store, ok := r.db.(storage.CollectionWatcherStore)
-	if !ok {
-		return runWatcher
-	}
-	watcher, err := store.WatchCollection(ctx, collection, collectionRunWatchOptions)
+	watcher, err := r.db.WatchCollection(ctx, collection, collectionRunWatchOptions)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: file watcher disabled for collection %q: %v\n", collection, err)
 		return runWatcher
@@ -303,11 +295,9 @@ func ScopesFor(db storage.DB, e *env.Environment, collectionName string, cliVars
 	if collectionName == "" {
 		return s
 	}
-	if store, ok := db.(storage.CollectionStore); ok {
-		if collection, err := store.GetCollectionByName(collectionName); err == nil && collection != nil {
-			s.Collection = collection.Variables
-			s.CollectionSecrets = collection.SecretKeys
-		}
+	if collection, err := db.GetCollectionByName(collectionName); err == nil && collection != nil {
+		s.Collection = collection.Variables
+		s.CollectionSecrets = collection.SecretKeys
 	}
 	return s
 }

@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -161,29 +162,27 @@ func importCollectionRecords(db storage.DB, collection *types.Collection, reques
 	}
 
 	allowLockedSave := false
-	if store, ok := db.(storage.CollectionStore); ok {
-		existing, err := store.GetCollectionByName(collection.Name)
-		if storage.IsCollectionLocked(err) {
-			if !force {
-				return 0, 0, fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
-			}
-			rawStore, ok := db.(rawCollectionByNameStore)
-			if !ok {
-				return 0, 0, fmt.Errorf("failed to inspect locked collection %q: %w", collection.Name, err)
-			}
-			existing, err = rawStore.GetRawCollectionByName(collection.Name)
-			if err != nil {
-				return 0, 0, fmt.Errorf("failed to inspect locked collection %q: %w", collection.Name, err)
-			}
-			allowLockedSave = true
+	existing, err := db.GetCollectionByName(collection.Name)
+	if storage.IsCollectionLocked(err) {
+		if !force {
+			return 0, 0, fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
 		}
-		if err == nil && existing != nil {
-			if !force {
-				return 0, 0, fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
-			}
-			collection.ID = existing.ID
-			collection.CreatedAt = existing.CreatedAt
+		raw, rawErr := db.GetRawCollectionByName(collection.Name)
+		if errors.Is(rawErr, storage.ErrNotSupported) {
+			return 0, 0, fmt.Errorf("failed to inspect locked collection %q: %w", collection.Name, err)
 		}
+		if rawErr != nil {
+			return 0, 0, fmt.Errorf("failed to inspect locked collection %q: %w", collection.Name, rawErr)
+		}
+		existing, err = raw, nil
+		allowLockedSave = true
+	}
+	if err == nil && existing != nil {
+		if !force {
+			return 0, 0, fmt.Errorf("collection %q already exists (use --force to overwrite)", collection.Name)
+		}
+		collection.ID = existing.ID
+		collection.CreatedAt = existing.CreatedAt
 	}
 	if err := saveCollectionRecord(db, collection, allowLockedSave); err != nil {
 		return 0, 0, err

@@ -55,16 +55,25 @@ func TestCollectionRunCommandPersistWritesDirtyVarsAndMasksSecrets(t *testing.T)
 	if err != nil {
 		t.Fatalf("failed to reload env: %v", err)
 	}
-	if reloaded.Variables["orderId"] != "ord_123" {
-		t.Fatalf("expected orderId to persist, got %+v", reloaded.Variables)
-	}
+	// sessionToken already lives in the environment, so it persists there;
+	// orderId is new in a collection run, so it persists to the collection.
 	if reloaded.Variables["sessionToken"] != "secret-456" {
 		t.Fatalf("expected sessionToken to persist, got %+v", reloaded.Variables)
 	}
-	if !reloaded.IsSecret("sessionToken") || reloaded.IsSecret("orderId") {
+	if !reloaded.IsSecret("sessionToken") {
 		t.Fatalf("expected existing secret metadata only, got %+v", reloaded.SecretKeys)
 	}
-	if !strings.Contains(output, "Persisted 2 variables to environment \"beta\"") || !strings.Contains(output, "orderId = ord_123") || !strings.Contains(output, "sessionToken = *****") {
+	if _, ok := reloaded.Variables["orderId"]; ok {
+		t.Fatalf("collection-origin orderId leaked into env: %+v", reloaded.Variables)
+	}
+	orders, err := db.GetCollectionByName("orders")
+	if err != nil {
+		t.Fatalf("failed to reload collection: %v", err)
+	}
+	if orders.Variables["orderId"] != "ord_123" {
+		t.Fatalf("expected orderId to persist to collection, got %+v", orders.Variables)
+	}
+	if !strings.Contains(output, "Persisted 1 variable to environment \"beta\"") || !strings.Contains(output, "Persisted 1 variable to collection \"orders\"") || !strings.Contains(output, "orderId = ord_123") || !strings.Contains(output, "sessionToken = *****") {
 		t.Fatalf("expected masked persist summary, got output:\n%s", output)
 	}
 	if strings.Contains(output, "secret-456") {

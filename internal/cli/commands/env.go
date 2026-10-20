@@ -14,17 +14,7 @@ import (
 	"golang.org/x/term"
 )
 
-type EnvStorage interface {
-	SaveEnv(e *env.Environment) error
-	GetEnv(id string) (*env.Environment, error)
-	DeleteEnv(id string) error
-	ListEnvs() ([]*env.Environment, error)
-	GetEnvByName(name string) (*env.Environment, error)
-	GetActiveEnv() (string, error)
-	SetActiveEnv(name string) error
-}
-
-func EnvCommand(db EnvStorage) *cli.Command {
+func EnvCommand(db env.Store) *cli.Command {
 	return &cli.Command{
 		Name:  "env",
 		Usage: "Manage environments",

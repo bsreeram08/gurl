@@ -13,7 +13,7 @@ type EngineOption func(*Engine)
 
 type Engine struct {
 	vm                *goja.Runtime
-	envStorage        *env.EnvStorage
+	envStorage        env.Store
 	timeout           time.Duration
 	outputBuffer      string
 	testResults       []TestResult
@@ -91,7 +91,7 @@ func (p *RuntimePool) Put(vm *goja.Runtime) {
 	p.pool.Put(vm)
 }
 
-func NewEngine(envStorage *env.EnvStorage, opts ...EngineOption) *Engine {
+func NewEngine(envStorage env.Store, opts ...EngineOption) *Engine {
 	eng := &Engine{
 		envStorage: envStorage,
 		timeout:    5 * time.Second,

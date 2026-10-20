@@ -4,11 +4,15 @@ import (
 	"errors"
 
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/internal/storage/memstore"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
-// mockDB implements storage.DB for testing
+// mockDB implements storage.DB for testing. Requests, history and folders
+// use the maps below (tests inspect them directly); collections and the rest
+// of storage.DB come from the embedded memory adapter.
 type mockDB struct {
+	memstore.DB
 	requests map[string]*types.SavedRequest
 	names    map[string]string
 	history  []*types.ExecutionHistory

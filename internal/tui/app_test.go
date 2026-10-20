@@ -5,11 +5,16 @@ import (
 	"testing"
 
 	"charm.land/bubbletea/v2"
+	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/internal/storage/memstore"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
+// MockDB keeps requests in a slice tests seed directly; collections and the
+// rest of storage.DB come from the memory adapter.
 type MockDB struct {
+	memstore.DB
 	requests []*types.SavedRequest
 }
 
@@ -70,11 +75,41 @@ func ctrlTextKey(s string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: rune(s[0]), Mod: tea.ModCtrl}
 }
 
+func TestApp_NewAppWiresEnvSwitcherFromEnvStore(t *testing.T) {
+	envs := env.NewMemoryStore()
+	beta := env.NewEnvironment("beta", "")
+	beta.SetVariable("BASE_URL", "https://beta.example.com")
+	if err := envs.SaveEnv(beta); err != nil {
+		t.Fatalf("SaveEnv: %v", err)
+	}
+	if err := envs.SetActiveEnv("beta"); err != nil {
+		t.Fatalf("SetActiveEnv: %v", err)
+	}
+
+	// The DB adapter is irrelevant: before the env store was injected, only a
+	// raw *storage.LMDB enabled the switcher, so production adapters
+	// (LazyDB, ProjectDB) silently got none.
+	app := NewApp(&MockDB{}, envs, &types.Config{})
+	if app.envSwitcher == nil {
+		t.Fatal("expected env switcher when an env store is provided")
+	}
+	if app.activeEnvName != "beta" {
+		t.Fatalf("activeEnvName = %q, want beta", app.activeEnvName)
+	}
+	if got := app.envSwitcher.GetActiveEnvVariables()["BASE_URL"]; got != "https://beta.example.com" {
+		t.Fatalf("active env BASE_URL = %q", got)
+	}
+
+	if NewApp(&MockDB{}, nil, &types.Config{}).envSwitcher != nil {
+		t.Fatal("expected no env switcher without an env store")
+	}
+}
+
 func TestApp_NewApp(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
 
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	if app == nil {
 		t.Fatal("NewApp returned nil")
@@ -115,7 +150,7 @@ func TestApp_Init(t *testing.T) {
 		{ID: "1", Name: "Test Request", URL: "https://example.com"},
 	}}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	cmd := app.Init()
 	if cmd == nil {
@@ -136,7 +171,7 @@ func TestApp_Init(t *testing.T) {
 func TestApp_OpenNewTab(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	initialCount := len(app.tabs)
 	app.openNewTab()
@@ -152,7 +187,7 @@ func TestApp_OpenNewTab(t *testing.T) {
 func TestApp_OpenInNewTab(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	req := &types.SavedRequest{ID: "test-id", Name: "Test Request", URL: "https://example.com"}
 	initialCount := len(app.tabs)
@@ -172,7 +207,7 @@ func TestApp_OpenInNewTab(t *testing.T) {
 func TestApp_CloseActiveTab(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.openNewTab()
 	app.openNewTab()
@@ -189,7 +224,7 @@ func TestApp_CloseActiveTab(t *testing.T) {
 func TestApp_CloseActiveTab_KeepsOne(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.closeActiveTab()
 
@@ -201,7 +236,7 @@ func TestApp_CloseActiveTab_KeepsOne(t *testing.T) {
 func TestApp_CloseActiveTab_AdjustsIndex(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.openNewTab()
 	app.openNewTab()
@@ -221,7 +256,7 @@ func TestApp_CloseActiveTab_AdjustsIndex(t *testing.T) {
 func TestApp_NextTab(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.openNewTab()
 	app.openNewTab()
@@ -237,7 +272,7 @@ func TestApp_NextTab(t *testing.T) {
 func TestApp_NextTab_Wraps(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.openNewTab()
 	app.activeTab = len(app.tabs) - 1
@@ -252,7 +287,7 @@ func TestApp_NextTab_Wraps(t *testing.T) {
 func TestApp_PrevTab(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.openNewTab()
 	app.activeTab = 1
@@ -267,7 +302,7 @@ func TestApp_PrevTab(t *testing.T) {
 func TestApp_PrevTab_Wraps(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.openNewTab()
 	app.activeTab = 0
@@ -282,7 +317,7 @@ func TestApp_PrevTab_Wraps(t *testing.T) {
 func TestApp_TabCount(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	if app.TabCount() != 1 {
 		t.Errorf("initial TabCount should be 1, got %d", app.TabCount())
@@ -302,7 +337,7 @@ func TestApp_TabCount(t *testing.T) {
 func TestApp_ActiveTab(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	tab := app.ActiveTab()
 	if tab == nil {
@@ -313,7 +348,7 @@ func TestApp_ActiveTab(t *testing.T) {
 func TestApp_PanelFocus_CtrlShortcuts(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	if app.focusedPanel != PanelSidebar {
 		t.Errorf("initial focus should be Sidebar, got %v", app.focusedPanel)
@@ -338,7 +373,7 @@ func TestApp_PanelFocus_CtrlShortcuts(t *testing.T) {
 func TestApp_Keyboard_ctrlT_OpensNewTab(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	initial := app.TabCount()
 	app.Update(ctrlKey('t'))
@@ -351,7 +386,7 @@ func TestApp_Keyboard_ctrlT_OpensNewTab(t *testing.T) {
 func TestApp_Keyboard_ctrlW_ClosesTab(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.openNewTab()
 	initial := app.TabCount()
@@ -366,7 +401,7 @@ func TestApp_Keyboard_ctrlW_ClosesTab(t *testing.T) {
 func TestApp_Keyboard_ctrlW_KeepsOneTab(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.Update(ctrlKey('w'))
 
@@ -378,7 +413,7 @@ func TestApp_Keyboard_ctrlW_KeepsOneTab(t *testing.T) {
 func TestApp_Keyboard_ctrlD_DuplicatesTab(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	req := &types.SavedRequest{ID: "dup-test", Name: "Original", URL: "https://example.com"}
 	app.openInNewTab(req)
@@ -401,7 +436,7 @@ func TestApp_Keyboard_ctrlD_DuplicatesTab(t *testing.T) {
 func TestApp_Keyboard_ctrlD_NoRequestNoDuplicate(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	initial := app.TabCount()
 	app.Update(ctrlKey('d'))
@@ -414,7 +449,7 @@ func TestApp_Keyboard_ctrlD_NoRequestNoDuplicate(t *testing.T) {
 func TestApp_Keyboard_q_Quits(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	_, cmd := app.Update(strKey("q"))
 
@@ -429,7 +464,7 @@ func TestApp_Keyboard_q_Quits(t *testing.T) {
 func TestApp_Keyboard_ctrlC_Quits(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	_, cmd := app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 
@@ -444,7 +479,7 @@ func TestApp_Keyboard_ctrlC_Quits(t *testing.T) {
 func TestApp_Keyboard_h_SwitchesToHistory(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	if app.sidebarMode != SidebarRequests {
 		t.Error("initial sidebarMode should be SidebarRequests")
@@ -460,7 +495,7 @@ func TestApp_Keyboard_h_SwitchesToHistory(t *testing.T) {
 func TestApp_Keyboard_r_SwitchesToRequests(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.sidebarMode = SidebarHistory
 	app.Update(strKey("r"))
@@ -473,7 +508,7 @@ func TestApp_Keyboard_r_SwitchesToRequests(t *testing.T) {
 func TestApp_Keyboard_question_TogglesHelp(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	if app.helpModal {
 		t.Error("helpModal should initially be false")
@@ -495,7 +530,7 @@ func TestApp_Keyboard_question_TogglesHelp(t *testing.T) {
 func TestApp_Keyboard_helpModal_Esc_Closes(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.helpModal = true
 	app.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -508,7 +543,7 @@ func TestApp_Keyboard_helpModal_Esc_Closes(t *testing.T) {
 func TestApp_Keyboard_ctrlShiftBrackets(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.openNewTab()
 	app.openNewTab()
@@ -530,7 +565,7 @@ func TestApp_Keyboard_ctrlK_OpensSearchModal(t *testing.T) {
 		{ID: "1", Name: "Test Request", URL: "https://example.com"},
 	}}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.width = 100
 	app.height = 40
@@ -549,7 +584,7 @@ func TestApp_SearchModal_FiltersResults(t *testing.T) {
 		{ID: "3", Name: "Get Posts", URL: "https://api.example.com/posts"},
 	}}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.width = 100
 	app.height = 40
@@ -581,7 +616,7 @@ func TestApp_SearchModal_FiltersResults(t *testing.T) {
 func TestApp_SearchModal_EscapeCloses(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.width = 100
 	app.height = 40
@@ -602,7 +637,7 @@ func TestApp_Keyboard_ctrlI_OpensImportModal(t *testing.T) {
 func TestApp_ImportModal_EscapeCloses(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.width = 100
 	app.height = 40
@@ -667,7 +702,7 @@ func TestApp_CalculateLayout_LargeTerminal(t *testing.T) {
 func TestApp_View_NotReady(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	view := app.View()
 	if !strings.Contains(view.Content, "Loading...") {
@@ -678,7 +713,7 @@ func TestApp_View_NotReady(t *testing.T) {
 func TestApp_View_WithSize(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 
@@ -694,7 +729,7 @@ func TestApp_View_WithSize(t *testing.T) {
 func TestApp_View_HelpModal(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app.helpModal = true
@@ -716,7 +751,7 @@ func TestApp_View_HelpModal(t *testing.T) {
 func TestApp_View_SearchModal(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app.searchModal = NewSearchModal(nil, app.width, app.height)
@@ -731,7 +766,7 @@ func TestApp_View_SearchModal(t *testing.T) {
 func TestApp_View_ImportModal(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app.importModal = NewImportModal(app.width, app.height)
@@ -746,7 +781,7 @@ func TestApp_View_ImportModal(t *testing.T) {
 func TestApp_NavigateWithNoSidebarFocus(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.focusedPanel = PanelMain
 
@@ -761,7 +796,7 @@ func TestApp_NavigateWithNoSidebarFocus(t *testing.T) {
 func TestApp_SpaceToggleFolder(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app.focusedPanel = PanelSidebar
@@ -781,7 +816,7 @@ func TestApp_GetRequestCount(t *testing.T) {
 		{ID: "3"},
 	}}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	cmd := app.Init()
 	if cmd != nil {
@@ -801,7 +836,7 @@ func TestApp_GetRequestCount(t *testing.T) {
 func TestApp_GetCurrentEnv(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	env := app.GetCurrentEnv()
 	if env != "default" {
@@ -812,7 +847,7 @@ func TestApp_GetCurrentEnv(t *testing.T) {
 func TestApp_RequestSendWithVarsFlow_OpensPromptOnMissingValues(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.openInNewTab(&types.SavedRequest{
 		ID:   "req-1",
@@ -835,7 +870,7 @@ func TestApp_RequestSendWithVarsFlow_OpensPromptOnMissingValues(t *testing.T) {
 func TestApp_RequestSendWithVarsFlow_AppliesDefaultsWithoutPrompt(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 
 	app.openInNewTab(&types.SavedRequest{
 		ID:   "req-1",
@@ -859,7 +894,7 @@ func TestApp_RequestSendWithVarsFlow_AppliesDefaultsWithoutPrompt(t *testing.T) 
 func TestApp_RequestSendWithVarsFlow_QuickModeReportsMissing(t *testing.T) {
 	db := &MockDB{}
 	config := &types.Config{}
-	app := NewApp(db, config)
+	app := NewApp(db, nil, config)
 	app.SetQuickMode(true)
 
 	app.openInNewTab(&types.SavedRequest{

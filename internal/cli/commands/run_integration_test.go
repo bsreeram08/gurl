@@ -610,10 +610,15 @@ func TestRunCommand_RequestChainingPRDFlowPersistsExtractedIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to reload env: %v", err)
 	}
-	if reloaded.Variables["orderId"] != "ord_123" || reloaded.Variables["paymentId"] != "pay_456" {
-		t.Fatalf("expected extracted orderId/paymentId to persist, got %+v", reloaded.Variables)
+	// The run is collection-backed, so extracted ids persist to the collection.
+	collection, err := db.GetCollectionByName("checkout-prd")
+	if err != nil {
+		t.Fatalf("failed to reload collection: %v", err)
 	}
-	for _, unexpected := range []string{"customerId"} {
+	if collection.Variables["orderId"] != "ord_123" || collection.Variables["paymentId"] != "pay_456" {
+		t.Fatalf("expected extracted orderId/paymentId to persist to collection, got %+v", collection.Variables)
+	}
+	for _, unexpected := range []string{"customerId", "orderId", "paymentId"} {
 		if _, ok := reloaded.Variables[unexpected]; ok {
 			t.Fatalf("expected %s not to persist, got %+v", unexpected, reloaded.Variables)
 		}
@@ -621,7 +626,7 @@ func TestRunCommand_RequestChainingPRDFlowPersistsExtractedIDs(t *testing.T) {
 	if reloaded.Variables["manualOnly"] != "keep" || reloaded.Variables["baseUrl"] != server.URL {
 		t.Fatalf("expected existing env vars to remain unchanged, got %+v", reloaded.Variables)
 	}
-	if !strings.Contains(output, "Persisted 2 variables to environment \"beta\"") || !strings.Contains(output, "orderId = ord_123") || !strings.Contains(output, "paymentId = pay_456") {
+	if !strings.Contains(output, "Persisted 2 variables to collection \"checkout-prd\"") || !strings.Contains(output, "orderId = ord_123") || !strings.Contains(output, "paymentId = pay_456") {
 		t.Fatalf("expected persist summary for extracted ids, got output:\n%s", output)
 	}
 }

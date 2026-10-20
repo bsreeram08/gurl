@@ -15,7 +15,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
+func CollectionRunCommand(db storage.DB, envStorage env.Store) *cli.Command {
 	return &cli.Command{
 		Name:    "run",
 		Aliases: []string{"r"},
@@ -177,8 +177,7 @@ func CollectionRunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Comman
 			printSummary(os.Stdout, results)
 			if c.Bool("persist") {
 				dirtyVars, dirtyOrigins := CollectDirtyVarsWithOrigins(results)
-				collectionStore, _ := db.(storage.CollectionStore)
-				persisted, err := PersistDirtyVariables(envStorage, collectionStore, persistEnvName, name, dirtyVars, dirtyOrigins)
+				persisted, err := PersistDirtyVariables(envStorage, db, persistEnvName, name, dirtyVars, dirtyOrigins)
 				if err != nil {
 					return err
 				}

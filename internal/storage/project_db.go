@@ -223,26 +223,20 @@ func (db *ProjectDB) SaveCollection(collection *types.Collection) error {
 			return db.files.SaveCollection(collection)
 		}
 	}
-	if store, ok := db.base.(CollectionStore); ok {
-		if collection != nil && collection.ID != "" {
-			if _, err := store.GetCollection(collection.ID); err == nil {
-				return store.SaveCollection(collection)
-			}
+	if collection != nil && collection.ID != "" {
+		if _, err := db.base.GetCollection(collection.ID); err == nil {
+			return db.base.SaveCollection(collection)
 		}
-		if collection != nil && collection.Name != "" {
-			if _, err := store.GetCollectionByName(collection.Name); err == nil {
-				return store.SaveCollection(collection)
-			}
+	}
+	if collection != nil && collection.Name != "" {
+		if _, err := db.base.GetCollectionByName(collection.Name); err == nil {
+			return db.base.SaveCollection(collection)
 		}
 	}
 	if db.hasFileStore() {
 		return db.files.SaveCollection(collection)
 	}
-	store, ok := db.base.(CollectionStore)
-	if !ok {
-		return fmt.Errorf("collection variables are not supported by this storage backend")
-	}
-	return store.SaveCollection(collection)
+	return db.base.SaveCollection(collection)
 }
 
 func (db *ProjectDB) SaveCollectionAllowLocked(collection *types.Collection) error {
@@ -262,11 +256,7 @@ func (db *ProjectDB) GetCollection(id string) (*types.Collection, error) {
 			return nil, err
 		}
 	}
-	store, ok := db.base.(CollectionStore)
-	if !ok {
-		return nil, fmt.Errorf("collection variables are not supported by this storage backend")
-	}
-	return store.GetCollection(id)
+	return db.base.GetCollection(id)
 }
 
 func (db *ProjectDB) GetCollectionByName(name string) (*types.Collection, error) {
@@ -279,11 +269,7 @@ func (db *ProjectDB) GetCollectionByName(name string) (*types.Collection, error)
 			return nil, err
 		}
 	}
-	store, ok := db.base.(CollectionStore)
-	if !ok {
-		return nil, fmt.Errorf("collection variables are not supported by this storage backend")
-	}
-	return store.GetCollectionByName(name)
+	return db.base.GetCollectionByName(name)
 }
 
 func (db *ProjectDB) GetRawCollectionByName(name string) (*types.Collection, error) {
@@ -304,15 +290,13 @@ func (db *ProjectDB) ListCollections() ([]*types.Collection, error) {
 			byName[collection.Name] = collection
 		}
 	}
-	if store, ok := db.base.(CollectionStore); ok {
-		collections, err := store.ListCollections()
-		if err != nil {
-			return nil, err
-		}
-		for _, collection := range collections {
-			if _, exists := byName[collection.Name]; !exists {
-				byName[collection.Name] = collection
-			}
+	collections, err := db.base.ListCollections()
+	if err != nil {
+		return nil, err
+	}
+	for _, collection := range collections {
+		if _, exists := byName[collection.Name]; !exists {
+			byName[collection.Name] = collection
 		}
 	}
 	results := make([]*types.Collection, 0, len(byName))
@@ -335,11 +319,7 @@ func (db *ProjectDB) DeleteCollection(id string) error {
 			return err
 		}
 	}
-	store, ok := db.base.(CollectionStore)
-	if !ok {
-		return fmt.Errorf("collection variables are not supported by this storage backend")
-	}
-	return store.DeleteCollection(id)
+	return db.base.DeleteCollection(id)
 }
 
 func (db *ProjectDB) UpdateCollection(collection *types.Collection) error {
@@ -352,11 +332,7 @@ func (db *ProjectDB) UpdateCollection(collection *types.Collection) error {
 			return db.files.UpdateCollection(collection)
 		}
 	}
-	store, ok := db.base.(CollectionStore)
-	if !ok {
-		return fmt.Errorf("collection variables are not supported by this storage backend")
-	}
-	return store.UpdateCollection(collection)
+	return db.base.UpdateCollection(collection)
 }
 
 func (db *ProjectDB) MigrateCollectionToFiles(name string) (int, string, error) {
@@ -365,10 +341,8 @@ func (db *ProjectDB) MigrateCollectionToFiles(name string) (int, string, error) 
 	}
 
 	var collection *types.Collection
-	if store, ok := db.base.(CollectionStore); ok {
-		if found, err := store.GetCollectionByName(name); err == nil {
-			collection = found
-		}
+	if found, err := db.base.GetCollectionByName(name); err == nil {
+		collection = found
 	}
 
 	requests, err := db.base.ListRequests(&ListOptions{Collection: name})
@@ -497,4 +471,3 @@ func requestIdentity(req *types.SavedRequest) string {
 }
 
 var _ DB = (*ProjectDB)(nil)
-var _ CollectionStore = (*ProjectDB)(nil)

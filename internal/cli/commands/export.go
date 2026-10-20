@@ -116,7 +116,7 @@ func ExportCommand(db storage.DB) *cli.Command {
 }
 
 func marshalCollectionExport(db storage.DB, name string, requests []*types.SavedRequest, passphrase string) ([]byte, error) {
-	collection, err := loadCollectionByName(db, name)
+	collection, err := db.GetCollectionByName(name)
 	if err != nil && !storage.IsCollectionNotFound(err) {
 		return nil, fmt.Errorf("failed to load collection %q: %w", name, err)
 	}

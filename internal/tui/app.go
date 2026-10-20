@@ -520,18 +520,19 @@ type App struct {
 	quickTuiMode    bool
 }
 
-// NewApp creates a new TUI application
-func NewApp(db storage.DB, config *types.Config) *App {
-	return NewAppWithVersion(db, config, "dev")
+// NewApp creates a new TUI application. envStore backs the environment
+// switcher; nil disables it.
+func NewApp(db storage.DB, envStore env.Store, config *types.Config) *App {
+	return NewAppWithVersion(db, envStore, config, "dev")
 }
 
 // NewAppWithVersion creates a new TUI application with build metadata.
-func NewAppWithVersion(db storage.DB, config *types.Config, version string) *App {
+func NewAppWithVersion(db storage.DB, envStore env.Store, config *types.Config, version string) *App {
 	initialTab := newBlankTab(db)
 	rl := NewRequestList(db)
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	envSwitcher, activeEnvName := newAppEnvSwitcher(db)
+	envSwitcher, activeEnvName := newAppEnvSwitcher(envStore)
 	return &App{
 		db:             db,
 		config:         config,
@@ -550,13 +551,12 @@ func NewAppWithVersion(db storage.DB, config *types.Config, version string) *App
 	}
 }
 
-func newAppEnvSwitcher(db storage.DB) (*EnvSwitcher, string) {
-	lmdb, ok := db.(*storage.LMDB)
-	if !ok || lmdb == nil || lmdb.DB == nil {
+func newAppEnvSwitcher(envStore env.Store) (*EnvSwitcher, string) {
+	if envStore == nil {
 		return nil, ""
 	}
 
-	switcher := NewEnvSwitcher(env.NewEnvStorage(lmdb))
+	switcher := NewEnvSwitcher(envStore)
 	return switcher, switcher.GetActiveEnvName()
 }
 

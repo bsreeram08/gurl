@@ -38,7 +38,7 @@ func SetPluginRegistry(r *plugins.Registry) {
 	}
 }
 
-func RunCommand(db storage.DB, envStorage *env.EnvStorage) *cli.Command {
+func RunCommand(db storage.DB, envStorage env.Store) *cli.Command {
 	return &cli.Command{
 		Name:    "run",
 		Aliases: []string{"r", "execute"},
@@ -188,7 +188,7 @@ func sortedStringKeys(values map[string]string) []string {
 	return keys
 }
 
-func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
+func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
 	currentName := name
 	visited := make(map[string]bool)
 	singleRunner := runner.NewRunner(db, envStorage)
@@ -203,8 +203,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 			warnUnpersisted(os.Stderr, dirtyForPersist)
 		}
 		if c.Bool("persist") && chainStarted {
-			collectionStore, _ := db.(storage.CollectionStore)
-			persisted, persistErr := runner.PersistDirtyVariablesWithCollectionTargets(envStorage, collectionStore, persistEnvName, currentCollectionName, dirtyForPersist, dirtyOriginsForPersist, dirtyCollectionTargets)
+			persisted, persistErr := runner.PersistDirtyVariablesWithCollectionTargets(envStorage, db, persistEnvName, currentCollectionName, dirtyForPersist, dirtyOriginsForPersist, dirtyCollectionTargets)
 			if persistErr != nil {
 				return persistErr
 			}
@@ -321,7 +320,7 @@ func executeChain(ctx context.Context, db storage.DB, envStorage *env.EnvStorage
 	return finish(fmt.Errorf("max iterations (%d) reached", maxChainIterations))
 }
 
-func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
+func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Store, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
@@ -339,8 +338,7 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage *env.En
 	scopes := runner.ScopesFor(db, runEnv, req.Collection, cliVars)
 	execution := runner.NewRunner(db, envStorage).RunSavedRequestInScopes(ctx, req, scopes)
 	if c.Bool("persist") {
-		collectionStore, _ := db.(storage.CollectionStore)
-		persisted, persistErr := runner.PersistDirtyVariables(envStorage, collectionStore, persistEnvName, req.Collection, execution.Result.DirtyVars, execution.Result.DirtyVarOrigins)
+		persisted, persistErr := runner.PersistDirtyVariables(envStorage, db, persistEnvName, req.Collection, execution.Result.DirtyVars, execution.Result.DirtyVarOrigins)
 		if persistErr != nil {
 			return persistErr
 		}
@@ -441,7 +439,7 @@ func warnUnpersisted(out io.Writer, dirty map[string]string) {
 // executeDryRun prints the request as it would be sent, after pre-request
 // scripts, and fails when it cannot be resolved. Secret values are masked in
 // the output.
-func executeDryRun(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, runEnv *env.Environment, cliVars map[string]string, out io.Writer) error {
+func executeDryRun(ctx context.Context, db storage.DB, envStorage env.Store, name string, runEnv *env.Environment, cliVars map[string]string, out io.Writer) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
@@ -561,7 +559,7 @@ func assertionVarsFromResult(result *runner.RequestResult) map[string]string {
 	return vars
 }
 
-func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvStorage, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
+func executeDataDriven(ctx context.Context, db storage.DB, envStorage env.Store, name string, runEnv *env.Environment, cliVars map[string]string, c *cli.Command, persistEnvName string) error {
 	req, err := db.GetRequestByName(name)
 	if err != nil {
 		return fmt.Errorf("request not found: %s", name)
@@ -644,8 +642,7 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage *env.EnvSt
 		return fmt.Errorf("data iteration failed: %w", err)
 	}
 	if c.Bool("persist") {
-		collectionStore, _ := db.(storage.CollectionStore)
-		persisted, persistErr := runner.PersistDirtyVariables(envStorage, collectionStore, persistEnvName, req.Collection, dirtyForPersist, dirtyOriginsForPersist)
+		persisted, persistErr := runner.PersistDirtyVariables(envStorage, db, persistEnvName, req.Collection, dirtyForPersist, dirtyOriginsForPersist)
 		if persistErr != nil {
 			return persistErr
 		}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/pkg/types"
 )
 
@@ -80,7 +81,7 @@ func TestParseRunIf_UnsupportedExpressions(t *testing.T) {
 
 func TestRunner_RunIfFalseSkipsBeforeHTTP(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	requestCount := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +135,7 @@ func TestRunner_RunIfFalseSkipsBeforeHTTP(t *testing.T) {
 
 func TestRunner_InvalidRunIfFailsBeforeHTTP(t *testing.T) {
 	db := newMockDB()
-	envStorage := newMockEnvStorage()
+	envStorage := env.NewMemoryStore()
 
 	requestCount := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

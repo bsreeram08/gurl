@@ -4,10 +4,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sreeram/gurl/internal/secrets"
 	"github.com/sreeram/gurl/internal/storage"
 )
 
+// persistTestStore records what PersistVariables saves; the rest of Store
+// comes from the embedded MemoryStore.
 type persistTestStore struct {
+	MemoryStore
 	env       *Environment
 	saved     *Environment
 	activeEnv string
@@ -348,7 +352,7 @@ func TestSecretMasking(t *testing.T) {
 		t.Error("BASE_URL should NOT be marked as secret")
 	}
 
-	maskedSecret := MaskSecret(env.Variables["API_KEY"])
+	maskedSecret := secrets.Mask(env.Variables["API_KEY"])
 	if maskedSecret != "*****" {
 		t.Errorf("secret value should be masked as *****, got %q", maskedSecret)
 	}

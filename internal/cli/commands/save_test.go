@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/internal/storage/memstore"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 )
@@ -437,28 +438,8 @@ type failingCollectionLookupDB struct {
 	lookupErr error
 }
 
-func (db *failingCollectionLookupDB) SaveCollection(collection *types.Collection) error {
-	return nil
-}
-
-func (db *failingCollectionLookupDB) GetCollection(id string) (*types.Collection, error) {
-	return nil, storage.ErrCollectionNotFound
-}
-
 func (db *failingCollectionLookupDB) GetCollectionByName(name string) (*types.Collection, error) {
 	return nil, db.lookupErr
-}
-
-func (db *failingCollectionLookupDB) ListCollections() ([]*types.Collection, error) {
-	return nil, nil
-}
-
-func (db *failingCollectionLookupDB) DeleteCollection(id string) error {
-	return nil
-}
-
-func (db *failingCollectionLookupDB) UpdateCollection(collection *types.Collection) error {
-	return nil
 }
 
 func TestSaveCommandPersistsAuthConfigInAllSaveModes(t *testing.T) {
@@ -601,5 +582,30 @@ func assertAuthConfig(t *testing.T, got *types.AuthConfig, wantType string, want
 		if got.Params[key] != want {
 			t.Fatalf("expected param %s=%q, got %q", key, want, got.Params[key])
 		}
+	}
+}
+
+func TestSaveCommandSavesIntoLockedCollection(t *testing.T) {
+	db := memstore.New()
+	if err := db.SaveCollection(types.NewCollection("payments")); err != nil {
+		t.Fatalf("SaveCollection: %v", err)
+	}
+	db.Lock("payments", "team-pass")
+
+	oldInteractive := saveCollectionIsInteractive
+	saveCollectionIsInteractive = func() bool { return false }
+	defer func() { saveCollectionIsInteractive = oldInteractive }()
+
+	// A locked collection exists, so the guard must not ask to create it.
+	cmd := SaveCommand(db)
+	if err := cmd.Run(context.Background(), []string{"save", "list payments", "https://example.com/payments", "--collection", "payments"}); err != nil {
+		t.Fatalf("save into locked collection failed: %v", err)
+	}
+	req, err := db.GetRequestByName("list payments")
+	if err != nil {
+		t.Fatalf("GetRequestByName: %v", err)
+	}
+	if req.Collection != "payments" {
+		t.Fatalf("request collection = %q, want payments", req.Collection)
 	}
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sreeram/gurl/internal/project"
+	"github.com/sreeram/gurl/internal/secrets"
 )
 
 const activeEnvFileName = ".active-env"
@@ -297,7 +298,7 @@ func envForFileStorage(source *Environment) (*Environment, error) {
 		if !isSecret {
 			continue
 		}
-		encrypted, err := EncryptSecret(key, stored.Variables[name])
+		encrypted, err := secrets.Encrypt(key, stored.Variables[name])
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt secret %s: %w", name, err)
 		}
@@ -315,8 +316,8 @@ func decryptFileEnvForUse(env *Environment) error {
 		return fmt.Errorf("failed to get encryption key: %w", err)
 	}
 	for name, isSecret := range env.SecretKeys {
-		if isSecret && IsEncryptedValue(env.Variables[name]) {
-			decrypted, err := DecryptSecret(key, env.Variables[name])
+		if isSecret && secrets.IsEncryptedValue(env.Variables[name]) {
+			decrypted, err := secrets.Decrypt(key, env.Variables[name])
 			if err != nil {
 				return fmt.Errorf("failed to decrypt secret %s: %w", name, err)
 			}

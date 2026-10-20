@@ -1,6 +1,10 @@
 package storage
 
-import "github.com/sreeram/gurl/pkg/types"
+import (
+	"context"
+
+	"github.com/sreeram/gurl/pkg/types"
+)
 
 // LazyDB opens and closes the underlying LevelDB handle for each operation.
 // This avoids holding a process-wide lock while interactive commands sit idle.
@@ -189,5 +193,34 @@ func (db *LazyDB) UpdateCollection(collection *types.Collection) error {
 	})
 }
 
+// GetRawCollectionByName is not supported; see LMDB.GetRawCollectionByName.
+func (db *LazyDB) GetRawCollectionByName(name string) (*types.Collection, error) {
+	return nil, ErrNotSupported
+}
+
+// SaveCollectionAllowLocked is not supported; see LMDB.GetRawCollectionByName.
+func (db *LazyDB) SaveCollectionAllowLocked(collection *types.Collection) error {
+	return ErrNotSupported
+}
+
+// UnlockCollection is not supported; see LMDB.UnlockCollection.
+func (db *LazyDB) UnlockCollection(name string, passphrase string) error {
+	return ErrNotSupported
+}
+
+// MigrateCollectionToFiles is not supported; see LMDB.MigrateCollectionToFiles.
+func (db *LazyDB) MigrateCollectionToFiles(name string) (int, string, error) {
+	return 0, "", ErrNotSupported
+}
+
+// WatchCollection returns a nil watcher: LazyDB has no collection files.
+func (db *LazyDB) WatchCollection(ctx context.Context, name string, opts CollectionWatchOptions) (*CollectionWatcher, error) {
+	return nil, nil
+}
+
+// WatchCollections returns a nil watcher: LazyDB has no collection files.
+func (db *LazyDB) WatchCollections(ctx context.Context, opts CollectionWatchOptions) (*CollectionWatcher, error) {
+	return nil, nil
+}
+
 var _ DB = (*LazyDB)(nil)
-var _ CollectionStore = (*LazyDB)(nil)

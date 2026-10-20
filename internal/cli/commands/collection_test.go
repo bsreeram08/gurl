@@ -13,6 +13,7 @@ import (
 	"github.com/sreeram/gurl/internal/env"
 	"github.com/sreeram/gurl/internal/project"
 	"github.com/sreeram/gurl/internal/storage"
+	"github.com/sreeram/gurl/internal/storage/memstore"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
 )
@@ -1232,5 +1233,87 @@ func TestCollectionRenameCommand(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestCollectionImportOverLockedCollectionUsesRawRecord(t *testing.T) {
+	sourceDB := memstore.New()
+	exported := types.NewCollection("payments")
+	exported.SetVariable("BASE_URL", "https://new.example.com")
+	if err := sourceDB.SaveCollection(exported); err != nil {
+		t.Fatalf("SaveCollection(source): %v", err)
+	}
+	exportPath := filepath.Join(t.TempDir(), "payments.gurl")
+	exportCmd := CollectionCommand(sourceDB, env.NewMemoryStore())
+	captureStdout(t, func() {
+		if err := exportCmd.Run(context.Background(), []string{"collection", "export", "payments", "--output", exportPath}); err != nil {
+			t.Fatalf("export failed: %v", err)
+		}
+	})
+
+	targetDB := memstore.New()
+	locked := types.NewCollection("payments")
+	locked.CreatedAt = 1700000000
+	locked.SetVariable("BASE_URL", "https://old.example.com")
+	if err := targetDB.SaveCollection(locked); err != nil {
+		t.Fatalf("SaveCollection(target): %v", err)
+	}
+	targetDB.Lock("payments", "team-pass")
+	importCmd := CollectionCommand(targetDB, env.NewMemoryStore())
+
+	err := importCmd.Run(context.Background(), []string{"collection", "import", exportPath})
+	if err == nil || !strings.Contains(err.Error(), "already exists (use --force to overwrite)") {
+		t.Fatalf("expected locked collection to block import without --force, got %v", err)
+	}
+
+	captureStdout(t, func() {
+		if err := importCmd.Run(context.Background(), []string{"collection", "import", exportPath, "--force"}); err != nil {
+			t.Fatalf("import --force over locked collection failed: %v", err)
+		}
+	})
+	got, err := targetDB.GetCollectionByName("payments")
+	if err != nil {
+		t.Fatalf("collection still locked after forced import: %v", err)
+	}
+	if got.ID != locked.ID || got.CreatedAt != locked.CreatedAt {
+		t.Fatalf("forced import should keep the locked record's ID/CreatedAt, got ID=%q CreatedAt=%d", got.ID, got.CreatedAt)
+	}
+	if got.Variables["BASE_URL"] != "https://new.example.com" {
+		t.Fatalf("forced import did not replace variables: %+v", got.Variables)
+	}
+}
+
+func TestCollectionUnlockWithoutFileStorage(t *testing.T) {
+	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
+	if err := db.Open(); err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	cmd := CollectionCommand(db, env.NewMemoryStore())
+	err := cmd.Run(context.Background(), []string{"collection", "unlock", "payments", "--passphrase", "team-pass"})
+	if err == nil || err.Error() != "collection unlock requires project file storage" {
+		t.Fatalf("expected unsupported unlock error, got %v", err)
+	}
+}
+
+func TestCollectionUnlockThroughStorageSeam(t *testing.T) {
+	db := memstore.New()
+	if err := db.SaveCollection(types.NewCollection("payments")); err != nil {
+		t.Fatalf("SaveCollection: %v", err)
+	}
+	db.Lock("payments", "team-pass")
+
+	cmd := CollectionCommand(db, env.NewMemoryStore())
+	if err := cmd.Run(context.Background(), []string{"collection", "unlock", "payments", "--passphrase", "wrong"}); err == nil {
+		t.Fatal("expected wrong passphrase to fail")
+	}
+	captureStdout(t, func() {
+		if err := cmd.Run(context.Background(), []string{"collection", "unlock", "payments", "--passphrase", "team-pass"}); err != nil {
+			t.Fatalf("unlock failed: %v", err)
+		}
+	})
+	if _, err := db.GetCollectionByName("payments"); err != nil {
+		t.Fatalf("collection still locked after unlock: %v", err)
 	}
 }

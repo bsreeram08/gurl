@@ -7,10 +7,28 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sreeram/gurl/internal/project"
+	"github.com/sreeram/gurl/internal/secrets"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
+// Store is the environment storage seam. *EnvStorage is the production
+// adapter (LMDB plus project files); NewMemoryStore is an in-memory adapter
+// for tests.
+type Store interface {
+	SaveEnv(env *Environment) error
+	GetEnv(id string) (*Environment, error)
+	GetEnvByName(name string) (*Environment, error)
+	DeleteEnv(id string) error
+	ListEnvs() ([]*Environment, error)
+	GetActiveEnv() (string, error)
+	SetActiveEnv(name string) error
+}
+
+var _ Store = (*EnvStorage)(nil)
+
+// EnvStorage stores environments in LMDB and, inside a gurl project, in
+// project files.
 type EnvStorage struct {
 	db     *storage.LMDB
 	dbPath string
@@ -103,7 +121,7 @@ func (s *EnvStorage) SaveEnv(env *Environment) error {
 
 	for k, isSecret := range env.SecretKeys {
 		if isSecret {
-			encrypted, encErr := EncryptSecret(key, env.Variables[k])
+			encrypted, encErr := secrets.Encrypt(key, env.Variables[k])
 			if encErr != nil {
 				return fmt.Errorf("failed to encrypt secret %s: %w", k, encErr)
 			}
@@ -163,8 +181,8 @@ func (s *EnvStorage) getEnvWithDB(db *storage.LMDB, id string) (*Environment, er
 	}
 
 	for k, isSecret := range env.SecretKeys {
-		if isSecret && IsEncryptedValue(env.Variables[k]) {
-			decrypted, decErr := DecryptSecret(key, env.Variables[k])
+		if isSecret && secrets.IsEncryptedValue(env.Variables[k]) {
+			decrypted, decErr := secrets.Decrypt(key, env.Variables[k])
 			if decErr != nil {
 				return nil, fmt.Errorf("failed to decrypt secret %s: %w", k, decErr)
 			}
