@@ -20,6 +20,12 @@ var saveCollectionIsInteractive = func() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
+// saveStdinIsTerminal reports whether stdin is a terminal; when it is not,
+// `gurl save <name>` reads the curl command from it.
+var saveStdinIsTerminal = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
 // SaveCommand creates the save command
 func SaveCommand(db storage.DB) *cli.Command {
 	return &cli.Command{
@@ -197,14 +203,18 @@ func SaveCommand(db storage.DB) *cli.Command {
 				return nil
 			}
 
-			// Mode 3: Read from stdin (piping curl command)
-			if args.Len() == 0 {
+			// Mode 3: Read from stdin (piping curl command), with no
+			// arguments or with only the name when stdin is not a terminal
+			if args.Len() == 0 || (args.Len() == 1 && nameFlag == "" && !saveStdinIsTerminal()) {
 				data, err := io.ReadAll(os.Stdin)
 				if err != nil {
 					return fmt.Errorf("failed to read stdin: %w", err)
 				}
 				input := strings.TrimSpace(string(data))
 				if input == "" {
+					if args.Len() == 1 {
+						return fmt.Errorf("name and URL arguments are required (or pipe a curl command: echo 'curl ...' | gurl save <name>)")
+					}
 					return fmt.Errorf("empty stdin input")
 				}
 
@@ -214,6 +224,9 @@ func SaveCommand(db storage.DB) *cli.Command {
 				}
 
 				name := nameFlag
+				if name == "" && args.Len() == 1 {
+					name = args.Get(0)
+				}
 				if name == "" {
 					name = generateNameFromURL(parsed.URL)
 				}

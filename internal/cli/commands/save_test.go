@@ -609,3 +609,83 @@ func TestSaveCommandSavesIntoLockedCollection(t *testing.T) {
 		t.Fatalf("request collection = %q, want payments", req.Collection)
 	}
 }
+
+// withStdin replaces os.Stdin with a pipe holding input for the test.
+func withStdin(t *testing.T, input string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create stdin pipe: %v", err)
+	}
+	if _, err := w.WriteString(input); err != nil {
+		t.Fatalf("failed to write stdin: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close stdin writer: %v", err)
+	}
+	old := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() {
+		os.Stdin = old
+		_ = r.Close()
+	})
+}
+
+func TestSaveCommandReadsPipedCurlWithName(t *testing.T) {
+	old := saveStdinIsTerminal
+	saveStdinIsTerminal = func() bool { return false }
+	t.Cleanup(func() { saveStdinIsTerminal = old })
+	withStdin(t, `curl -X POST https://api.example.com/items -H 'Content-Type: application/json' -H 'X-Trace: abc' -d '{"a":1}'`+"\n")
+
+	db := newMockDB()
+	var err error
+	out := captureStdout(t, func() {
+		err = SaveCommand(db).Run(context.Background(), []string{"save", "create item"})
+	})
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if !strings.Contains(out, "Saved request 'create item'") {
+		t.Errorf("confirmation = %q", out)
+	}
+	req, err := db.GetRequestByName("create item")
+	if err != nil {
+		t.Fatalf("request not saved under its name: %v", err)
+	}
+	if req.Method != "POST" || req.URL != "https://api.example.com/items" || req.Body != `{"a":1}` {
+		t.Errorf("saved %s %s body %q", req.Method, req.URL, req.Body)
+	}
+	headers := map[string]string{}
+	for _, h := range req.Headers {
+		headers[h.Key] = h.Value
+	}
+	if headers["Content-Type"] != "application/json" || headers["X-Trace"] != "abc" || len(headers) != 2 {
+		t.Errorf("headers = %v", req.Headers)
+	}
+}
+
+func TestSaveCommandNameOnlyNeedsURLWithoutPipedCurl(t *testing.T) {
+	for name, tc := range map[string]struct {
+		terminal bool
+		stdin    string
+	}{
+		"terminal":    {terminal: true, stdin: "curl https://ignored.example.com"},
+		"empty stdin": {stdin: ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			old := saveStdinIsTerminal
+			saveStdinIsTerminal = func() bool { return tc.terminal }
+			t.Cleanup(func() { saveStdinIsTerminal = old })
+			withStdin(t, tc.stdin)
+
+			db := newMockDB()
+			err := SaveCommand(db).Run(context.Background(), []string{"save", "only-name"})
+			if err == nil || !strings.Contains(err.Error(), "name and URL arguments are required") {
+				t.Fatalf("want missing URL error, got %v", err)
+			}
+			if _, err := db.GetRequestByName("only-name"); err == nil {
+				t.Fatal("nothing should be saved")
+			}
+		})
+	}
+}
