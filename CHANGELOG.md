@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `cookies list` masks cookie values as `*****`. `--reveal` shows them (refused in agent mode), and the new `--json` follows the same rules.
+
 ## [v0.7.0] - 2026-10-20
 
 ### Added

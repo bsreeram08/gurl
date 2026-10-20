@@ -3,8 +3,10 @@ package commands
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/sreeram/gurl/internal/cookies"
+	"github.com/sreeram/gurl/internal/redact"
 	"github.com/urfave/cli/v3"
 )
 
@@ -22,9 +24,19 @@ func CookiesCommand(provider CookieJarProvider) *cli.Command {
 				Name:    "list",
 				Aliases: []string{"ls", "l"},
 				Usage:   "List all stored cookies",
-				Action: func(ctx context.Context, c *cli.Command) error {
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "json", Aliases: []string{"j"}, Usage: "JSON output"},
+					&cli.BoolFlag{Name: "reveal", Usage: "Show cookie values"},
+				},
+				Action: jsonAction(func(ctx context.Context, c *cli.Command) error {
+					if err := rejectReveal(c); err != nil {
+						return err
+					}
 					jar := provider.GetCookieJar()
 					if jar == nil {
+						if jsonOutput(c) {
+							return fmt.Errorf("cookie jar not initialized")
+						}
 						fmt.Println("Cookie jar not initialized.")
 						return nil
 					}
@@ -32,6 +44,22 @@ func CookiesCommand(provider CookieJarProvider) *cli.Command {
 					entries, err := jar.List()
 					if err != nil {
 						return fmt.Errorf("failed to list cookies: %w", err)
+					}
+
+					reveal := c.Bool("reveal")
+					cookieValue := func(v string) string {
+						if reveal {
+							return v
+						}
+						return redact.Mask
+					}
+
+					if jsonOutput(c) {
+						out := make([]cookieJSON, len(entries))
+						for i, e := range entries {
+							out[i] = cookieJSON{Domain: e.Domain, Path: e.Path, Name: e.Name, Value: cookieValue(e.Value), Secure: e.Secure, HttpOnly: e.HttpOnly, Expires: e.Expires}
+						}
+						return writeJSON(os.Stdout, out)
 					}
 
 					if len(entries) == 0 {
@@ -52,7 +80,7 @@ func CookiesCommand(provider CookieJarProvider) *cli.Command {
 						if len(name) > 13 {
 							name = name[:10] + "..."
 						}
-						value := e.Value
+						value := cookieValue(e.Value)
 						if len(value) > 20 {
 							value = value[:17] + "..."
 						}
@@ -62,7 +90,7 @@ func CookiesCommand(provider CookieJarProvider) *cli.Command {
 					fmt.Println("└─────────────────────────────────────────────────────────┘")
 					fmt.Printf("  %d cookie(s)\n", len(entries))
 					return nil
-				},
+				}),
 			},
 			{
 				Name:    "clear",
@@ -111,4 +139,16 @@ func CookiesCommand(provider CookieJarProvider) *cli.Command {
 			},
 		},
 	}
+}
+
+// cookieJSON is one cookie in `cookies list --json`; Value is masked unless
+// --reveal.
+type cookieJSON struct {
+	Domain   string `json:"domain"`
+	Path     string `json:"path"`
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	Secure   bool   `json:"secure"`
+	HttpOnly bool   `json:"http_only"`
+	Expires  int64  `json:"expires,omitempty"`
 }
