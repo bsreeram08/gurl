@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/sreeram/gurl/internal/env"
+	"github.com/sreeram/gurl/internal/redact"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )
@@ -219,7 +220,7 @@ func EnvCommand(db env.Store) *cli.Command {
 							if env.IsSecret(k) {
 								out.Secrets = append(out.Secrets, k)
 								if !reveal {
-									v = secretMask
+									v = redact.Mask
 								}
 							}
 							out.Variables[k] = v
@@ -241,7 +242,7 @@ func EnvCommand(db env.Store) *cli.Command {
 						fmt.Println("Variables:")
 						for k, v := range env.Variables {
 							if env.IsSecret(k) && !reveal {
-								v = secretMask
+								v = redact.Mask
 							}
 							fmt.Printf("  %s = %s\n", k, v)
 						}

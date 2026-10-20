@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,11 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 // ErrNotSupported is returned by adapters for operations their backing store
@@ -34,6 +37,10 @@ type DB interface {
 	UpdateRequest(req *types.SavedRequest) error
 	SaveHistory(history *types.ExecutionHistory) error
 	GetHistory(requestID string, limit int) ([]*types.ExecutionHistory, error)
+	// GetHistoryByID returns the execution record whose ID is idOrPrefix or
+	// starts with it. It fails with ErrHistoryNotFound or, when several
+	// records match, ErrAmbiguousHistoryID.
+	GetHistoryByID(idOrPrefix string) (*types.ExecutionHistory, error)
 	ListFolder(path string) ([]*types.SavedRequest, error)
 	ListFolderRecursive(path string) ([]*types.SavedRequest, error)
 	DeleteFolder(path string) error
@@ -699,7 +706,23 @@ func (db *LMDB) saveRequestLocked(req *types.SavedRequest) error {
 	return nil
 }
 
-// SaveHistory saves an execution history entry with per-request limit of 100 entries
+// maxHistory is the number of execution records kept per request.
+const maxHistory = 100
+
+// historyKey is "history:<requestID>:n<unix nanos, 20 digits>:<id>". The
+// "n" sorts after the digits of the old "history:<requestID>:<unix seconds>"
+// keys, so old and new keys of a request iterate oldest first together, and
+// the id keeps two records saved in the same instant apart.
+func historyKey(h *types.ExecutionHistory) string {
+	ns := h.TimestampNs
+	if ns == 0 {
+		ns = h.Timestamp * int64(time.Second)
+	}
+	return fmt.Sprintf("history:%s:n%020d:%s", h.RequestID, ns, h.ID)
+}
+
+// SaveHistory saves an execution record, keeping the newest maxHistory
+// records per request.
 func (db *LMDB) SaveHistory(history *types.ExecutionHistory) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -707,96 +730,94 @@ func (db *LMDB) SaveHistory(history *types.ExecutionHistory) error {
 	if history.ID == "" {
 		history.ID = uuid.New().String()
 	}
+	if history.Timestamp == 0 && history.TimestampNs == 0 {
+		now := time.Now()
+		history.Timestamp, history.TimestampNs = now.Unix(), now.UnixNano()
+	}
 
 	data, err := json.Marshal(history)
 	if err != nil {
 		return fmt.Errorf("failed to marshal history: %w", err)
 	}
 
-	// Use timestamp as part of key for ordering
-	key := fmt.Sprintf("history:%s:%d", history.RequestID, history.Timestamp)
-
-	// Enforce history limit: collect existing keys and delete oldest if over 100
-	const maxHistory = 100
-	var historyKeys []int64
-	prefix := fmt.Sprintf("history:%s:", history.RequestID)
-	iter := db.DB.NewIterator(nil, nil)
+	// Keys iterate oldest first; drop the oldest to leave room for this one.
+	var existing [][]byte
+	iter := db.DB.NewIterator(util.BytesPrefix([]byte("history:"+history.RequestID+":")), nil)
 	for iter.Next() {
-		k := string(iter.Key())
-		if len(k) > len(prefix) && k[:len(prefix)] == prefix {
-			var ts int64
-			fmt.Sscanf(k[len(prefix):], "%d", &ts)
-			historyKeys = append(historyKeys, ts)
-		}
+		existing = append(existing, append([]byte(nil), iter.Key()...))
 	}
 	iter.Release()
-
-	// If we would exceed limit, delete oldest entries
-	if len(historyKeys) >= maxHistory {
-		// Sort timestamps ascending (oldest first)
-		for i := 0; i < len(historyKeys)-1; i++ {
-			for j := i + 1; j < len(historyKeys); j++ {
-				if historyKeys[i] > historyKeys[j] {
-					historyKeys[i], historyKeys[j] = historyKeys[j], historyKeys[i]
-				}
-			}
-		}
-		// Delete oldest entries to get down to maxHistory - 1 (leaving room for new entry)
-		toDelete := len(historyKeys) - (maxHistory - 1)
-		batch := new(leveldb.Batch)
-		for i := 0; i < toDelete; i++ {
-			oldKey := fmt.Sprintf("history:%s:%d", history.RequestID, historyKeys[i])
-			batch.Delete([]byte(oldKey))
-		}
-		if err := db.DB.Write(batch, &opt.WriteOptions{Sync: true}); err != nil {
-			return fmt.Errorf("failed to trim old history: %w", err)
-		}
+	if err := iter.Error(); err != nil {
+		return fmt.Errorf("failed to read history: %w", err)
 	}
 
-	if err := db.DB.Put([]byte(key), data, &opt.WriteOptions{Sync: true}); err != nil {
+	batch := new(leveldb.Batch)
+	for i := 0; i < len(existing)-(maxHistory-1); i++ {
+		batch.Delete(existing[i])
+	}
+	batch.Put([]byte(historyKey(history)), data)
+	if err := db.DB.Write(batch, &opt.WriteOptions{Sync: true}); err != nil {
 		return fmt.Errorf("failed to save history: %w", err)
 	}
-
 	return nil
 }
 
-// GetHistory retrieves execution history for a request
+// GetHistory returns the newest limit execution records of a request, most
+// recent first. A non-positive limit means maxHistory.
 func (db *LMDB) GetHistory(requestID string, limit int) ([]*types.ExecutionHistory, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
 	if limit <= 0 {
-		limit = 100
+		limit = maxHistory
 	}
 
 	var results []*types.ExecutionHistory
-	prefix := fmt.Sprintf("history:%s:", requestID)
-
-	iter := db.DB.NewIterator(nil, nil)
+	iter := db.DB.NewIterator(util.BytesPrefix([]byte("history:"+requestID+":")), nil)
 	defer iter.Release()
-
-	for iter.Next() {
-		key := string(iter.Key())
-		if len(key) > len(prefix) && key[:len(prefix)] == prefix {
-			data := iter.Value()
-			var history types.ExecutionHistory
-			if err := json.Unmarshal(data, &history); err != nil {
-				continue
-			}
-			results = append(results, &history)
-
-			if len(results) >= limit {
-				break
-			}
+	for ok := iter.Last(); ok && len(results) < limit; ok = iter.Prev() {
+		var history types.ExecutionHistory
+		if err := json.Unmarshal(iter.Value(), &history); err != nil {
+			continue
 		}
+		results = append(results, &history)
 	}
-
-	// Reverse to get most recent first
-	for i, j := 0, len(results)-1; i < j; i, j = i+1, j-1 {
-		results[i], results[j] = results[j], results[i]
+	if err := iter.Error(); err != nil {
+		return nil, fmt.Errorf("failed to read history: %w", err)
 	}
-
 	return results, nil
+}
+
+// GetHistoryByID returns the execution record whose ID is idOrPrefix or
+// starts with it.
+func (db *LMDB) GetHistoryByID(idOrPrefix string) (*types.ExecutionHistory, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	prefix := normalizeHistoryID(idOrPrefix)
+	if prefix == "" {
+		return nil, ErrHistoryIDRequired
+	}
+	// Records are marshalled with "id" first; checking the raw JSON skips
+	// decoding every record. The decoded ID is still compared below.
+	needle := []byte(`"id":"` + prefix)
+	var candidates []*types.ExecutionHistory
+	iter := db.DB.NewIterator(util.BytesPrefix([]byte("history:")), nil)
+	defer iter.Release()
+	for iter.Next() {
+		if !bytes.Contains(iter.Value(), needle) {
+			continue
+		}
+		var history types.ExecutionHistory
+		if err := json.Unmarshal(iter.Value(), &history); err != nil {
+			continue
+		}
+		candidates = append(candidates, &history)
+	}
+	if err := iter.Error(); err != nil {
+		return nil, fmt.Errorf("failed to read history: %w", err)
+	}
+	return MatchHistoryID(candidates, prefix)
 }
 
 func (db *LMDB) ListFolder(path string) ([]*types.SavedRequest, error) {

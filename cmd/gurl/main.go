@@ -125,6 +125,7 @@ Quick Start:
 			commands.HistoryCommand(db),
 			commands.TimelineCommand(db),
 			commands.DiffCommand(db),
+			commands.DiagCommand(db),
 			commands.DetectCommand(db),
 			commands.EditCommand(db),
 			commands.ShowCommand(db),

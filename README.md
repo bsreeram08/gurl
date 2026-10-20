@@ -313,6 +313,7 @@ gurl codegen "create-order" --lang curl
 | `history` | Show execution history for a request |
 | `timeline` | Global execution timeline across all requests |
 | `diff` | Compare last two responses for a request |
+| `diag` | Inspect one execution and compare it with the last success |
 | `env` | Manage environments (create, list, show, switch) |
 | `collection` | Manage collections |
 | `sequence` | Run multiple requests in sequence |
@@ -369,6 +370,22 @@ gurl list --pattern M-4242
 # Test extraction rules on a sample response without sending a request
 gurl extract 'orderId=jsonpath:$.data.items[0].id' < sample.json
 ```
+
+### Diagnosing failures
+
+Every `run`, `collection run` and shell `send` is recorded, including attempts that never got a response (unresolved variables, connection errors, timeouts, script errors). When one fails, `run` names the record on stderr:
+
+```bash
+$ gurl run "health" --var REGION=us
+{"status":"error","error":"upstream timeout","region":"us"}
+request failed: HTTP 500 (id: 078b9896) — inspect with: gurl diag 078b9896
+
+$ gurl diag 078b9896          # or: gurl diag --id 078b9896; any unique prefix works
+```
+
+`diag` shows the request as sent, the variables and where each came from, the response (`--full` for bodies over 4KB), assertions, and what changed since the last successful run of the same request: status, duration, URL/headers/body, variable values and origins, response headers and top-level JSON fields. `--json` prints the same as JSON. `gurl history <name>` lists record ids.
+
+Records never contain secrets: secret and credential-looking values are masked before saving, so secret variables are compared by origin only. Response bodies are stored as received.
 
 ### Templates
 

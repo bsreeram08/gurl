@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/sreeram/gurl/internal/redact"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/urfave/cli/v3"
 )
@@ -48,7 +49,7 @@ func ShowCommand(db storage.DB) *cli.Command {
 				return fmt.Errorf("request not found: %s", name)
 			}
 			if !c.Bool("reveal") {
-				req = maskRequestSecrets(req)
+				req = redact.SavedRequest(req)
 			}
 
 			format := c.String("format")

@@ -17,11 +17,13 @@ import (
 	"github.com/sreeram/gurl/internal/formatter"
 	"github.com/sreeram/gurl/internal/plugins"
 	"github.com/sreeram/gurl/internal/plugins/builtins"
+	"github.com/sreeram/gurl/internal/redact"
 	"github.com/sreeram/gurl/internal/resolve"
 	"github.com/sreeram/gurl/internal/runner"
 	"github.com/sreeram/gurl/internal/storage"
 	"github.com/sreeram/gurl/pkg/types"
 	"github.com/urfave/cli/v3"
+	"golang.org/x/term"
 )
 
 var outputPluginRegistry *plugins.Registry
@@ -212,6 +214,10 @@ func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name
 		return err
 	}
 	const maxChainIterations = 100
+	// Each step's failure notice is printed after its response body.
+	var failed *types.ExecutionHistory
+	stdout := newLineTracker(os.Stdout)
+	defer func() { printFailureNotice(os.Stderr, failed, stdout) }()
 
 	for i := 0; i < maxChainIterations; i++ {
 		req, err := db.GetRequestByName(currentName)
@@ -260,7 +266,9 @@ func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name
 			}
 		}
 		if execution.Result.Error != "" {
-			return finish(fmt.Errorf("%s", execution.Result.Error))
+			rec := execution.Record(envName(runEnv))
+			failed = keepRecord(db, rec)
+			return finish(fmt.Errorf("%s", rec.Error)) // redacted copy of Result.Error
 		}
 		var assertionErr error
 		if execution.Result.FailurePhase == runner.FailurePhaseAssertion {
@@ -277,16 +285,11 @@ func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name
 		clientReq := *execution.Request
 		resp := *execution.Response
 
-		history := types.NewExecutionHistory(
-			req.ID,
-			string(resp.Body),
-			resp.StatusCode,
-			resp.Duration.Milliseconds(),
-			resp.Size,
-		)
-		if err := db.SaveHistory(history); err != nil {
+		rec := execution.Record(envName(runEnv))
+		if err := db.SaveHistory(rec); err != nil {
 			return finish(fmt.Errorf("failed to save history: %w", err))
 		}
+		failed = rec
 
 		if outputPath := c.String("output"); outputPath != "" {
 			if !c.Bool("force") {
@@ -305,9 +308,11 @@ func executeChain(ctx context.Context, db storage.DB, envStorage env.Store, name
 		}
 
 		format := c.String("format")
-		if err := printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
+		if err := printResponse(stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
 			return finish(err)
 		}
+		printFailureNotice(os.Stderr, failed, stdout)
+		failed = nil
 		chainAssertionErr = mergeAssertionErrors(chainAssertionErr, httpFailure(c, resp.StatusCode))
 		nextReq := execution.Result.NextRequestOverride
 		if nextReq == "" {
@@ -337,6 +342,10 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Sto
 
 	scopes := runner.ScopesFor(db, runEnv, req.Collection, cliVars)
 	execution := runner.NewRunner(db, envStorage).RunSavedRequestInScopes(ctx, req, scopes)
+	// The failure notice is printed last, after the response body.
+	var failed *types.ExecutionHistory
+	stdout := newLineTracker(os.Stdout)
+	defer func() { printFailureNotice(os.Stderr, failed, stdout) }()
 	if c.Bool("persist") {
 		persisted, persistErr := runner.PersistDirtyVariables(envStorage, db, persistEnvName, req.Collection, execution.Result.DirtyVars, execution.Result.DirtyVarOrigins)
 		if persistErr != nil {
@@ -350,7 +359,9 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Sto
 		warnUnpersisted(os.Stderr, execution.Result.DirtyVars)
 	}
 	if execution.Result.Error != "" {
-		return fmt.Errorf("%s", execution.Result.Error)
+		rec := execution.Record(envName(runEnv))
+		failed = keepRecord(db, rec)
+		return fmt.Errorf("%s", rec.Error) // redacted copy of Result.Error
 	}
 	var assertionErr error
 	if execution.Result.FailurePhase == runner.FailurePhaseAssertion {
@@ -361,12 +372,14 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Sto
 	}
 	clientReq := *execution.Request
 	resp := *execution.Response
+	rec := execution.Record(envName(runEnv))
 
 	// Evaluate assertions if provided
 	if assertFlags := c.StringSlice("assert"); len(assertFlags) > 0 {
 		parser := assertions.NewCLIParser()
 		asserts, err := parser.ParseSlice(assertFlags)
 		if err != nil {
+			failed = keepRecord(db, rec)
 			return fmt.Errorf("failed to parse assertions: %w", err)
 		}
 		evaluator := assertions.NewEvaluator()
@@ -378,21 +391,19 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Sto
 			fmt.Fprintf(os.Stderr, "%s\n", r.Message)
 		}
 
+		rec.Assertions = append(rec.Assertions, runner.AssertionRecords(results)...)
 		if summary.Failed > 0 {
 			assertionErr = mergeAssertionErrors(assertionErr, fmt.Errorf("assertion failed: %s", cliAssertionFailureMessage(results)))
+			if rec.FailurePhase == "" {
+				rec.FailurePhase = runner.FailurePhaseAssertion
+			}
 		}
 	}
 
-	history := types.NewExecutionHistory(
-		req.ID,
-		string(resp.Body),
-		resp.StatusCode,
-		resp.Duration.Milliseconds(),
-		resp.Size,
-	)
-	if err := db.SaveHistory(history); err != nil {
+	if err := db.SaveHistory(rec); err != nil {
 		return fmt.Errorf("failed to save history: %w", err)
 	}
+	failed = rec
 
 	if outputPath := c.String("output"); outputPath != "" {
 		if !c.Bool("force") {
@@ -413,10 +424,71 @@ func executeSingleRequest(ctx context.Context, db storage.DB, envStorage env.Sto
 	}
 
 	format := c.String("format")
-	if err := printResponse(os.Stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
+	if err := printResponse(stdout, clientReq.Method, clientReq.URL, resp, format); err != nil {
 		return err
 	}
 	return mergeAssertionErrors(assertionErr, httpFailure(c, resp.StatusCode))
+}
+
+// envName is the name of e, or "" for no environment.
+func envName(e *env.Environment) string {
+	if e == nil {
+		return ""
+	}
+	return e.Name
+}
+
+// keepRecord saves rec, the record of a failed execution, and returns it for
+// the failure notice. It returns nil, after a warning on stderr, when there
+// is no record or it cannot be saved.
+func keepRecord(db storage.DB, rec *types.ExecutionHistory) *types.ExecutionHistory {
+	if rec == nil {
+		return nil
+	}
+	if err := db.SaveHistory(rec); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to save execution record: %v\n", err)
+		return nil
+	}
+	return rec
+}
+
+// printFailureNotice prints the failure notice of rec when it failed,
+// starting a new line when the response body printed to stdout did not end
+// one (stdout may be nil).
+func printFailureNotice(w io.Writer, rec *types.ExecutionHistory, stdout *lineTracker) {
+	if rec == nil {
+		return
+	}
+	notice := runner.FailureNotice(rec)
+	if notice == "" {
+		return
+	}
+	if stdout != nil && stdout.midLine {
+		fmt.Fprintln(w)
+		stdout.midLine = false
+	}
+	fmt.Fprintln(w, notice)
+}
+
+// lineTracker is a writer that remembers whether the last write to a
+// terminal ended mid-line, so a notice on the same terminal starts on its
+// own line.
+type lineTracker struct {
+	w        io.Writer
+	terminal bool
+	midLine  bool
+}
+
+func newLineTracker(f *os.File) *lineTracker {
+	return &lineTracker{w: f, terminal: term.IsTerminal(int(f.Fd()))}
+}
+
+func (t *lineTracker) Write(p []byte) (int, error) {
+	n, err := t.w.Write(p)
+	if n > 0 && t.terminal {
+		t.midLine = p[n-1] != '\n'
+	}
+	return n, err
 }
 
 // httpFailure returns an error for non-2xx statuses when --fail is set.
@@ -455,43 +527,15 @@ func executeDryRun(ctx context.Context, db storage.DB, envStorage env.Store, nam
 		return nil
 	}
 
-	vars := resolve.Vars(scopes)
-	var secrets []string
-	for key, v := range vars {
-		if (v.Secret || isSensitiveName(key)) && v.Value != "" {
-			secrets = append(secrets, v.Value)
-		}
-	}
-	// A secret overridden by a higher scope can still reach the request
-	// through an alias, so mask every secret-marked value, winning or not.
-	for key := range scopes.EnvSecrets {
-		if value := scopes.Env[key]; value != "" {
-			secrets = append(secrets, value)
-		}
-	}
-	for key := range scopes.CollectionSecrets {
-		if value := scopes.Collection[key]; value != "" {
-			secrets = append(secrets, value)
-		}
-	}
-	for key, value := range result.DirtyVars {
-		if (vars[key].Secret || isSensitiveName(key)) && value != "" {
-			secrets = append(secrets, value)
-		}
-	}
-	mask := func(s string) string {
-		for _, secret := range secrets {
-			s = strings.ReplaceAll(s, secret, secretMask)
-		}
-		return s
-	}
+	secrets := redact.ScopeSecrets(scopes, result.DirtyVars)
+	mask := func(s string) string { return redact.Replace(s, secrets) }
 
 	preview := execution.Request
 	fmt.Fprintf(out, "%s %s\n", result.PlannedMethod, mask(result.PlannedURL))
 	for _, h := range preview.Headers {
 		value := h.Value
-		if isSensitiveName(h.Key) && shouldMaskValue(value) {
-			value = secretMask
+		if redact.SensitiveName(h.Key) && redact.Literal(value) {
+			value = redact.Mask
 		}
 		fmt.Fprintf(out, "%s: %s\n", h.Key, mask(value))
 	}
@@ -613,7 +657,9 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage env.Store,
 			}
 		}
 		if execution.Result.Error != "" {
-			fmt.Fprintf(os.Stderr, "Row %d: request failed: %v\n", rowNum, execution.Result.Error)
+			rec := execution.Record(envName(runEnv))
+			fmt.Fprintf(os.Stderr, "Row %d: request failed: %v\n", rowNum, rec.Error)
+			printFailureNotice(os.Stderr, keepRecord(db, rec), nil)
 			return nil
 		}
 		if execution.Result.Skipped || execution.Response == nil {
@@ -622,18 +668,14 @@ func executeDataDriven(ctx context.Context, db storage.DB, envStorage env.Store,
 		}
 		resp := *execution.Response
 
-		history := types.NewExecutionHistory(
-			req.ID,
-			string(resp.Body),
-			resp.StatusCode,
-			resp.Duration.Milliseconds(),
-			resp.Size,
-		)
-		if err := db.SaveHistory(history); err != nil {
+		rec := execution.Record(envName(runEnv))
+		if err := db.SaveHistory(rec); err != nil {
 			fmt.Fprintf(os.Stderr, "Row %d: failed to save history: %v\n", rowNum, err)
+			rec = nil
 		}
 
 		fmt.Fprintf(os.Stdout, "Row %d [%s]: %d (%dms)\n", rowNum, name, resp.StatusCode, resp.Duration.Milliseconds())
+		printFailureNotice(os.Stderr, rec, nil)
 
 		return nil
 	})
