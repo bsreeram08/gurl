@@ -22,7 +22,7 @@ class Gurl < Formula
   end
 
   def install
-    bin.install "gurl"
+    bin.install Dir["gurl-*"].first => "gurl"
   end
 
   def post_install
