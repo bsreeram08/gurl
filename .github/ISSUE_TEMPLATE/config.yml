@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/bsreeram08/gurl/security/advisories/new
+    about: Report vulnerabilities privately, not as public issues.
+  - name: Documentation
+    url: https://bsreeram08.github.io/gurl/
+    about: Guides and the command reference.
