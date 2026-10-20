@@ -173,6 +173,35 @@ func TestCollectionRunCommandDryRunPrintsDiagnostics(t *testing.T) {
 	}
 }
 
+func TestCollectionRunCommandReporterOutputCreatesMissingDirectory(t *testing.T) {
+	db := newMockDB()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+	db.SaveRequest(&types.SavedRequest{ID: "ping", Name: "ping", Method: "GET", URL: server.URL, Collection: "orders"})
+
+	outDir := filepath.Join(t.TempDir(), "out", "nested", "reports")
+	cmd := CollectionRunCommand(db, newTestEnvStorage(t))
+	output := captureStdoutFile(t, func() {
+		if err := cmd.Run(context.Background(), []string{"run", "orders", "--reporter", "junit", "--reporter-output", outDir}); err != nil {
+			t.Fatalf("collection run failed: %v", err)
+		}
+	})
+
+	report := filepath.Join(outDir, "report.xml")
+	data, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("report not written: %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(string(data), "<testsuite") {
+		t.Fatalf("not a JUnit report:\n%s", data)
+	}
+	if !strings.Contains(output, "Report written to "+report) {
+		t.Fatalf("missing confirmation:\n%s", output)
+	}
+}
+
 func TestCollectionRunUsesCollectionVarsBetweenEnvAndCLI(t *testing.T) {
 	db := storage.NewLMDBWithPath(filepath.Join(t.TempDir(), "collections.db"))
 	if err := db.Open(); err != nil {
