@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.6.0] - 2026-10-20
 
 ### Added
 
@@ -13,11 +13,19 @@
 
 - Execution records store the method, URL, headers, body, variables, response headers, error, failure phase and assertion results. Secrets are masked before saving; response bodies are stored as before. Older records still load.
 - The masking rules used by `show`, `list --json`, `codegen`, `paste` and `run --dry-run` now live in one package (`internal/redact`), shared with execution records.
+- Request resolution is one module (`internal/resolve`) used by `run`, `collection run`, the shell and the TUI. Errors list every problem at once, e.g. `missing required variables: a, b; body: …`.
+- The shell and TUI resolve `{{$uuid}}`-style dynamic functions, as do auth params.
+- `run --dry-run` shows the request after pre-request scripts run and never applies auth (which could contact a token endpoint).
+- `--persist` returns an error for a locked collection instead of overwriting it.
+- Collections and environments each sit behind one storage interface.
 
 ### Fixed
 
 - Two runs of a request in the same second no longer overwrite each other's history.
 - `history`, `diff` and `timeline` showed the oldest entries when a request had more than `--limit` entries; they now show the newest.
+- Errors returned by `run` no longer print secrets (e.g. a transport error showing `?api_key=…`).
+- Masking also catches URL- and JSON-escaped copies of secrets, and secrets overridden by a higher scope but reached through an alias in dry runs.
+- Shell and TUI path parameters are filled from any scope; `{{baseUrl}}/users/:id` no longer fails.
 
 ## [v0.5.0] - 2026-10-19
 
