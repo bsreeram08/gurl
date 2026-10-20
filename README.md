@@ -1,512 +1,285 @@
 # gurl
 
-[![Latest Release](https://img.shields.io/github/v/release/bsreeram08/gurl)](https://github.com/bsreeram08/gurl/releases/latest)
-[![Go Version](https://img.shields.io/badge/go-1.25.0%2B-blue)](https://go.dev)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+A terminal library of named HTTP requests, run against environments and collections, with variables filled in at send time.
 
-![gurl logo](assets/logo.jpg)
+[![Latest release](https://img.shields.io/github/v/release/bsreeram08/gurl)](https://github.com/bsreeram08/gurl/releases/latest)
+[![Build](https://github.com/bsreeram08/gurl/actions/workflows/build.yml/badge.svg)](https://github.com/bsreeram08/gurl/actions/workflows/build.yml)
+[![Container image](https://img.shields.io/badge/ghcr.io-bsreeram08%2Fgurl-blue?logo=docker)](https://github.com/bsreeram08/gurl/pkgs/container/gurl)
 
-A CLI API workbench. Save requests, run them with environments, assert on responses, generate client code. All from the terminal.
+**Docs:** <https://bsreeram08.github.io/gurl/>
 
-Not a curl wrapper. gurl persists requests, manages project-backed collections and environments, keeps secrets encrypted, runs JavaScript hooks, and speaks HTTP, GraphQL, gRPC, WebSocket, and SSE.
+## Why gurl
 
-> **Status: early (v0.4.x).** The CLI works. The TUI (`gurl tui`) exists in code but is not functional yet. Everything below describes the CLI interface.
+- **Named, replayable requests.** Save a request once as `get-user` and run it by name instead of digging through shell history.
+- **Secrets stay out of sight.** Secret values are encrypted at rest, masked in every output and execution record, and can be handed to other tools with `gurl exec` without being printed.
+- **Fails loudly, not silently.** An unresolved `{{placeholder}}` stops the run instead of being sent. Every run is recorded, and `gurl diag <id>` shows what was sent and what changed since the last success.
+- **Built for scripts and AI agents.** `gurl docs` is a single reference generated from the binary. `--json`, `--agent` and stable exit codes make the output easy to parse.
+- **Local-first and git-friendly.** One binary, no account. Collections and environments can live in a `.gurl/` directory next to your code.
 
-## Features
+## Install
 
-- **Named requests** — save any curl command with a name, replay it forever
-- **Variable templates** — `{{token}}`, `{{BASE_URL}}`, substituted at runtime with `--var` or environments
-- **Environments** — swap base URLs, secrets, and tokens between dev/staging/prod
-- **Collections** — group requests with scoped variables and encrypted collection secrets
-- **Git-friendly projects** — commit `.gurl/collections/` and `.gurl/environments/` alongside code
-- **Import** — OpenAPI, Insomnia, Bruno, Postman, HAR
-- **Auth handlers** — Basic, Bearer, API Key, Digest, OAuth 1/2, AWS SigV4, NTLM — saved with requests, template-aware
-- **Protocols** — HTTP, GraphQL, gRPC, WebSocket, SSE
-- **Scripting** — JavaScript pre/post-request hooks (goja runtime)
-- **Assertions** — assert on status, headers, body, jsonpath, regex, and extracted variables
-- **Request chaining** — `setNextRequest`, `run-if`, extracted variables flow between requests
-- **Collection runner** — data-driven testing with CSV/JSON, dry runs, assertion bail mode
-- **Code generation** — curl, Go, Python, JavaScript from any saved request
-- **Execution history** — per-request history, global timeline, diff between runs
-- **Plugin system** — middleware, output formatters, commands, and auth handlers
-
-### Known limitations
-
-- The TUI is not functional. Use the CLI commands below.
-- Collection-level auth inheritance is defined but not wired into the execution path yet.
-
-## Installation
-
-### Homebrew (macOS / Linux)
+### Homebrew (macOS, Linux)
 
 ```bash
 brew tap bsreeram08/gurl https://github.com/bsreeram08/gurl
 brew install gurl
 ```
 
-### One-liner
+### Install script
 
 ```bash
 curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/install.sh | bash
 ```
 
-### GitHub Packages / Container
+This installs to `~/.local/bin` (set `INSTALL_DIR` to change it).
 
-Public GHCR packages can be pulled without authentication. If GitHub still shows the package as private, log in first with a token that has `read:packages`:
+### Binary download
+
+Each [release](https://github.com/bsreeram08/gurl/releases/latest) has binaries for `darwin-arm64`, `darwin-amd64`, `linux-amd64` and `linux-arm64`, plus `SHA256SUMS`:
 
 ```bash
-echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
+curl -Lo gurl https://github.com/bsreeram08/gurl/releases/latest/download/gurl-darwin-arm64
+chmod +x gurl && sudo mv gurl /usr/local/bin/gurl
 ```
+
+### Docker
+
+The public, multi-arch (`linux/amd64`, `linux/arm64`) image is published on every release. `latest` follows the newest stable release, and each release also has its own tag, such as `v0.7.0`.
 
 ```bash
 docker run --rm ghcr.io/bsreeram08/gurl:latest --version
 docker run --rm -v "$PWD:/work" -w /work ghcr.io/bsreeram08/gurl:latest list
 ```
 
-Images are published automatically for every release (`linux/amd64` and `linux/arm64`). `latest` tracks the newest stable release; each release is also tagged with its version (for example `v0.7.0`, matching the [GitHub release](https://github.com/bsreeram08/gurl/releases) tag). Pin a version tag for reproducible runs:
-
-```bash
-docker run --rm ghcr.io/bsreeram08/gurl:<version> --version   # e.g. ghcr.io/bsreeram08/gurl:v0.7.0
-```
-
-To keep gurl's local database, project files, and encrypted key material across container runs, mount the relevant host directories:
+To keep the request database and secret keys between runs, mount them:
 
 ```bash
 docker run --rm \
-  -v "$PWD:/work" \
+  -v "$PWD:/work" -w /work \
   -v "$HOME/.local/share/gurl:/home/gurl/.local/share/gurl" \
   -v "$HOME/.config/gurl:/home/gurl/.config/gurl" \
-  -w /work \
   ghcr.io/bsreeram08/gurl:latest list
 ```
 
-### Pre-built Binaries
+### Build from source
 
-Download from [GitHub Releases](https://github.com/bsreeram08/gurl/releases/latest):
-
-```bash
-# macOS (Apple Silicon)
-curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-darwin-arm64.tar.gz
-tar -xzf gurl-darwin-arm64.tar.gz && sudo mv gurl /usr/local/bin/gurl
-
-# Linux (amd64)
-curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-amd64.tar.gz
-tar -xzf gurl-linux-amd64.tar.gz && sudo mv gurl /usr/local/bin/gurl
-
-# Linux (arm64)
-curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-arm64.tar.gz
-tar -xzf gurl-linux-arm64.tar.gz && sudo mv gurl /usr/local/bin/gurl
-```
-
-### Build from Source
+Requires Go 1.25 or newer.
 
 ```bash
-git clone https://github.com/bsreeram08/gurl.git
-cd gurl
+git clone https://github.com/bsreeram08/gurl.git && cd gurl
 go build -o gurl ./cmd/gurl
-sudo mv gurl /usr/local/bin/
-gurl --version
 ```
 
-## Quick Start
+### Upgrade
 
 ```bash
-# Save a request
-gurl save "health" https://api.example.com/health
-
-# Save with full curl flags
-gurl save "create-order" https://api.example.com/orders \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer {{token}}" \
-  -d '{"customer_id": "{{customerId}}"}'
-
-# Or pipe a raw curl string
-echo 'curl -X POST https://api.example.com/orders -d "{}"' | gurl save "create-order"
-
-# Run it
-gurl run "create-order" --var token=abc123 --var customerId=42
-
-# List all saved requests
-gurl list
+gurl update
 ```
 
-## For AI Agents
-
-gurl is designed to give coding agents a safe, repeatable way to inspect and exercise APIs without putting credentials in the model context.
-
-**Start here:** `gurl docs` prints one compact reference (about 25KB): every command and subcommand with its arguments and flags (types, defaults, aliases), generated from the binary itself, plus placeholders, scope precedence, extract rules, `--persist`, the `run --json` shape and exit codes. `gurl docs run` narrows it to one command, and `gurl docs --json` returns `{"commands":[{"path","usage","args","flags":[{"name","aliases","type","default","usage"}]}],"sections":{...}}`.
-
-The agent should operate on names, environments, collections, and templates:
+## Quickstart
 
 ```bash
-# Good: the agent sees stable names, not secrets
-gurl run "get-user" --env staging
-gurl collection run "checkout-flow" --env staging --dry-run
-gurl collection show "payments-api"
+# 1. Save a request and run it
+gurl save health https://api.example.com/health
+gurl run health
 
-# Avoid: do not paste raw tokens into prompts or commands
-gurl run "get-user" --var API_KEY=sk-live-...
+# 2. Create an environment. KEY=- reads the value from stdin (no echo on a terminal)
+gurl env create dev --var BASE_URL=https://dev.example.com --var API_KEY=- --secret API_KEY
+
+# 3. Save a request with placeholders and run it with the environment
+gurl save get-user '{{BASE_URL}}/users/{{id}}' -H 'Authorization: Bearer {{API_KEY}}'
+gurl run get-user --env dev --var id=42
+
+# 4. Preview without sending (secrets masked)
+gurl run get-user --env dev --var id=42 --dry-run
+
+# 5. Group requests into a collection and run them all
+gurl collection create users-api --var 'API={{BASE_URL}}/v1'
+gurl save list-users '{{API}}/users' --collection users-api
+gurl collection run users-api --env dev
+
+# 6. When something fails, gurl prints a record id. Inspect it:
+#    request failed: HTTP 500 (id: 078b9896) — inspect with: gurl diag 078b9896
+gurl diag 078b9896
 ```
 
-Recommended agent workflow:
+## Feature tour
 
-1. Read `gurl docs`, then discover what exists with `gurl list`, `gurl env list`, and `gurl collection list`.
-2. Inspect before running with `gurl show <request>` or `gurl collection show <collection>`.
-3. Prefer named environments and collections over ad-hoc `--var` secrets.
-4. Use `--dry-run` before collection runs to see request order, variable sources, and unresolved templates.
-5. Run the smallest named request or collection that answers the task.
-6. Use `--persist` only when the task explicitly needs extracted/script variables saved back.
-
-Credential-safe setup for humans:
+### Environments and secrets
 
 ```bash
-gurl collection create "payments-api" \
-  --var BASE_URL=https://api.example.com \
-  --secret API_KEY=sk-live-...
+gurl env create prod --var BASE_URL=https://api.example.com --var API_KEY=- --secret API_KEY
+gurl env show prod              # API_KEY = *****
+gurl env show prod --reveal     # prints the value (refused in agent mode)
+gurl env switch prod            # make it the active environment
+gurl env import prod --file .env     # add variables from a .env file
 
-gurl save "list-payments" '{{BASE_URL}}/payments' \
-  --collection payments-api \
-  --auth bearer \
-  --auth-param token='{{API_KEY}}'
-
-# After setup, the agent only needs:
-gurl run "list-payments"
+# Alias: one set of requests works across environments that name keys differently
+gurl env set partner-beta 'API_KEY={{SA_KEY}}'
 ```
 
-Project-backed sharing for teams and agents:
+Secret values are encrypted at rest with AES-256-GCM. `env show`, `show`, `list --json`, `codegen` and `paste` mask secret values and credential headers unless you pass `--reveal`.
+
+### Placeholders
 
 ```bash
-gurl init
-gurl collection migrate "payments-api"
-git add .gurl
-git commit -m "add payments API collection"
+# Typed placeholders keep a saved JSON body valid: "{{amount:num}}" sends 5, not "5"
+gurl save create-order '{{BASE_URL}}/orders' -X POST \
+  -d '{"amount":"{{amount:num}}","ref":"{{$uuid}}"}'
+gurl run create-order --env dev --var amount=5
 ```
 
-`.gurl/.gitignore` keeps local `collection.key` files out of git. To share secrets without sharing key files:
+- `{{name}}` works in the URL, headers, body and auth params.
+- Types: `num`, `bool`, `raw`.
+- Dynamic values: `{{$uuid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt(1,100)}}`, `{{$randomString(8)}}`, `{{$randomEmail}}`.
+- An unresolved placeholder fails the run with a resolution problem instead of being sent.
+- Scope precedence, lowest first: environment < collection < data row (`--data`) < CLI (`--var`) < runtime (values extracted or set by a script earlier in the run).
+
+### Chaining, extract and `--persist`
 
 ```bash
-gurl collection export "payments-api" --passphrase "$TEAM_SECRET" --output payments-api.gurl
-gurl collection import payments-api.gurl --passphrase "$TEAM_SECRET"
+gurl save login '{{BASE_URL}}/auth/login' -X POST -d '{"user":"{{user}}"}' \
+  --extract token=jsonpath:$.token \
+  --post-script "gurl.setNextRequest('profile')"
+
+gurl run login --env dev --chain --persist --assert "status=200"
+
+# Try extraction rules on a saved response without sending anything
+gurl extract 'id=jsonpath:$.data.items[0].id' --file response.json
 ```
 
-For CI or non-interactive agents, provide collection import/unlock passphrases with `GURL_IMPORT_PASSPHRASE` or `--passphrase`.
+Extract methods are `jsonpath:`, `jq:` (an alias of jsonpath), `header:` and `regex:` (first capture group). Extracted values are dropped after the run unless you pass `--persist`, which writes each value back to its variable origin (the environment or the request's collection).
 
-### Agent mode
-
-Use one switch, any of these three:
+### Collections and data-driven runs
 
 ```bash
-gurl --agent run "get-user" --env staging     # flag, any position
-GURL_AGENT=1 gurl run "get-user"              # environment variable
-ln -s "$(command -v gurl)" ~/.local/bin/agentgurl
-agentgurl run "get-user"                      # binary named agentgurl
+gurl collection run checkout --env staging --dry-run       # order and resolved URLs, nothing sent
+gurl collection run checkout --env staging --data rows.csv  # one iteration per CSV/JSON row
+gurl collection run checkout --env staging --bail --reporter junit --reporter-output out/
+
+gurl init                          # create .gurl/ in this repo
+gurl collection migrate checkout   # move the collection into .gurl/ to commit it
+```
+
+`.gurl/.gitignore` keeps the local `collection.key` files out of git. To share secrets, use `gurl collection export --passphrase` and `gurl collection import --passphrase`. In CI, set `GURL_IMPORT_PASSPHRASE` instead.
+
+### Diagnosing failures and history
+
+Every `run`, `collection run` and shell send is recorded, including attempts that never got a response. Dry runs are not recorded.
+
+```bash
+gurl history get-user              # record ids, statuses and durations
+gurl diag 078b9896                 # any unique id prefix works; --full, --json
+gurl diff get-user                 # compare the last two responses
+gurl timeline --since 24h
+```
+
+`diag` shows the request as sent, where each variable came from, the response, assertions, and what changed since the last successful run. Secret values are masked before records are saved.
+
+### exec
+
+```bash
+gurl exec --env prod -- node e2e.mjs   # the environment's variables arrive as process.env.API_KEY etc.
+```
+
+gurl never prints the values, and the command's exit code is passed through.
+
+### Code generation, import and export
+
+```bash
+gurl codegen get-user --lang python    # go, python, javascript, curl; secrets masked
+gurl import ./postman_collection.json  # OpenAPI, Insomnia, Postman, Bruno, HAR, .gurl (auto-detected)
+gurl export --collection users-api -o users-api.gurl
+echo 'curl -X POST https://api.example.com/x -d "{}"' | gurl detect --name x
+```
+
+### Other protocols
+
+```bash
+gurl graphql https://api.example.com/graphql --query '{ me { id } }'
+gurl grpc localhost:50051 --list
+gurl ws wss://echo.example.com --send '{"ping":1}'
+gurl sse https://api.example.com/events --event update
+```
+
+Authentication is saved with the request: `--auth basic|bearer|apikey|oauth1|oauth2|awsv4|digest|ntlm` plus repeated `--auth-param KEY=VALUE`. Run `gurl auth list` and `gurl auth info <type>` for the parameters.
+
+## For AI agents
+
+**Start with `gurl docs`.** It prints a compact reference of every command, flag and concept, generated from the binary (under 32KB). `gurl docs run` narrows it to one command, and `gurl docs --json` returns it as structured data.
+
+Turn on agent mode in any of three ways:
+
+```bash
+gurl --agent run get-user --env dev       # flag, in any position
+GURL_AGENT=1 gurl run get-user --env dev  # environment variable
+ln -s "$(command -v gurl)" ~/.local/bin/agentgurl && agentgurl run get-user --env dev
 ```
 
 Agent mode:
 
-- turns on `--json` for every command that has it (`run`, `run --dry-run`, `diag`, `list`, `show`, `env list`/`show`, `history`, `timeline`, `diff`, `collection list`/`show`, `docs`)
-- turns on `--no-input`
-- masks secrets strictly: `--reveal` is refused, `paste` and `codegen --clipboard` are refused, and secret values are also masked in response bodies, response headers and errors. Secret values here means secret or credential-looking variables and literal secrets in the saved request, including their URL- and JSON-escaped forms. Outside agent mode, `run --json` shows bodies as received, like execution records.
+- turns on `--json` wherever a command supports it, and `--no-input`, so a command never prompts and instead fails naming what to pass;
+- refuses `--reveal`, `paste` and `codegen --clipboard` (exit 2);
+- masks secret values in response bodies, response headers and errors as well as in requests;
+- prints every error on stdout as `{"ok":false,"error":"..."}`.
 
-Every error is printed on stdout as `{"ok":false,"error":"..."}`, unless it is already part of an execution object. The message also goes to stderr.
-
-`--no-input` (or `GURL_NO_INPUT=1`; implied by `--json` and `--agent`) never prompts. A command that would ask fails and names what to pass instead, for example `request name is required: gurl run <name>`, `collection "x" does not exist; create it first with 'gurl collection create x'`, or `passphrase required: pass --passphrase or set GURL_IMPORT_PASSPHRASE`. `gurl shell` refuses to start.
-
-### `run --json`
-
-stdout carries only JSON: one object for a single run, and NDJSON (one line per step or row) for `--chain` and `--data`. With `--persist`, `persisted` is on the last line. Status lines, notes and assertion summaries are not printed, and the failure notice is dropped because `id` is in the object. Empty fields are omitted:
+`run --json` prints one object per execution (NDJSON for `--chain` and `--data`):
 
 ```json
-{"id":"7fd1254b-5a17-48b1-ad64-ac7f874d365e","short_id":"7fd1254b","request":"get-user","environment":"dev",
- "ok":true,"method":"POST","url":"http://127.0.0.1:18731/users?api_key=*****","status":200,"status_text":"OK",
- "duration_ms":4,"size_bytes":144,"response_headers":{"Content-Type":"application/json","Set-Cookie":"*****"},
- "body":{"id":"u-123"},"extracted":{"uid":"u-123"}}
+{"id":"77f8d53b-...","short_id":"77f8d53b","request":"get-user","environment":"dev","ok":true,
+ "method":"GET","url":"https://dev.example.com/users/7","status":200,"duration_ms":4,
+ "body":{"id":"u-123","auth":"Bearer *****"}}
 ```
 
-(This example is wrapped here; the real output is one line.)
+A failed run has `error`, `failure_phase` and, for resolution problems, a `problems` list (`missing`, `leftover_placeholder`, `bad_type`, `unknown_dynamic`, `auth`). Pass `short_id` to `gurl diag <id> --json`.
 
-- `ok` is true when there was no error, no failed assertion and the status was 2xx.
-- `body` is the parsed JSON value when the body is valid JSON, otherwise a string.
-- A failed attempt has `error` and `failure_phase`: `request_build`, `http`, `extraction`, `assertion`, `status`, `pre_request_script`, `post_response_script`, `run_if` or `next_request`.
-- Unresolvable requests list structured `problems`:
-
-```json
-{"ok":false,"failure_phase":"request_build","error":"variable substitution failed: missing required variables: API_KEY",
- "problems":[{"kind":"missing","variable":"API_KEY","location":"header Authorization","message":"missing required variable \"API_KEY\""}], ...}
-```
-
-Problem kinds are `missing`, `leftover_placeholder`, `bad_type`, `unknown_dynamic` and `auth`.
-
-`run --dry-run --json` prints `{"dry_run":true,"ok":...,"method","url","headers":[{"key","value"}],"body","extracts":[{"name","source"}],"problems":[...]}` with secrets masked. Nothing is sent or recorded, and it exits 1 when there are problems.
-
-Pass the `id` or `short_id` to `gurl diag <id> --json` to see the request as sent, where each variable came from, and what changed since the last success.
-
-### Exit codes
-
-| Code | Meaning |
-|------|---------|
+| Exit code | Meaning |
+|-----------|---------|
 | 0 | Success. A non-2xx response is still 0 unless `--fail` is passed (`ok` is false in JSON). |
-| 1 | Error: request or environment not found, resolution problems, transport error, script or extraction error, failed assertion, non-2xx with `--fail`, dry run with problems, unknown flag |
-| 2 | Usage: missing argument with `--no-input`, conflicting flags (`--persist --dry-run`), `--reveal` in agent mode, `shell` with `--no-input` |
+| 1 | Error: not found, resolution problems, transport, script, extraction or assertion failure, non-2xx with `--fail`. |
+| 2 | Usage: missing argument with `--no-input`, conflicting flags, `--reveal` in agent mode. |
 
-`gurl exec --env NAME -- <cmd>` runs a command with the environment's variables in its process environment, without printing them, and exits with the command's exit code.
+`collection run` uses its own codes: 0 all passed, 1 a request failed (or was skipped, with `--ci`), 2 runtime error, 3 empty or missing collection. `exec` exits with the command's code.
 
-## Real Workflows
+Work with names, not secrets: have a human create environments with `KEY=-`, then let the agent run `gurl run <name> --env <env>`. Never pass live tokens through `--var`.
 
-### Share API collections through git
+## Commands
 
-```bash
-gurl init
-
-gurl collection create "payments-api" \
-  --var BASE_URL=https://api.example.com \
-  --secret API_KEY=sk-live-...
-
-gurl save "list-payments" '{{BASE_URL}}/payments' \
-  --collection payments-api \
-  --auth bearer \
-  --auth-param token='{{API_KEY}}'
-
-gurl collection migrate "payments-api"
-git add .gurl
-git commit -m "add payments API collection"
-```
-
-The collection directory contains request JSON plus `collection.json`. Secret values are encrypted at rest, and local `collection.key` files are gitignored.
-
-### Migrate from Postman, keep your terminal
-
-```bash
-# Import your existing collection
-gurl import postman ./my-collection.json
-
-# Everything is here — names, auth, variables
-gurl list
-gurl run "Get Users" --env staging
-```
-
-### Test APIs with scripting and assertions
-
-```bash
-# Save extraction and scripts on a request
-gurl save "login" https://api.example.com/auth/login \
-  -X POST \
-  --extract token=jsonpath:$.token \
-  --post-script "gurl.setNextRequest('profile')"
-
-# Run the chain, then persist extracted/script variables to the environment
-gurl run "login" --env dev --chain --persist --assert "extract:token != ''"
-```
-
-### Save authentication with the request
-
-```bash
-# Discover the handlers and their parameters
-gurl auth list
-gurl auth info bearer
-
-# Save a bearer token once, then run the request later
-gurl save "profile" https://api.example.com/me \
-  --auth bearer \
-  --auth-param token='{{token}}'
-
-gurl run "profile" --var token=abc123
-
-# Basic auth and API keys work the same way
-gurl save "admin" https://api.example.com/admin \
-  --auth basic \
-  --auth-param username='{{user}}' \
-  --auth-param password='{{password}}'
-
-gurl save "search" https://api.example.com/search \
-  --auth apikey \
-  --auth-param header=X-API-Key \
-  --auth-param value='{{api_key}}'
-```
-
-Auth parameters use repeated `--auth-param key=value` flags. Saved auth settings are applied when you run the request, after variable templates are substituted.
-
-### Run collections with data-driven inputs
-
-```bash
-# Run every request in a collection with CSV test data
-gurl collection run "checkout-flow" --data ./test-data.csv --env staging
-
-# Preview the flow without sending requests
-gurl collection run "checkout-flow" --env staging --dry-run
-
-# Stop only when an assertion fails
-gurl collection run "checkout-flow" --env staging --assert-bail
-```
-
-### Compare responses over time
-
-```bash
-# See what changed between the last two runs
-gurl diff "get-user"
-
-# Or browse the full timeline
-gurl timeline --pattern "get-*"
-```
-
-### Generate client code from saved requests
-
-```bash
-gurl codegen "create-order" --lang python
-gurl codegen "create-order" --lang javascript
-gurl codegen "create-order" --lang go
-gurl codegen "create-order" --lang curl
-```
-
-## All Commands
-
-| Command | Description |
-|---------|-------------|
-| `save` | Save a request (flags or raw curl string) |
-| `run` | Execute a saved request with variable substitution |
-| `list` | List saved requests (filter by collection, tag, pattern) |
-| `auth` | Discover supported authentication types and parameters |
-| `detect` | Parse curl from stdin |
+| Command | What it does |
+|---------|--------------|
+| `init` | Create a `.gurl/` project directory |
+| `save` | Save a request (flags or a raw curl string) |
+| `run` | Execute a saved request |
+| `list` | List saved requests |
+| `show` | Show a saved request (secrets masked) |
 | `edit` | Edit a saved request |
-| `delete` | Delete a saved request |
-| `rename` | Rename a saved request |
-| `show` | Show full request details |
-| `history` | Show execution history for a request |
-| `timeline` | Global execution timeline across all requests |
-| `diff` | Compare last two responses for a request |
+| `rename` / `delete` | Rename or remove a saved request |
+| `detect` | Parse a curl command from stdin or a file |
+| `history` | Execution history for a request |
+| `timeline` | Execution timeline across all requests |
+| `diff` | Compare responses for a request |
 | `diag` | Inspect one execution and compare it with the last success |
-| `env` | Manage environments (create, list, show, switch) |
-| `collection` | Manage collections |
-| `sequence` | Run multiple requests in sequence |
-| `graphql` | Execute a GraphQL query |
-| `export` | Export requests to JSON |
-| `import` | Import from OpenAPI/Insomnia/Bruno/Postman/HAR |
-| `paste` | Copy request as curl command to clipboard |
-| `codegen` | Generate code (curl, Go, Python, JavaScript) |
+| `env` | Manage environments |
 | `exec` | Run a command with an environment's variables injected |
+| `collection` | Manage and run collections |
+| `sequence` | Set execution order within a collection |
 | `extract` | Test extraction rules against a sample response |
-| `docs` | Compact reference of every command, flag and concept (`--json` for agents) |
-| `tui` | Launch interactive TUI (not functional yet) |
-| `update` | Self-update to latest release |
+| `auth` | List authentication types and their parameters |
+| `codegen` | Generate go, python, javascript or curl code |
+| `import` / `export` | Import from OpenAPI, Insomnia, Postman, Bruno, HAR; export to gurl format |
+| `paste` | Copy a request as curl to the clipboard |
+| `graphql` / `grpc` / `ws` / `sse` | GraphQL, gRPC, WebSocket and Server-Sent Events |
+| `cookies` | Manage stored cookies |
+| `shell` | Interactive shell |
+| `docs` | Compact reference of every command and concept |
+| `update` | Update gurl to the latest release |
 
-## Environments
+Run `gurl <command> --help` or `gurl docs <command>` for flags.
 
-```bash
-# Create environments (KEY=- reads the value from stdin, prompting without echo on a terminal)
-gurl env create dev --var "BASE_URL=https://dev.api.com" --var API_KEY=- --secret API_KEY
-gurl env create prod --var "BASE_URL=https://api.com" --var API_KEY=- --secret API_KEY
+## Links
 
-# Alias keys so one request set works across envs that name credentials differently
-gurl env set nets-beta 'API_KEY={{SA_KEY}}'
-
-# Run with an environment
-gurl run "create-order" --env prod
-
-# Switch default environment
-gurl env use dev
-```
-
-Secrets are encrypted at rest with AES-256-GCM. `env show`, `show`, `list --json`, `codegen` and `paste` mask secret values and literal credential headers unless you pass `--reveal`.
-
-### Scripting
-
-```bash
-# Hand an environment to another tool without printing it
-gurl exec --env prod -- node e2e.mjs        # vars arrive as process.env.API_KEY, etc.
-
-# Machine-readable output
-gurl list --json
-gurl env list --json
-gurl env show prod --json                   # secrets masked
-gurl show "create-order" --json
-
-# Exit non-zero on non-2xx (body still printed); status lines go to stderr
-gurl run "create-order" --env prod --fail | jq .
-
-# Preview a request without sending it (secrets masked; fails on unresolved variables)
-gurl run "create-order" --env prod --dry-run
-
-# Find requests by name, URL or header value (e.g. a merchant ID)
-gurl list --pattern M-4242
-
-# Test extraction rules on a sample response without sending a request
-gurl extract 'orderId=jsonpath:$.data.items[0].id' < sample.json
-```
-
-### Diagnosing failures
-
-Every `run`, `collection run` and shell `send` is recorded, including attempts that never got a response (unresolved variables, connection errors, timeouts, script errors). When one fails, `run` names the record on stderr:
-
-```bash
-$ gurl run "health" --var REGION=us
-{"status":"error","error":"upstream timeout","region":"us"}
-request failed: HTTP 500 (id: 078b9896) — inspect with: gurl diag 078b9896
-
-$ gurl diag 078b9896          # or: gurl diag --id 078b9896; any unique prefix works
-```
-
-`diag` shows the request as sent, the variables and where each came from, the response (`--full` for bodies over 4KB), assertions, and what changed since the last successful run of the same request: status, duration, URL/headers/body, variable values and origins, response headers and top-level JSON fields. `--json` prints the same as JSON. `gurl history <name>` lists record ids. With `run --json` there is no notice on stderr: the record id is in the JSON object (`id`, `short_id`).
-
-Records never contain secrets: secret and credential-looking values are masked before saving, so secret variables are compared by origin only. Response bodies are stored as received.
-
-### Templates
-
-- An unresolved `{{var}}` fails the run instead of being sent, including when a variable's value is itself a leftover placeholder such as `{{orderId}}`.
-- Dynamic functions work in `run`: `{{$uuid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt(1,100)}}`, `{{$randomString(12)}}`, `{{$randomEmail}}`.
-- Typed placeholders keep saved bodies valid JSON: `{"amount":"{{amount:num}}"}` sends `{"amount":5}`. Types are `num`, `bool` and `raw`.
-- Extracted and script variables only carry into later runs with `--persist`; `run` prints a note when it drops them.
-
-## Collections and Projects
-
-Collections are first-class records with their own variables and secrets. Variable precedence is:
-
-```text
-CLI --var > collection variables > environment variables
-```
-
-Collection variables can reference environment variables:
-
-```bash
-gurl env create staging --var "BASE_URL=https://staging.example.com"
-gurl collection create "users-api" --var "API_URL={{BASE_URL}}/v1"
-```
-
-Project storage lives under `.gurl/`:
-
-```text
-.gurl/
-  collections/
-    users-api/
-      collection.json
-      list-users.json
-      collection.key   # local only, gitignored
-  environments/
-    staging.json
-```
-
-Run `gurl init` once in a repo. After that, gurl walks up parent directories to find `.gurl/`, or you can set `GURL_PROJECT_DIR` / `--project-dir` for CI.
-
-## Configuration
-
-`~/.config/gurl/config.toml` or `~/.gurlrc`:
-
-```toml
-[general]
-history_depth = 100
-auto_template = true
-timeout = "30s"
-
-[output]
-default_format = "auto"
-syntax_highlight = true
-json_pretty = true
-```
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
-
-MIT
+- Documentation: <https://bsreeram08.github.io/gurl/>
+- [CHANGELOG](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- License: MIT

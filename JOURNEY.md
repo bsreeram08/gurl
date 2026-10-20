@@ -6,6 +6,8 @@
 
 *(Like GNU = "GNU's Not Unix")*
 
+> This is a historical decision log, kept as written. Some entries are out of date: request chaining (`run --chain`, `--extract`, `--persist`) did ship, and the interactive interface is `gurl shell` (the `tui` command is hidden). For current behavior, see [README.md](README.md) and [CHANGELOG.md](CHANGELOG.md).
+
 ---
 
 ## The Beginning
