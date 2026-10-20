@@ -2,8 +2,8 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/sreeram/gurl/internal/redact"
@@ -44,36 +44,18 @@ func PasteCommand(db storage.DB) *cli.Command {
 			// Join for display (safe - no shell execution)
 			displayCmd := strings.Join(curlLines(req), " ")
 
-			// Try to copy to clipboard using pbcopy (macOS) or xclip (Linux)
-			var copyCmd *exec.Cmd
-			switch {
-			case isCommandAvailable("pbcopy"):
-				copyCmd = exec.Command("pbcopy")
-			case isCommandAvailable("xclip"):
-				copyCmd = exec.Command("xclip", "-selection", "clipboard")
-			case isCommandAvailable("wl-copy"):
-				copyCmd = exec.Command("wl-copy")
-			default:
+			if err := clipboardWrite(displayCmd); err != nil {
+				if !errors.Is(err, errNoClipboard) {
+					return fmt.Errorf("failed to copy to clipboard: %w", err)
+				}
 				// Fallback: just print the command
 				fmt.Println("Clipboard tools not available. Curl command:")
 				fmt.Println(displayCmd)
 				return nil
 			}
 
-			// Use array form - no shell=True
-			copyCmd.Stdin = strings.NewReader(displayCmd)
-			if err := copyCmd.Run(); err != nil {
-				return fmt.Errorf("failed to copy to clipboard: %w", err)
-			}
-
 			fmt.Printf("✓ Copied curl command for '%s' to clipboard\n", name)
 			return nil
 		},
 	}
-}
-
-// isCommandAvailable checks if a command is available in PATH
-func isCommandAvailable(name string) bool {
-	_, err := exec.LookPath(name)
-	return err == nil
 }

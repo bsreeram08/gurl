@@ -3,8 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"os/exec"
-	"strings"
 
 	"github.com/sreeram/gurl/internal/codegen"
 	"github.com/sreeram/gurl/internal/redact"
@@ -65,33 +63,14 @@ func CodegenCommand(db storage.DB) *cli.Command {
 			}
 
 			if c.Bool("clipboard") {
-				return copyToClipboard(code)
+				if err := clipboardWrite(code); err != nil {
+					return fmt.Errorf("failed to copy to clipboard: %w", err)
+				}
+				return nil
 			}
 
 			fmt.Println(code)
 			return nil
 		},
 	}
-}
-
-func copyToClipboard(text string) error {
-	// Try pbcopy (macOS) first
-	if isCommandAvailable("pbcopy") {
-		cmd := exec.Command("pbcopy")
-		cmd.Stdin = strings.NewReader(text)
-		return cmd.Run()
-	}
-	// Try xclip (Linux)
-	if isCommandAvailable("xclip") {
-		cmd := exec.Command("xclip", "-selection", "clipboard")
-		cmd.Stdin = strings.NewReader(text)
-		return cmd.Run()
-	}
-	// Try wl-copy (Wayland)
-	if isCommandAvailable("wl-copy") {
-		cmd := exec.Command("wl-copy")
-		cmd.Stdin = strings.NewReader(text)
-		return cmd.Run()
-	}
-	return fmt.Errorf("clipboard tools not available. Install xclip (Linux) or wl-copy (Wayland) to enable clipboard copy")
 }
