@@ -134,6 +134,45 @@ func TestRunJSONSuccess(t *testing.T) {
 	}
 }
 
+func TestRunJSONPrintsNoPersistNote(t *testing.T) {
+	server := quietServer(t)
+	db := memstore.New()
+	extract := []types.Extract{{Name: "uid", Source: "jsonpath:$.id"}}
+	saveTestRequest(t, db, &types.SavedRequest{Name: "one", Method: "GET", URL: server.URL + "/1", Extracts: extract})
+	saveTestRequest(t, db, &types.SavedRequest{Name: "first", Method: "GET", URL: server.URL + "/1", Extracts: extract, PostScript: "gurl.setNextRequest('one')"})
+
+	for _, tc := range []struct {
+		name     string
+		agent    string
+		args     []string
+		wantNote bool
+	}{
+		{name: "plain", args: []string{"one"}, wantNote: true},
+		{name: "json", args: []string{"one", "--json"}},
+		{name: "agent", agent: "1", args: []string{"one"}},
+		{name: "chain json", args: []string{"first", "--chain", "--json"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearAgentEnv(t)
+			t.Setenv(AgentEnvVar, tc.agent)
+			stdout, stderr, err := runGurl(t, db, env.NewMemoryStore(), tc.args...)
+			if err != nil {
+				t.Fatalf("run: %v\nstderr: %s", err, stderr)
+			}
+			if got := strings.Contains(stderr, "add --persist"); got != tc.wantNote {
+				t.Fatalf("persist note on stderr = %v, want %v:\n%s", got, tc.wantNote, stderr)
+			}
+			if tc.wantNote {
+				return
+			}
+			lines := decodeLines(t, stdout)
+			if extracted, _ := lines[len(lines)-1]["extracted"].(map[string]any); extracted["uid"] != "u-1" {
+				t.Errorf("JSON should list the extracted value: %s", stdout)
+			}
+		})
+	}
+}
+
 func TestRunJSONNon2xx(t *testing.T) {
 	clearAgentEnv(t)
 	server := echoServer(t)
