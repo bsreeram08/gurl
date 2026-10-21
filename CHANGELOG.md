@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- A cookie set without a `Path` attribute is saved with the RFC 6265 default path (the request path up to its last `/`, so `/api` for a cookie from `/api/login`) instead of the full request path. After a reload it is sent to `/api/users` again, not only to `/api/login`.
+
 ## [v0.7.2] - 2026-10-21
 
 ### Fixed
