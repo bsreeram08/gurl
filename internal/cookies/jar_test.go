@@ -631,8 +631,29 @@ func TestCookieJar_SetCookiesWithDefaults(t *testing.T) {
 		t.Errorf("expected domain=example.com, got %s", saved[0].Domain)
 	}
 
-	if saved[0].Path != "/api/v1" {
-		t.Errorf("expected path=/api/v1, got %s", saved[0].Path)
+	if saved[0].Path != "/api" {
+		t.Errorf("expected default path=/api, got %s", saved[0].Path)
+	}
+}
+
+func TestCookieJar_DefaultPathSurvivesReload(t *testing.T) {
+	db := newMockCookieDB()
+	jar, err := NewCookieJar(db)
+	if err != nil {
+		t.Fatalf("failed to create cookie jar: %v", err)
+	}
+	login, _ := url.Parse("https://example.com/api/login")
+	jar.SetCookies(login, []*http.Cookie{{Name: "session", Value: "abc123"}})
+
+	reloaded, err := NewCookieJar(db)
+	if err != nil {
+		t.Fatalf("failed to reload cookie jar: %v", err)
+	}
+	for path, want := range map[string]int{"/api/users": 1, "/api": 1, "/other": 0} {
+		u, _ := url.Parse("https://example.com" + path)
+		if got := len(reloaded.Cookies(u)); got != want {
+			t.Errorf("%s: got %d cookies after reload, want %d", path, got, want)
+		}
 	}
 }
 

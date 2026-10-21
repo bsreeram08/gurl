@@ -196,11 +196,8 @@ func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 			domain = attrDomain
 		}
 		path := cookie.Path
-		if path == "" {
-			path = u.Path
-		}
-		if path == "" {
-			path = "/"
+		if !strings.HasPrefix(path, "/") {
+			path = defaultPath(u.Path)
 		}
 		var expires int64
 		if !cookie.Expires.IsZero() {
@@ -222,6 +219,16 @@ func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 	}
 
 	c.db.SetCookies(entries)
+}
+
+// defaultPath is the RFC 6265 section 5.1.4 default-path of a cookie set
+// without a Path attribute: the request path up to its last "/".
+func defaultPath(p string) string {
+	i := strings.LastIndex(p, "/")
+	if i <= 0 {
+		return "/"
+	}
+	return p[:i]
 }
 
 func (c *CookieJar) Cookies(u *url.URL) []*http.Cookie {
