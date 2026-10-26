@@ -8,6 +8,7 @@ require (
 	charm.land/bubbles/v2 v2.1.0
 	charm.land/bubbletea/v2 v2.0.6
 	charm.land/lipgloss/v2 v2.0.3
+	filippo.io/age v1.2.1
 	github.com/Azure/go-ntlmssp v0.1.1
 	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/antchfx/xmlquery v1.5.1
@@ -22,6 +23,7 @@ require (
 	github.com/urfave/cli/v3 v3.9.0
 	github.com/wI2L/jsondiff v0.7.1
 	github.com/zalando/go-keyring v0.2.8
+	golang.org/x/crypto v0.51.0
 	golang.org/x/net v0.54.0
 	golang.org/x/term v0.43.0
 	google.golang.org/grpc v1.81.1
@@ -30,6 +32,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/PaesslerAG/gval v1.2.4 // indirect
 	github.com/antchfx/xpath v1.3.6 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect

@@ -32,10 +32,12 @@ One page per command, in alphabetical order. Every page has the same layout: syn
 | [`init`]({{< relref "/cli/init" >}}) | Initialize a project (`.gurl/`) |
 | [`list`]({{< relref "/cli/list" >}}) | List saved requests |
 | [`paste`]({{< relref "/cli/paste" >}}) | Copy a request as curl to the clipboard |
+| [`receive`]({{< relref "/cli/receive" >}}) | Decrypt a share bundle and import it |
 | [`rename`]({{< relref "/cli/rename" >}}) | Rename a saved request |
 | [`run`]({{< relref "/cli/run" >}}) | Execute a saved request |
 | [`save`]({{< relref "/cli/save" >}}) | Save a request under a name |
 | [`sequence`]({{< relref "/cli/sequence" >}}) | Set execution order within a collection |
+| [`share`]({{< relref "/cli/share" >}}) | Encrypt requests to a recipient's public key |
 | [`shell`]({{< relref "/cli/shell" >}}) | Launch the typed interactive shell |
 | [`show`]({{< relref "/cli/show" >}}) | Show a saved request |
 | [`sse`]({{< relref "/cli/sse" >}}) | Connect to a Server-Sent Events endpoint |

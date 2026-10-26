@@ -191,6 +191,8 @@ gurl never prints the values, and the command's exit code is passed through.
 gurl codegen get-user --lang python    # go, python, javascript, curl; secrets masked
 gurl import ./postman_collection.json  # OpenAPI, Insomnia, Postman, Bruno, HAR, .gurl (auto-detected)
 gurl export --collection users-api -o users-api.gurl
+gurl share -c users-api --to github:alice -o users-api.gurl.age   # encrypted to alice's SSH keys
+gurl receive users-api.gurl.age                                  # alice: decrypt, preview, import
 echo 'curl -X POST https://api.example.com/x -d "{}"' | gurl detect --name x
 ```
 
@@ -268,6 +270,7 @@ Work with names, not secrets: have a human create environments with `KEY=-`, the
 | `auth` | List authentication types and their parameters |
 | `codegen` | Generate go, python, javascript or curl code |
 | `import` / `export` | Import from OpenAPI, Insomnia, Postman, Bruno, HAR; export to gurl format |
+| `share` / `receive` | Encrypt requests to someone's public key (`github:<user>`, SSH, age) and import them |
 | `paste` | Copy a request as curl to the clipboard |
 | `graphql` / `grpc` / `ws` / `sse` | GraphQL, gRPC, WebSocket and Server-Sent Events |
 | `cookies` | Manage stored cookies |

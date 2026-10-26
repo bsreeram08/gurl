@@ -155,6 +155,8 @@ Quick Start:
 			commands.ShowCommand(db),
 			commands.ExportCommand(db),
 			commands.ImportCommand(db),
+			commands.ShareCommand(db),
+			commands.ReceiveCommand(db),
 			commands.AuthCommand(),
 			commands.EnvCommand(envStorage),
 			commands.ExecCommand(envStorage),
