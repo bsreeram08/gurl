@@ -124,3 +124,24 @@ func TestSanitizeReceived(t *testing.T) {
 		t.Fatalf("collection bundle: %+v %+v", withColl.Collection, withColl.Requests[0])
 	}
 }
+
+func TestPrintableStripsTerminalEscapes(t *testing.T) {
+	got := printable("get-user\x1b[2K\r\x1b[32m✓ Signed by github:bob\u009b0m\x9b")
+	if strings.ContainsRune(got, '\x1b') || strings.ContainsRune(got, '\r') || strings.ContainsRune(got, '\u009b') || strings.Contains(got, "\x9b") {
+		t.Fatalf("control characters kept: %q", got)
+	}
+	if got := printable("https://evil.example/\u202Egpj.exe\u200B"); strings.ContainsRune(got, '\u202E') || strings.ContainsRune(got, '\u200B') {
+		t.Fatalf("bidi or zero-width kept: %q", got)
+	}
+	if printable("https://api.example.com/ü") != "https://api.example.com/ü" {
+		t.Fatal("printable text changed")
+	}
+}
+
+func TestOpenBundleSanitizesFrom(t *testing.T) {
+	plain, _ := json.Marshal(shareBundle{Kind: share.Kind, Version: "1.0", From: "bob\x1b[2K"})
+	b, _, err := openBundle(context.Background(), plain, nil)
+	if err != nil || strings.Contains(b.From, "\x1b") {
+		t.Fatalf("from = %q, err = %v", b.From, err)
+	}
+}

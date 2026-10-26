@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -30,6 +31,10 @@ const Kind = "gurl-share"
 var GitHubKeysURL = "https://github.com"
 
 const maxKeysResponse = 64 << 10
+
+// githubUser matches GitHub's username rules: alphanumerics and single
+// hyphens, at most 39 characters.
+var githubUser = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9]){0,38}$`)
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
@@ -92,7 +97,7 @@ func keyLines(ctx context.Context, spec string, pins *KnownKeys) ([]string, erro
 // ("github:<user>") and checks their fingerprints against pins.
 func GitHubKeys(ctx context.Context, spec string, pins *KnownKeys) ([]string, []string, error) {
 	user := strings.TrimPrefix(spec, "github:")
-	if user == "" || strings.ContainsAny(user, "/?#") {
+	if !githubUser.MatchString(user) {
 		return nil, nil, fmt.Errorf("invalid GitHub user in %q", spec)
 	}
 	lines, err := fetchGitHubKeys(ctx, user)
