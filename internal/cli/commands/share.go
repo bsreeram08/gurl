@@ -296,14 +296,14 @@ func ReceiveCommand(db storage.DB) *cli.Command {
 				if err != nil {
 					return err
 				}
-				fmt.Printf("✓ Imported collection '%s' (%d requests, %d skipped)\n", bundle.Collection.Name, imported, skipped)
+				fmt.Printf("✓ Imported collection '%s' (%d requests, %d skipped)\n", printable(bundle.Collection.Name), imported, skipped)
 				return nil
 			}
 			imported, skipped := 0, 0
 			for _, req := range bundle.Requests {
 				if existing, err := db.GetRequestByName(req.Name); err == nil && existing != nil {
 					if !c.Bool("force") {
-						fmt.Printf("⚠ Skipped '%s' (already exists, use --force to overwrite)\n", req.Name)
+						fmt.Printf("⚠ Skipped '%s' (already exists, use --force to overwrite)\n", printable(req.Name))
 						skipped++
 						continue
 					}
@@ -365,12 +365,13 @@ func sanitizeReceived(b *shareBundle) {
 	}
 }
 
-// printable replaces control characters in sender-controlled text, so a
-// bundle can't use terminal escapes to rewrite or hide the preview (a fake
-// "✓ Signed by" line, a cleared script warning).
+// printable replaces control and format characters in sender-controlled
+// text, so a bundle can't use terminal escapes, bidi overrides or zero-width
+// characters to rewrite or hide the preview (a fake "✓ Signed by" line, a
+// cleared script warning, a reordered URL).
 func printable(s string) string {
 	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			return '�'
 		}
 		return r

@@ -130,6 +130,9 @@ func TestPrintableStripsTerminalEscapes(t *testing.T) {
 	if strings.ContainsRune(got, '\x1b') || strings.ContainsRune(got, '\r') || strings.ContainsRune(got, '\u009b') || strings.Contains(got, "\x9b") {
 		t.Fatalf("control characters kept: %q", got)
 	}
+	if got := printable("https://evil.example/\u202Egpj.exe\u200B"); strings.ContainsRune(got, '\u202E') || strings.ContainsRune(got, '\u200B') {
+		t.Fatalf("bidi or zero-width kept: %q", got)
+	}
 	if printable("https://api.example.com/ü") != "https://api.example.com/ü" {
 		t.Fatal("printable text changed")
 	}
