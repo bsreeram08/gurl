@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/sreeram/gurl/internal/redact"
 	"github.com/sreeram/gurl/internal/share"
@@ -364,15 +365,27 @@ func sanitizeReceived(b *shareBundle) {
 	}
 }
 
+// printable replaces control characters in sender-controlled text, so a
+// bundle can't use terminal escapes to rewrite or hide the preview (a fake
+// "✓ Signed by" line, a cleared script warning).
+func printable(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return '�'
+		}
+		return r
+	}, s)
+}
+
 func printBundlePreview(b *shareBundle) {
 	if b.Collection != nil {
-		fmt.Printf("Collection: %s (%d variables)\n", b.Collection.Name, len(b.Collection.Variables))
+		fmt.Printf("Collection: %s (%d variables)\n", printable(b.Collection.Name), len(b.Collection.Variables))
 	}
 	secrets := "not included"
 	if b.WithSecrets {
 		secrets = "included"
 	}
-	fmt.Printf("Shared at: %s · secrets %s\n", b.ExportedAt, secrets)
+	fmt.Printf("Shared at: %s · secrets %s\n", printable(b.ExportedAt), secrets)
 	scripted := 0
 	for _, req := range b.Requests {
 		var extras []string
@@ -383,7 +396,7 @@ func printBundlePreview(b *shareBundle) {
 			extras = append(extras, "post-script")
 		}
 		if req.AuthConfig != nil && req.AuthConfig.Type != "" {
-			extras = append(extras, "auth: "+req.AuthConfig.Type)
+			extras = append(extras, "auth: "+printable(req.AuthConfig.Type))
 		}
 		note := ""
 		if len(extras) > 0 {
@@ -392,7 +405,7 @@ func printBundlePreview(b *shareBundle) {
 		if req.PreScript != "" || req.PostScript != "" {
 			scripted++
 		}
-		fmt.Printf("  %-7s %-24s %s%s\n", req.Method, req.Name, req.URL, note)
+		fmt.Printf("  %-7s %-24s %s%s\n", printable(req.Method), printable(req.Name), printable(req.URL), note)
 	}
 	if scripted > 0 {
 		fmt.Printf("⚠ %d request(s) carry scripts; they run on your machine when you run the request. Check them with 'gurl show' first.\n", scripted)
@@ -492,8 +505,9 @@ func openBundle(ctx context.Context, plain []byte, pins *share.KnownKeys) (*shar
 		return nil, signerStatus{}, notBundle
 	}
 	if bundle.Version != "1.0" {
-		return nil, signerStatus{}, storage.ErrUnsupportedCollectionExportVersion(bundle.Version)
+		return nil, signerStatus{}, storage.ErrUnsupportedCollectionExportVersion(printable(bundle.Version))
 	}
+	bundle.From = printable(bundle.From)
 	if pub == nil {
 		return &bundle, signerStatus{line: "⚠ Unsigned: the sender can't be verified"}, nil
 	}

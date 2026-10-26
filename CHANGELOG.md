@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `receive` replaces control characters in everything the sender controls (request names, URLs, methods, auth type, collection name, `from`) before printing the preview, so a crafted bundle can't use terminal escapes to fake a "✓ Signed by" line or hide the script warning. `github:` users must be valid GitHub usernames.
+
 ## [v0.8.0] - 2026-10-26
 
 ### Added
