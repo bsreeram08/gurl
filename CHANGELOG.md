@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- `gurl share` encrypts a request (`<name>` / `--name`), a collection (`--collection`, with its variables) or everything (`--all`) to another person's public key, and `gurl receive` decrypts, previews and imports it. Recipients are `github:<user>` (the SSH keys GitHub publishes), an SSH `.pub` file or literal `ssh-ed25519` / `ssh-rsa` key, or an `age1...` key; several `--to` are allowed. Encryption is [age](https://age-encryption.org), ASCII-armored by default so a bundle can be pasted into chat; `--binary` writes raw age.
+- Secret collection variables are shared as empty values unless `--with-secrets` is passed; received secrets are encrypted at rest with the receiver's local key. `share` warns when a sensitive header holds a literal value instead of a `{{variable}}`.
+- Bundles are signed with the sender's SSH key (OpenSSH SSHSIG, namespace `gurl-share`, checkable with `ssh-keygen -Y verify`). With `--from github:<you>` the receiver checks the signing key against your GitHub keys; a forged claim or bad signature is refused, and `receive --require-signed` refuses anything unverified.
+- Fingerprints of `github:<user>` keys are pinned in `~/.config/gurl/known_keys.json` on first use; a changed key set stops `share` / `receive` until `--update-keys` accepts it.
+
 ### Fixed
 
 - A cookie set without a `Path` attribute is saved with the RFC 6265 default path (the request path up to its last `/`, so `/api` for a cookie from `/api/login`) instead of the full request path. After a reload it is sent to `/api/users` again, not only to `/api/login`.

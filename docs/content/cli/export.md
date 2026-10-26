@@ -52,5 +52,6 @@ gurl export --all --output backup.gurl
 ## Related commands
 
 - [`gurl import`]({{< relref "/cli/import" >}}) - Import requests and collection exports
+- [`gurl share`]({{< relref "/cli/share" >}}) - Encrypt an export to one person's public key instead of a shared passphrase
 - [`gurl collection`]({{< relref "/cli/collection" >}}) - `collection export` / `collection import`
 - [Credential storage]({{< relref "/security/credential-storage" >}}) - How passphrase exports are encrypted
