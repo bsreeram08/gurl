@@ -266,6 +266,7 @@ func ReceiveCommand(db storage.DB) *cli.Command {
 				return err
 			}
 
+			sanitizeReceived(bundle)
 			printBundlePreview(bundle)
 			fmt.Println(signer.line)
 			if c.Bool("require-signed") && !signer.verified {
@@ -347,6 +348,22 @@ func receiveIdentities(c *cli.Command) ([]string, error) {
 	return append(explicit, share.DefaultIdentities()...), nil
 }
 
+// sanitizeReceived drops fields a sender must not control. IDs come from the
+// sender's database and could collide with (and overwrite) unrelated local
+// records; a loose request's collection could attach it to a local collection
+// and its secrets. Requests then match local records by name only.
+func sanitizeReceived(b *shareBundle) {
+	if b.Collection != nil {
+		b.Collection.ID = ""
+	}
+	for _, req := range b.Requests {
+		req.ID = ""
+		if b.Collection == nil {
+			req.Collection = ""
+		}
+	}
+}
+
 func printBundlePreview(b *shareBundle) {
 	if b.Collection != nil {
 		fmt.Printf("Collection: %s (%d variables)\n", b.Collection.Name, len(b.Collection.Variables))
@@ -356,8 +373,29 @@ func printBundlePreview(b *shareBundle) {
 		secrets = "included"
 	}
 	fmt.Printf("Shared at: %s · secrets %s\n", b.ExportedAt, secrets)
+	scripted := 0
 	for _, req := range b.Requests {
-		fmt.Printf("  %-7s %-24s %s\n", req.Method, req.Name, req.URL)
+		var extras []string
+		if req.PreScript != "" {
+			extras = append(extras, "pre-script")
+		}
+		if req.PostScript != "" {
+			extras = append(extras, "post-script")
+		}
+		if req.AuthConfig != nil && req.AuthConfig.Type != "" {
+			extras = append(extras, "auth: "+req.AuthConfig.Type)
+		}
+		note := ""
+		if len(extras) > 0 {
+			note = "  [" + strings.Join(extras, ", ") + "]"
+		}
+		if req.PreScript != "" || req.PostScript != "" {
+			scripted++
+		}
+		fmt.Printf("  %-7s %-24s %s%s\n", req.Method, req.Name, req.URL, note)
+	}
+	if scripted > 0 {
+		fmt.Printf("⚠ %d request(s) carry scripts; they run on your machine when you run the request. Check them with 'gurl show' first.\n", scripted)
 	}
 }
 

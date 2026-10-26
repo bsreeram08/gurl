@@ -33,7 +33,7 @@ A broken signature, or a bundle that claims `github:bob` but is signed by a key 
 
 ## What gets imported
 
-Before importing, `receive` prints the collection, each request's method, name and URL, and whether secrets are included, then asks to confirm. Nothing runs on receive. Existing requests and collections are kept unless you pass `--force`. Imported secret values are encrypted at rest with your local key, like any other collection secret.
+Before importing, `receive` prints the collection, each request's method, name and URL (marking pre/post scripts and auth), and whether secrets are included, then asks to confirm. Nothing runs on receive, but a request's scripts run when you later run it, so check them with `gurl show` first. Requests are matched to local ones by name only: the sender's internal IDs are dropped, and a loose request (not part of a shared collection) is imported without a collection, so it can't join one of yours and read its secrets. Existing requests and collections are kept unless you pass `--force`. Imported secret values are encrypted at rest with your local key, like any other collection secret.
 
 ## Flags
 

@@ -108,3 +108,19 @@ func TestArgsAfterDash(t *testing.T) {
 		}
 	}
 }
+
+func TestSanitizeReceived(t *testing.T) {
+	loose := &shareBundle{Requests: []*types.SavedRequest{{ID: "victim-id", Name: "x", Collection: "payments"}}}
+	sanitizeReceived(loose)
+	if r := loose.Requests[0]; r.ID != "" || r.Collection != "" {
+		t.Fatalf("loose request kept sender fields: %+v", r)
+	}
+
+	coll := types.NewCollection("shared")
+	coll.ID = "victim-coll"
+	withColl := &shareBundle{Collection: coll, Requests: []*types.SavedRequest{{ID: "victim-id", Name: "x", Collection: "shared"}}}
+	sanitizeReceived(withColl)
+	if withColl.Collection.ID != "" || withColl.Requests[0].ID != "" || withColl.Requests[0].Collection != "shared" {
+		t.Fatalf("collection bundle: %+v %+v", withColl.Collection, withColl.Requests[0])
+	}
+}
