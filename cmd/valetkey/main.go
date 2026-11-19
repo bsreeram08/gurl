@@ -84,7 +84,10 @@ func run() error {
 
 	cookieProvider := commands.CookieJarProvider(cookieJarHolder{})
 	var runnerOpts []runner.Option
-	if cookieDB, cookieErr := cookies.NewLMDBCookieDB(); cookieErr != nil {
+	if firstCommand(os.Args) == "mcp" {
+		// The MCP server runs each request in a child process; holding the
+		// cookie store open here would lock the children out of it.
+	} else if cookieDB, cookieErr := cookies.NewLMDBCookieDB(); cookieErr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: cookie store unavailable: %v\n", cookieErr)
 	} else if jar, jarErr := cookies.NewCookieJar(cookieDB); jarErr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: cookie jar unavailable: %v\n", jarErr)
@@ -175,6 +178,7 @@ The old command name gurl, and agentgurl, still work.`,
 			websocket.WSCommand(db),
 			sse.SSECommand(db),
 			commands.CookiesCommand(cookieProvider),
+			commands.MCPCommand(db, envStorage),
 			commands.MigrateCommand(),
 			commands.DocsCommand(),
 		},
@@ -187,6 +191,24 @@ The old command name gurl, and agentgurl, still work.`,
 // binary that always runs with --agent.
 func invokedAsAgent(arg0 string) bool {
 	return brand.IsAgentBinary(arg0)
+}
+
+// firstCommand returns the first command name in args (after the program
+// name and the global flags), or "".
+func firstCommand(args []string) string {
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			return ""
+		case arg == "--project-dir":
+			i++
+		case strings.HasPrefix(arg, "-"):
+		default:
+			return arg
+		}
+	}
+	return ""
 }
 
 func projectDirFromArgs(args []string) string {

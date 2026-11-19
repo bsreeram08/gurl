@@ -75,3 +75,16 @@ func runWithArgs(t *testing.T, args []string) (string, string, error) {
 
 	return string(stdout), string(stderr), runErr
 }
+
+func TestFirstCommand(t *testing.T) {
+	for want, args := range map[string][]string{
+		"mcp":  {"valetkey", "--project-dir", "/p", "--agent", "mcp", "--env", "dev"},
+		"run":  {"valetkey", "run", "mcp"},
+		"":     {"valetkey", "--agent"},
+		"list": {"valetkey", "--project-dir=/p", "list"},
+	} {
+		if got := firstCommand(args); got != want {
+			t.Errorf("firstCommand(%v) = %q, want %q", args, got, want)
+		}
+	}
+}
