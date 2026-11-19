@@ -25,19 +25,19 @@ func (o *OpenAPIImporter) Extensions() []string {
 
 // OpenAPISpec represents the structure of an OpenAPI 3.x spec
 type OpenAPISpec struct {
-	OpenAPI    string                  `json:"openapi" yaml:"openapi"`
-	Info       OpenAPIInfo             `json:"info" yaml:"info"`
-	Paths      map[string]PathItem     `json:"paths" yaml:"paths"`
-	Components Components              `json:"components" yaml:"components"`
-	Tags       []Tag                   `json:"tags" yaml:"tags"`
-	Servers    []Server                `json:"servers" yaml:"servers"`
-	Security   []map[string][]string   `json:"security" yaml:"security"`
+	OpenAPI    string                `json:"openapi" yaml:"openapi"`
+	Info       OpenAPIInfo           `json:"info" yaml:"info"`
+	Paths      map[string]PathItem   `json:"paths" yaml:"paths"`
+	Components Components            `json:"components" yaml:"components"`
+	Tags       []Tag                 `json:"tags" yaml:"tags"`
+	Servers    []Server              `json:"servers" yaml:"servers"`
+	Security   []map[string][]string `json:"security" yaml:"security"`
 }
 
 // Server represents a server object
 type Server struct {
-	URL         string                  `json:"url" yaml:"url"`
-	Description string                  `json:"description,omitempty" yaml:"description,omitempty"`
+	URL         string                    `json:"url" yaml:"url"`
+	Description string                    `json:"description,omitempty" yaml:"description,omitempty"`
 	Variables   map[string]ServerVariable `json:"variables,omitempty" yaml:"variables,omitempty"`
 }
 
@@ -57,28 +57,28 @@ type OpenAPIInfo struct {
 
 // PathItem represents a path and its operations
 type PathItem struct {
-	Ref     string      `json:"$ref,omitempty" yaml:"$ref,omitempty"`
-	Summary string      `json:"summary,omitempty" yaml:"summary,omitempty"`
-	Get     *Operation  `json:"get,omitempty" yaml:"get,omitempty"`
-	Post    *Operation  `json:"post,omitempty" yaml:"post,omitempty"`
-	Put     *Operation  `json:"put,omitempty" yaml:"put,omitempty"`
-	Delete  *Operation  `json:"delete,omitempty" yaml:"delete,omitempty"`
-	Patch   *Operation  `json:"patch,omitempty" yaml:"patch,omitempty"`
-	Options *Operation  `json:"options,omitempty" yaml:"options,omitempty"`
-	Head    *Operation  `json:"head,omitempty" yaml:"head,omitempty"`
-	Trace   *Operation  `json:"trace,omitempty" yaml:"trace,omitempty"`
+	Ref     string     `json:"$ref,omitempty" yaml:"$ref,omitempty"`
+	Summary string     `json:"summary,omitempty" yaml:"summary,omitempty"`
+	Get     *Operation `json:"get,omitempty" yaml:"get,omitempty"`
+	Post    *Operation `json:"post,omitempty" yaml:"post,omitempty"`
+	Put     *Operation `json:"put,omitempty" yaml:"put,omitempty"`
+	Delete  *Operation `json:"delete,omitempty" yaml:"delete,omitempty"`
+	Patch   *Operation `json:"patch,omitempty" yaml:"patch,omitempty"`
+	Options *Operation `json:"options,omitempty" yaml:"options,omitempty"`
+	Head    *Operation `json:"head,omitempty" yaml:"head,omitempty"`
+	Trace   *Operation `json:"trace,omitempty" yaml:"trace,omitempty"`
 }
 
 // Operation represents an HTTP operation
 type Operation struct {
-	Tags        []string                `json:"tags,omitempty" yaml:"tags,omitempty"`
-	Summary     string                  `json:"summary,omitempty" yaml:"summary,omitempty"`
-	Description string                  `json:"description,omitempty" yaml:"description,omitempty"`
-	OperationID string                  `json:"operationId,omitempty" yaml:"operationId,omitempty"`
-	Parameters  []Parameter             `json:"parameters,omitempty" yaml:"parameters,omitempty"`
-	RequestBody *RequestBody            `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
-	Responses   map[string]Response     `json:"responses,omitempty" yaml:"responses,omitempty"`
-	Security    []map[string][]string   `json:"security,omitempty" yaml:"security,omitempty"`
+	Tags        []string              `json:"tags,omitempty" yaml:"tags,omitempty"`
+	Summary     string                `json:"summary,omitempty" yaml:"summary,omitempty"`
+	Description string                `json:"description,omitempty" yaml:"description,omitempty"`
+	OperationID string                `json:"operationId,omitempty" yaml:"operationId,omitempty"`
+	Parameters  []Parameter           `json:"parameters,omitempty" yaml:"parameters,omitempty"`
+	RequestBody *RequestBody          `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
+	Responses   map[string]Response   `json:"responses,omitempty" yaml:"responses,omitempty"`
+	Security    []map[string][]string `json:"security,omitempty" yaml:"security,omitempty"`
 }
 
 // Parameter represents an OpenAPI parameter
@@ -93,9 +93,9 @@ type Parameter struct {
 
 // RequestBody represents the request body
 type RequestBody struct {
-	Description string                  `json:"description,omitempty" yaml:"description,omitempty"`
-	Required    bool                    `json:"required,omitempty" yaml:"required,omitempty"`
-	Content     map[string]MediaType    `json:"content,omitempty" yaml:"content,omitempty"`
+	Description string               `json:"description,omitempty" yaml:"description,omitempty"`
+	Required    bool                 `json:"required,omitempty" yaml:"required,omitempty"`
+	Content     map[string]MediaType `json:"content,omitempty" yaml:"content,omitempty"`
 }
 
 // MediaType represents a media type
@@ -110,20 +110,20 @@ type Response struct {
 
 // Schema represents an OpenAPI schema
 type Schema struct {
-	Ref       string   `json:"$ref,omitempty" yaml:"$ref,omitempty"`
-	Type      string   `json:"type,omitempty" yaml:"type,omitempty"`
-	Format    string   `json:"format,omitempty" yaml:"format,omitempty"`
-	Example   any      `json:"example,omitempty" yaml:"example,omitempty"`
-	Default   any      `json:"default,omitempty" yaml:"default,omitempty"`
-	Enum      []any    `json:"enum,omitempty" yaml:"enum,omitempty"`
+	Ref        string            `json:"$ref,omitempty" yaml:"$ref,omitempty"`
+	Type       string            `json:"type,omitempty" yaml:"type,omitempty"`
+	Format     string            `json:"format,omitempty" yaml:"format,omitempty"`
+	Example    any               `json:"example,omitempty" yaml:"example,omitempty"`
+	Default    any               `json:"default,omitempty" yaml:"default,omitempty"`
+	Enum       []any             `json:"enum,omitempty" yaml:"enum,omitempty"`
 	Properties map[string]Schema `json:"properties,omitempty" yaml:"properties,omitempty"`
-	Items     *Schema  `json:"items,omitempty" yaml:"items,omitempty"`
+	Items      *Schema           `json:"items,omitempty" yaml:"items,omitempty"`
 }
 
 // Components represents reusable components
 type Components struct {
-	Schemas         map[string]Schema              `json:"schemas,omitempty" yaml:"schemas,omitempty"`
-	SecuritySchemes map[string]SecurityScheme      `json:"securitySchemes,omitempty" yaml:"securitySchemes,omitempty"`
+	Schemas         map[string]Schema         `json:"schemas,omitempty" yaml:"schemas,omitempty"`
+	SecuritySchemes map[string]SecurityScheme `json:"securitySchemes,omitempty" yaml:"securitySchemes,omitempty"`
 }
 
 // SecurityScheme represents a security scheme
