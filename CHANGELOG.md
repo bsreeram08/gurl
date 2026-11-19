@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `collection run` and `run --chain`: a request that asserts its status (`status=402`, `status=404`) passes or fails on its assertions when the response is not 2xx. Before, every non-2xx response failed the request before its assertions ran, so a test could not expect an error status. The execution record (`history`, `diag`, the `[FAIL]` line) treats such an expected status as a success.
+- Assertion fields and values fill `{{placeholders}}` from the run's variables, including values extracted by earlier requests: `body.data.id={{itemId}}` compares against the extracted `itemId` instead of the literal text, and `body.data.items.{{itemId}}.name` looks up the extracted key.
+
 ## [v0.8.1] - 2026-10-26
 
 ### Fixed

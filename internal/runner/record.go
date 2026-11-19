@@ -65,7 +65,9 @@ func (a Attempt) Record() *types.ExecutionHistory {
 
 	rec.Error = a.Error
 	rec.FailurePhase = a.FailurePhase
-	if rec.FailurePhase == "" && rec.Error == "" && a.Response != nil && (rec.StatusCode < 200 || rec.StatusCode >= 300) {
+	// A non-2xx status is a failure unless an assertion expected it.
+	rec.StatusAsserted = statusAsserted(a.Assertions)
+	if rec.FailurePhase == "" && rec.Error == "" && a.Response != nil && (rec.StatusCode < 200 || rec.StatusCode >= 300) && !rec.StatusAsserted {
 		rec.FailurePhase = FailurePhaseStatus
 	}
 	rec.Assertions = AssertionRecords(a.Assertions)
@@ -193,4 +195,15 @@ func (r *Runner) saveRecord(execution *SingleRequestExecution, envName string) *
 		return nil
 	}
 	return rec
+}
+
+// statusAsserted reports whether one of the evaluated assertions checked the
+// response status.
+func statusAsserted(results []assertions.Result) bool {
+	for _, r := range results {
+		if field := strings.TrimSpace(r.Assertion.Field); field == "status" || field == "status_code" {
+			return true
+		}
+	}
+	return false
 }
