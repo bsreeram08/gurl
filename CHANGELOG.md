@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `import` detects the format of a `.json` file from its content. OpenAPI, Postman, Insomnia, HAR and Yaak all use `.json`, and every `.json` file went to the importer registered last (Yaak), so an OpenAPI or Postman `.json` imported nothing ("No requests found to import"). A `.json` file of unknown shape now fails and asks for `--format`.
+- `import --format` is honored (it was accepted and ignored) and takes an importer name: `openapi`, `postman`, `insomnia`, `har`, `bruno`, `yaak`, `gurl`.
+
 ## [v0.8.1] - 2026-10-26
 
 ### Fixed

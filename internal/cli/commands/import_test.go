@@ -43,7 +43,7 @@ func TestImportCommand(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "imports empty supported file",
+			name: "fails when the JSON format cannot be detected",
 			setup: func(db *mockDB) string {
 				tmpDir := t.TempDir()
 				tmpFile := filepath.Join(tmpDir, "test.json")
@@ -51,7 +51,18 @@ func TestImportCommand(t *testing.T) {
 				return tmpFile
 			},
 			args:    []string{"--force"},
-			wantErr: false,
+			wantErr: true,
+		},
+		{
+			name: "fails on an unknown --format",
+			setup: func(db *mockDB) string {
+				tmpDir := t.TempDir()
+				tmpFile := filepath.Join(tmpDir, "test.json")
+				os.WriteFile(tmpFile, []byte(`{}`), 0644)
+				return tmpFile
+			},
+			args:    []string{"--format", "nope"},
+			wantErr: true,
 		},
 	}
 
