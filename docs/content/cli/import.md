@@ -4,7 +4,7 @@ description: "Import requests from OpenAPI, Insomnia, Bruno, Postman, HAR or gur
 ---
 
 
-Import requests from OpenAPI, Insomnia, Bruno, Postman, HAR or a native gurl export. The format is detected from the file unless you force it.
+Import requests from OpenAPI, Insomnia, Bruno, Postman, HAR or a native gurl export. The format is detected from the file unless you force it with `--format`: an extension used by one format (`.bru`, `.har`, `.gurl`) decides on its own, and for `.json` the document's top-level keys decide (`openapi`, Postman `info` + `item`, Insomnia `_type`/`resources`, HAR `log`, Yaak `collections`).
 
 ## Synopsis
 
@@ -18,7 +18,7 @@ Supported inputs (`gurl import --list`):
 | Extension | Format |
 |-----------|--------|
 | `.yaml`, `.yml` | OpenAPI/Swagger 3.x |
-| `.json` | Insomnia, Postman, OpenAPI, HAR |
+| `.json` | OpenAPI, Postman, Insomnia, HAR, Yaak (detected from the content) |
 | `.bru` | Bruno |
 | `.har` | HAR (HTTP Archive) |
 | `.gurl` | Native gurl request or collection export |
@@ -28,7 +28,7 @@ Supported inputs (`gurl import --list`):
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--force` | `-f` | `false` | Overwrite existing requests with the same name |
-| `--format` | `--fmt` | auto-detected | Force a specific format |
+| `--format` | `--fmt` | detected | Import as `openapi`, `postman`, `insomnia`, `har`, `bruno`, `yaak` or `gurl` |
 | `--list` | `-l` | `false` | List all supported formats |
 | `--passphrase` | | none | Passphrase for decrypting native collection exports (or set `GURL_IMPORT_PASSPHRASE`) |
 

@@ -31,7 +31,7 @@ func ImportCommand(db storage.DB) *cli.Command {
 			&cli.StringFlag{
 				Name:    "format",
 				Aliases: []string{"fmt"},
-				Usage:   "Force specific format (auto-detected if not specified)",
+				Usage:   "Format to import as: openapi, postman, insomnia, har, bruno, yaak, gurl (detected from the file content if not specified)",
 			},
 			&cli.BoolFlag{
 				Name:    "list",
@@ -48,7 +48,7 @@ func ImportCommand(db storage.DB) *cli.Command {
 			if c.Bool("list") {
 				fmt.Println("Supported formats:")
 				fmt.Println("  .yaml, .yml  - OpenAPI/Swagger 3.x")
-				fmt.Println("  .json        - Insomnia, Postman, OpenAPI, HAR")
+				fmt.Println("  .json        - OpenAPI, Postman, Insomnia, HAR, Yaak (detected from the content)")
 				fmt.Println("  .bru         - Bruno")
 				fmt.Println("  .har         - HAR (HTTP Archive)")
 				fmt.Println("  .gurl        - Native gurl request or collection export format")
@@ -82,7 +82,7 @@ func ImportCommand(db storage.DB) *cli.Command {
 			}
 
 			// Import requests
-			requests, err := importers.Import(path)
+			requests, err := importers.ImportAs(path, c.String("format"))
 			if err != nil {
 				return fmt.Errorf("import failed: %w", err)
 			}
