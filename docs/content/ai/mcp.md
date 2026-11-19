@@ -25,6 +25,12 @@ Then add the server to your MCP client's configuration:
 }
 ```
 
+For Claude Code:
+
+```bash
+claude mcp add --scope user my-api -- apigent mcp --env dev
+```
+
 | Flag | Meaning |
 |------|---------|
 | `--env`, `-e` | The environment every call runs against. Fixed for the server's lifetime. Default: the active environment. |
@@ -53,6 +59,12 @@ argument "BASE_URL" is not allowed: only placeholders the environment leaves und
 ```
 
 So define every host in the environment or collection, never leave it as a placeholder for the agent to fill.
+
+Pinning the environment only governs placeholders. A request saved with a literal URL, such as `https://api.example.com/orders`, goes to that host whatever `--env` says. Before exposing a library, check which requests hard-code production hosts, and use `--collection` to expose only the ones an agent should run.
+
+## Large libraries
+
+Every saved request becomes a tool, and each tool's definition goes into the agent's context. A few hundred requests can add up to tens of thousands of tokens. Register one server per collection with `--collection` to keep each one small and focused.
 
 ## Under the hood
 

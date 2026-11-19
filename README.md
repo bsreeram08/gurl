@@ -34,6 +34,8 @@ Then add the server to your MCP client:
 { "mcpServers": { "my-api": { "command": "apigent", "args": ["mcp", "--env", "dev"] } } }
 ```
 
+For Claude Code, run `claude mcp add --scope user apigent -- apigent mcp --env dev`.
+
 The agent sees one tool, `get-user`, with a single argument, `id`. It never sees `API_KEY`, and it cannot change `BASE_URL`. Use `--collection <name>` to expose only part of your library.
 
 ## Install
@@ -303,7 +305,7 @@ Run `apigent <command> --help` or `apigent docs <command>` for flags.
 
 ## Coming from gurl
 
-apigent is the new name of gurl. Nothing has to change on day one:
+apigent is the new name of gurl. Nothing has to change on day one. `gurl update` on an older release installs apigent in place of the `gurl` binary, and the `gurl` name keeps working:
 
 | Before | Now | The old one still works? |
 |--------|-----|--------------------------|
