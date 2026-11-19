@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )

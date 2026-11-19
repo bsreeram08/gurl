@@ -1,22 +1,22 @@
 ---
-title: "gurl save"
+title: "apigent save"
 description: "Save a request under a name"
 ---
 
 
-Store an HTTP request under a name so you can run it later with `gurl run <name>`. URL, headers, body and auth params may contain `{{placeholders}}` that are filled at send time.
+Store an HTTP request under a name so you can run it later with `apigent run <name>`. URL, headers, body and auth params may contain `{{placeholders}}` that are filled at send time.
 
 ## Synopsis
 
 ```bash
-gurl save <name> <url> [flags]
-gurl save <name> --curl "<curl command>"
-gurl save --name <name> --curl "<curl command>"
+apigent save <name> <url> [flags]
+apigent save <name> --curl "<curl command>"
+apigent save --name <name> --curl "<curl command>"
 ```
 
-To parse a curl command from stdin, use [`gurl detect`]({{< relref "/cli/detect" >}}).
+To parse a curl command from stdin, use [`apigent detect`]({{< relref "/cli/detect" >}}).
 
-The collection passed with `--collection` must already exist. In an interactive terminal gurl offers to create it; with `--no-input` (or `--json`/`--agent`) it fails and names the command to run: `collection "x" does not exist; create it first with 'gurl collection create x'`.
+The collection passed with `--collection` must already exist. In an interactive terminal apigent offers to create it; with `--no-input` (or `--json`/`--agent`) it fails and names the command to run: `collection "x" does not exist; create it first with 'apigent collection create x'`.
 
 ## Flags
 
@@ -47,7 +47,7 @@ The collection passed with `--collection` must already exist. In an interactive 
 ### Save a JSON POST with placeholders
 
 ```bash
-gurl save "create-order" '{{BASE_URL}}/orders' \
+apigent save "create-order" '{{BASE_URL}}/orders' \
   -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer {{API_KEY}}" \
@@ -59,24 +59,24 @@ The quoted typed placeholder `"{{amount:num}}"` keeps the stored body valid JSON
 ### Save from a curl command
 
 ```bash
-gurl save "me" --curl "curl -H 'Accept: application/json' https://api.example.com/me"
+apigent save "me" --curl "curl -H 'Accept: application/json' https://api.example.com/me"
 ```
 
 ### Save auth and an extraction rule
 
 ```bash
-gurl save "login" '{{BASE_URL}}/auth/login' \
+apigent save "login" '{{BASE_URL}}/auth/login' \
   -X POST \
   --collection payments-api \
   --auth basic --auth-param username='{{USER}}' --auth-param password='{{PASSWORD}}' \
   --extract token=jsonpath:'$.token'
 ```
 
-Use [`gurl auth info <type>`]({{< relref "/cli/auth" >}}) to see every parameter a handler accepts, and [`gurl extract`]({{< relref "/cli/extract" >}}) to test a rule against a sample response first.
+Use [`apigent auth info <type>`]({{< relref "/cli/auth" >}}) to see every parameter a handler accepts, and [`apigent extract`]({{< relref "/cli/extract" >}}) to test a rule against a sample response first.
 
 ## Related commands
 
-- [`gurl run`]({{< relref "/cli/run" >}}) - Execute a saved request
-- [`gurl edit`]({{< relref "/cli/edit" >}}) - Change a saved request
-- [`gurl detect`]({{< relref "/cli/detect" >}}) - Save a curl command from stdin
-- [`gurl auth`]({{< relref "/cli/auth" >}}) - Auth handlers and parameters
+- [`apigent run`]({{< relref "/cli/run" >}}) - Execute a saved request
+- [`apigent edit`]({{< relref "/cli/edit" >}}) - Change a saved request
+- [`apigent detect`]({{< relref "/cli/detect" >}}) - Save a curl command from stdin
+- [`apigent auth`]({{< relref "/cli/auth" >}}) - Auth handlers and parameters

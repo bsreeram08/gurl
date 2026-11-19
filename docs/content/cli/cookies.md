@@ -1,15 +1,15 @@
 ---
-title: "gurl cookies"
+title: "apigent cookies"
 description: "Manage stored cookies"
 ---
 
 
-List, delete and clear the cookies gurl has stored from responses.
+List, delete and clear the cookies apigent has stored from responses.
 
 ## Synopsis
 
 ```bash
-gurl cookies <subcommand> [arguments]
+apigent cookies <subcommand> [arguments]
 ```
 
 ## Subcommands
@@ -19,7 +19,7 @@ gurl cookies <subcommand> [arguments]
 List all stored cookies (domain, name, value; long values are truncated).
 
 ```bash
-gurl cookies list
+apigent cookies list
 ```
 
 None.
@@ -31,7 +31,7 @@ Aliases: `ls`, `l`
 Delete every stored cookie.
 
 ```bash
-gurl cookies clear
+apigent cookies clear
 ```
 
 None.
@@ -43,7 +43,7 @@ Aliases: `cl`, `clean`
 Delete one cookie by domain and name.
 
 ```bash
-gurl cookies delete <domain> <name>
+apigent cookies delete <domain> <name>
 ```
 
 None.
@@ -60,22 +60,22 @@ Aliases: `rm`, `del`
 ### See what is stored
 
 ```bash
-gurl cookies list
+apigent cookies list
 ```
 
 ### Drop a session cookie
 
 ```bash
-gurl cookies delete api.example.com sid
+apigent cookies delete api.example.com sid
 ```
 
 ### Start fresh
 
 ```bash
-gurl cookies clear
+apigent cookies clear
 ```
 
 ## Related commands
 
-- [`gurl run`]({{< relref "/cli/run" >}}) - Execute a saved request
+- [`apigent run`]({{< relref "/cli/run" >}}) - Execute a saved request
 - [Header redaction]({{< relref "/security/header-redaction" >}}) - `Cookie` and `Set-Cookie` masking

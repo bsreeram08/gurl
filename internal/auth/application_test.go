@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 func TestBuiltinRegistryRegistersAllHandlersWithParams(t *testing.T) {

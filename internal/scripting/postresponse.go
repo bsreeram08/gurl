@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/bsreeram08/apigent/internal/client"
 	"github.com/dop251/goja"
-	"github.com/sreeram/gurl/internal/client"
 )
 
 type PostResponseResult struct {

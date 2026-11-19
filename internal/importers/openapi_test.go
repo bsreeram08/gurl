@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 const sampleOpenAPIYAML = `

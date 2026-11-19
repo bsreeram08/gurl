@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // RequestItem represents a request in the list

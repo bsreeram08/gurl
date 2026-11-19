@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/bsreeram08/apigent/internal/project"
+	"github.com/bsreeram08/apigent/internal/secrets"
+	"github.com/bsreeram08/apigent/internal/storage"
 	"github.com/google/uuid"
-	"github.com/sreeram/gurl/internal/project"
-	"github.com/sreeram/gurl/internal/secrets"
-	"github.com/sreeram/gurl/internal/storage"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
@@ -27,7 +27,7 @@ type Store interface {
 
 var _ Store = (*EnvStorage)(nil)
 
-// EnvStorage stores environments in LMDB and, inside a gurl project, in
+// EnvStorage stores environments in LMDB and, inside a apigent project, in
 // project files.
 type EnvStorage struct {
 	db     *storage.LMDB

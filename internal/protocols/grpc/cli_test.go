@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/formatter"
-	"github.com/sreeram/gurl/internal/storage/memstore"
+	"github.com/bsreeram08/apigent/internal/formatter"
+	"github.com/bsreeram08/apigent/internal/storage/memstore"
 	"github.com/urfave/cli/v3"
 )
 

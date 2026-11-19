@@ -1,5 +1,5 @@
 ---
-title: "gurl shell"
+title: "apigent shell"
 description: "Launch the typed interactive shell"
 ---
 
@@ -9,12 +9,12 @@ A line-oriented REPL for browsing, editing and sending requests, without fullscr
 ## Synopsis
 
 ```bash
-gurl shell [--env <name>] [--request <name>] [--format <auto|json|table>]
+apigent shell [--env <name>] [--request <name>] [--format <auto|json|table>]
 ```
 
-`gurl shell` is for humans. It refuses to start with `--no-input` or `--agent` (exit code 2): `gurl shell is interactive and cannot run with --no-input or --agent; use gurl run <name> instead`.
+`apigent shell` is for humans. It refuses to start with `--no-input` or `--agent` (exit code 2): `apigent shell is interactive and cannot run with --no-input or --agent; use apigent run <name> instead`.
 
-Every `send` is recorded like a `run`, so failures can be inspected with [`gurl diag`]({{< relref "/cli/diag" >}}).
+Every `send` is recorded like a `run`, so failures can be inspected with [`apigent diag`]({{< relref "/cli/diag" >}}).
 
 ### Shell commands
 
@@ -53,27 +53,27 @@ Every `send` is recorded like a `run`, so failures can be inspected with [`gurl 
 ### Open a request against staging
 
 ```bash
-gurl shell --env staging --request "create-order"
+apigent shell --env staging --request "create-order"
 ```
 
 ### Send with one-off values
 
 ```text
-gurl> open create-order
-gurl[create-order]> send amount=10 currency=USD
+apigent> open create-order
+apigent[create-order]> send amount=10 currency=USD
 ```
 
 ### Build and save a new request
 
 ```text
-gurl> new health check
-gurl[health check]> set url https://api.example.com/health
-gurl[health check*]> send
-gurl[health check*]> save
+apigent> new health check
+apigent[health check]> set url https://api.example.com/health
+apigent[health check*]> send
+apigent[health check*]> save
 ```
 
 ## Related commands
 
-- [`gurl run`]({{< relref "/cli/run" >}}) - Non-interactive execution
-- [`gurl list`]({{< relref "/cli/list" >}}) - List saved requests
-- [`gurl env`]({{< relref "/cli/env" >}}) - Manage environments
+- [`apigent run`]({{< relref "/cli/run" >}}) - Non-interactive execution
+- [`apigent list`]({{< relref "/cli/list" >}}) - List saved requests
+- [`apigent env`]({{< relref "/cli/env" >}}) - Manage environments

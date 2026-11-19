@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 // BasicHandler supports Basic authentication with configurable charset encoding

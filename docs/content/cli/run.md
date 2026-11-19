@@ -1,5 +1,5 @@
 ---
-title: "gurl run"
+title: "apigent run"
 description: "Execute a saved request"
 ---
 
@@ -9,30 +9,30 @@ Execute a previously saved request by name.
 ## Synopsis
 
 ```bash
-gurl run <name> [flags]
+apigent run <name> [flags]
 ```
 
-The `run` command executes a request that was previously saved with `gurl save`. You can pick an environment, override variables, set timeouts, validate responses with assertions, iterate over a data file, and follow request chains.
+The `run` command executes a request that was previously saved with `apigent save`. You can pick an environment, override variables, set timeouts, validate responses with assertions, iterate over a data file, and follow request chains.
 
-Before anything is sent, gurl performs **request resolution**: every `{{placeholder}}` in the URL, headers, body and auth params is filled from the scopes (environment < collection < data row < CLI `--var` < runtime). If any placeholder cannot be filled, the request is not sent and every **resolution problem** is reported at once, for example `missing required variables: BASE, API_KEY`. See [Environments and variables]({{< relref "/guides/environments" >}}) for the placeholder rules.
+Before anything is sent, apigent performs **request resolution**: every `{{placeholder}}` in the URL, headers, body and auth params is filled from the scopes (environment < collection < data row < CLI `--var` < runtime). If any placeholder cannot be filled, the request is not sent and every **resolution problem** is reported at once, for example `missing required variables: BASE, API_KEY`. See [Environments and variables]({{< relref "/guides/environments" >}}) for the placeholder rules.
 
-If the saved request has auth settings, `gurl run` applies them after the placeholders are filled.
+If the saved request has auth settings, `apigent run` applies them after the placeholders are filled.
 
 ### Output streams
 
 - The response body goes to stdout.
-- Status lines, notes (for example `note: uid not saved; add --persist to use them in later runs`), persist summaries, assertion summaries and `Response saved` go to stderr, so `gurl run ... | jq .` sees only the body.
+- Status lines, notes (for example `note: uid not saved; add --persist to use them in later runs`), persist summaries, assertion summaries and `Response saved` go to stderr, so `apigent run ... | jq .` sees only the body.
 - With `--json`, stdout carries only JSON (see below).
 
 ### Execution records and the failure notice
 
-Every execution is recorded, including attempts that never got a response (resolution problems, connection errors, timeouts, script errors), assertion failures and non-2xx responses. Dry runs are not recorded. When a run fails, gurl names the record on stderr:
+Every execution is recorded, including attempts that never got a response (resolution problems, connection errors, timeouts, script errors), assertion failures and non-2xx responses. Dry runs are not recorded. When a run fails, apigent names the record on stderr:
 
 ```text
-request failed: HTTP 500 (id: bbd47546) — inspect with: gurl diag bbd47546
+request failed: HTTP 500 (id: bbd47546) — inspect with: apigent diag bbd47546
 ```
 
-Pass that id to [`gurl diag`]({{< relref "/cli/diag" >}}). Execution records never contain secrets; see [Header Redaction]({{< relref "/security/header-redaction" >}}).
+Pass that id to [`apigent diag`]({{< relref "/cli/diag" >}}). Execution records never contain secrets; see [Header Redaction]({{< relref "/security/header-redaction" >}}).
 
 ## Flags
 
@@ -64,24 +64,24 @@ Pass that id to [`gurl diag`]({{< relref "/cli/diag" >}}). Execution records nev
 ### Basic run
 
 ```bash
-gurl run "users"
+apigent run "users"
 ```
 
 ### Run with an environment and variables
 
 ```bash
-gurl run "users" --env production
-gurl run "users" --var "page=2" --var "limit=50"
+apigent run "users" --env production
+apigent run "users" --var "page=2" --var "limit=50"
 ```
 
 ### Run a request with saved auth
 
 ```bash
-gurl save "profile" https://api.example.com/me \
+apigent save "profile" https://api.example.com/me \
   --auth bearer \
   --auth-param token='{{token}}'
 
-gurl run "profile" --var token=abc123
+apigent run "profile" --var token=abc123
 ```
 
 The saved `bearer` auth handler adds the `Authorization: Bearer abc123` header during execution. You don't need to resupply `--auth` when running the request.
@@ -89,7 +89,7 @@ The saved `bearer` auth handler adds the `Authorization: Bearer abc123` header d
 ### Fail on non-2xx responses
 
 ```bash
-gurl run "create-order" --env prod --fail | jq .
+apigent run "create-order" --env prod --fail | jq .
 ```
 
 By default a non-2xx response still exits 0. With `--fail` it exits 1; the body is still printed to stdout.
@@ -97,7 +97,7 @@ By default a non-2xx response still exits 0. With `--fail` it exits 1; the body 
 ### Preview without sending (dry run)
 
 ```bash
-gurl run "get-user" --env dev --dry-run
+apigent run "get-user" --env dev --dry-run
 ```
 
 ```text
@@ -112,7 +112,7 @@ The dry run shows the request after pre-request scripts run, with secrets masked
 ### Machine-readable output
 
 ```bash
-gurl run "get-user" --env dev --json
+apigent run "get-user" --env dev --json
 ```
 
 stdout gets one JSON object per execution (one line). Empty fields are omitted:
@@ -162,21 +162,21 @@ extracted persisted{environment,variables,collections[{name,variables}]}
 ### Run with timeout and assertion
 
 ```bash
-gurl run "create-user" --timeout 10s --assert "status=201"
+apigent run "create-user" --timeout 10s --assert "status=201"
 ```
 
 ### Run a chained request
 
 ```bash
-gurl run "login" --chain --env staging
+apigent run "login" --chain --env staging
 ```
 
-Enables request chaining for saved post-response scripts that call `gurl.setNextRequest(...)`. Extracted variables and variables set by scripts become available to later requests in the chain.
+Enables request chaining for saved post-response scripts that call `apigent.setNextRequest(...)`. Extracted variables and variables set by scripts become available to later requests in the chain.
 
 ### Persist flow variables
 
 ```bash
-gurl run "login" --chain --persist --env staging
+apigent run "login" --chain --persist --env staging
 ```
 
 Without `--persist`, extracted and script-set variables are dropped at the end of the run and `run` prints a note naming them. With `--persist`, each one is written back to its variable origin: values that came from the environment go to the environment (`--env` or the active one), others to the request's collection, otherwise to the environment. CLI variables and data-row values are not written back unless extraction or a script changes them.
@@ -193,9 +193,9 @@ Without `--persist`, extracted and script-set variables are dropped at the end o
 
 ## Related commands
 
-- [`gurl diag`]({{< relref "/cli/diag" >}}) - Inspect a recorded execution
-- [`gurl save`]({{< relref "/cli/save" >}}) - Save a new request
-- [`gurl extract`]({{< relref "/cli/extract" >}}) - Test extraction rules offline
-- [`gurl history`]({{< relref "/cli/history" >}}) - View execution history
-- [`gurl env`]({{< relref "/cli/env" >}}) - Manage environments
+- [`apigent diag`]({{< relref "/cli/diag" >}}) - Inspect a recorded execution
+- [`apigent save`]({{< relref "/cli/save" >}}) - Save a new request
+- [`apigent extract`]({{< relref "/cli/extract" >}}) - Test extraction rules offline
+- [`apigent history`]({{< relref "/cli/history" >}}) - View execution history
+- [`apigent env`]({{< relref "/cli/env" >}}) - Manage environments
 - [Agent mode]({{< relref "/ai/agent-mode" >}}) - JSON output and strict masking for AI agents

@@ -10,16 +10,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/internal/assertions"
-	"github.com/sreeram/gurl/internal/auth"
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/core/template"
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/extract"
-	"github.com/sreeram/gurl/internal/resolve"
-	"github.com/sreeram/gurl/internal/scripting"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/assertions"
+	"github.com/bsreeram08/apigent/internal/auth"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/core/template"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/extract"
+	"github.com/bsreeram08/apigent/internal/resolve"
+	"github.com/bsreeram08/apigent/internal/scripting"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 type RunConfig struct {
@@ -433,7 +433,7 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		if !config.DryRun {
 			if rec := r.saveRecord(execution, config.Environment); rec != nil && rec.Failed() {
 				id := rec.ShortID()
-				fmt.Fprintf(os.Stderr, "  [FAIL] %s: %s (id: %s) — inspect with: gurl diag %s\n", req.Name, FailureReason(rec), id, id)
+				fmt.Fprintf(os.Stderr, "  [FAIL] %s: %s (id: %s) — inspect with: apigent diag %s\n", req.Name, FailureReason(rec), id, id)
 			}
 		}
 		if config.DryRun {

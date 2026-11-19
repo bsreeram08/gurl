@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/resolve"
-	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/resolve"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )
@@ -114,7 +114,7 @@ func ShellCommand(db storage.DB, envStorage env.Store) *cli.Command {
 		Name:    "shell",
 		Aliases: []string{"sh", "repl"},
 		Usage:   "Launch the typed interactive shell",
-		Description: `gurl shell launches a line-oriented REPL for browsing, editing, and
+		Description: `apigent shell launches a line-oriented REPL for browsing, editing, and
 executing requests without fullscreen keybindings or terminal key conflicts.`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -136,7 +136,7 @@ executing requests without fullscreen keybindings or terminal key conflicts.`,
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			if noInput(c) {
-				return cli.Exit("gurl shell is interactive and cannot run with --no-input or --agent; use gurl run <name> instead", 2)
+				return cli.Exit("apigent shell is interactive and cannot run with --no-input or --agent; use apigent run <name> instead", 2)
 			}
 			session := newShellSession(db, envStorage, os.Stdin, os.Stdout, c.String("format"))
 
@@ -195,7 +195,7 @@ func (s *shellSession) Run(ctx context.Context) error {
 	watcher := s.startFileWatcher(ctx)
 	defer watcher.Stop()
 
-	fmt.Fprintln(s.out, "gurl shell")
+	fmt.Fprintln(s.out, "apigent shell")
 	fmt.Fprintln(s.out, "Type `help` for commands. This shell only uses typed commands.")
 
 	for {
@@ -362,7 +362,7 @@ func (s *shellSession) executeLine(line string) (bool, error) {
 
 func (s *shellSession) prompt() string {
 	if s.current == nil {
-		return "gurl> "
+		return "apigent> "
 	}
 
 	label := strings.TrimSpace(s.current.Name)
@@ -373,7 +373,7 @@ func (s *shellSession) prompt() string {
 		label += "*"
 	}
 
-	return fmt.Sprintf("gurl[%s]> ", label)
+	return fmt.Sprintf("apigent[%s]> ", label)
 }
 
 func (s *shellSession) printHelp(topic string) error {

@@ -3,7 +3,7 @@ package builtins
 import (
 	"fmt"
 
-	"github.com/sreeram/gurl/internal/plugins"
+	"github.com/bsreeram08/apigent/internal/plugins"
 )
 
 type MinimalOutput struct{}

@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // LazyDB opens and closes the underlying LevelDB handle for each operation.

@@ -10,13 +10,13 @@ import (
 
 func TestRunSupportsShellCompletion(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("GURL_DB_PATH", filepath.Join(t.TempDir(), "gurl.db"))
-	t.Setenv("GURL_COOKIE_DB_PATH", filepath.Join(t.TempDir(), "gurl-cookies.db"))
-	t.Setenv("GURL_PLUGIN_DIR", t.TempDir())
+	t.Setenv("APIGENT_DB_PATH", filepath.Join(t.TempDir(), "apigent.db"))
+	t.Setenv("APIGENT_COOKIE_DB_PATH", filepath.Join(t.TempDir(), "apigent-cookies.db"))
+	t.Setenv("APIGENT_PLUGIN_DIR", t.TempDir())
 
 	for _, shell := range []string{"bash", "zsh", "fish"} {
 		t.Run(shell, func(t *testing.T) {
-			stdout, stderr, err := runWithArgs(t, []string{"gurl", "completion", shell})
+			stdout, stderr, err := runWithArgs(t, []string{"apigent", "completion", shell})
 			if err != nil {
 				t.Fatalf("expected completion to run for %s: %v\nstderr: %s", shell, err, stderr)
 			}
@@ -74,4 +74,17 @@ func runWithArgs(t *testing.T, args []string) (string, string, error) {
 	}
 
 	return string(stdout), string(stderr), runErr
+}
+
+func TestFirstCommand(t *testing.T) {
+	for want, args := range map[string][]string{
+		"mcp":  {"apigent", "--project-dir", "/p", "--agent", "mcp", "--env", "dev"},
+		"run":  {"apigent", "run", "mcp"},
+		"":     {"apigent", "--agent"},
+		"list": {"apigent", "--project-dir=/p", "list"},
+	} {
+		if got := firstCommand(args); got != want {
+			t.Errorf("firstCommand(%v) = %q, want %q", args, got, want)
+		}
+	}
 }

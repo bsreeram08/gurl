@@ -1,27 +1,28 @@
 package main
 
 import (
+	"github.com/bsreeram08/apigent/internal/brand"
+
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 
-	"github.com/sreeram/gurl/internal/cli/commands"
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/cookies"
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/plugins"
-	"github.com/sreeram/gurl/internal/plugins/builtins"
-	"github.com/sreeram/gurl/internal/project"
-	"github.com/sreeram/gurl/internal/protocols/graphql"
-	"github.com/sreeram/gurl/internal/protocols/grpc"
-	"github.com/sreeram/gurl/internal/protocols/sse"
-	"github.com/sreeram/gurl/internal/protocols/websocket"
-	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/internal/storage"
+	"github.com/bsreeram08/apigent/internal/cli/commands"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/cookies"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/plugins"
+	"github.com/bsreeram08/apigent/internal/plugins/builtins"
+	"github.com/bsreeram08/apigent/internal/project"
+	"github.com/bsreeram08/apigent/internal/protocols/graphql"
+	"github.com/bsreeram08/apigent/internal/protocols/grpc"
+	"github.com/bsreeram08/apigent/internal/protocols/sse"
+	"github.com/bsreeram08/apigent/internal/protocols/websocket"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/storage"
 	"github.com/urfave/cli/v3"
 )
 
@@ -39,14 +40,14 @@ func (h cookieJarHolder) GetCookieJar() *cookies.CookieJar {
 }
 
 func getPluginDir() string {
-	if dir := os.Getenv("GURL_PLUGIN_DIR"); dir != "" {
+	if dir := brand.Getenv("PLUGIN_DIR"); dir != "" {
 		return dir
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".gurl", "plugins")
+	return brand.PluginDir(home)
 }
 
 func main() {
@@ -83,7 +84,10 @@ func run() error {
 
 	cookieProvider := commands.CookieJarProvider(cookieJarHolder{})
 	var runnerOpts []runner.Option
-	if cookieDB, cookieErr := cookies.NewLMDBCookieDB(); cookieErr != nil {
+	if firstCommand(os.Args) == "mcp" {
+		// The MCP server runs each request in a child process; holding the
+		// cookie store open here would lock the children out of it.
+	} else if cookieDB, cookieErr := cookies.NewLMDBCookieDB(); cookieErr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: cookie store unavailable: %v\n", cookieErr)
 	} else if jar, jarErr := cookies.NewCookieJar(cookieDB); jarErr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: cookie jar unavailable: %v\n", jarErr)
@@ -117,28 +121,30 @@ func run() error {
 	return app.Run(ctx, args)
 }
 
-// newApp builds the gurl command tree.
+// newApp builds the apigent command tree.
 func newApp(db storage.DB, envStorage env.Store, cookieProvider commands.CookieJarProvider, runnerOpts ...runner.Option) *cli.Command {
 	return &cli.Command{
-		Name:                  "gurl",
-		Usage:                 "Smart curl saver - Your named request library",
+		Name:                  brand.Name,
+		Usage:                 "Saved API requests your AI agents can run without ever seeing the keys",
 		Version:               version,
 		EnableShellCompletion: true,
 		Flags: append([]cli.Flag{
 			&cli.StringFlag{
 				Name:  "project-dir",
-				Usage: "Project root containing .gurl file storage",
+				Usage: "Project root containing a .apigent (or legacy .gurl) directory",
 			},
 		}, commands.GlobalFlags()...),
-		Description: `gurl replaces your chaotic curl history with an intelligent, 
-named request library. Save requests with memorable names 
-and run them whenever you need.
+		Description: `apigent is a library of named HTTP requests for people and AI agents.
+You save requests and keep secrets in environments; agents run them by
+name and get JSON back, but never see the keys.
 
 Quick Start:
-  gurl save "health check" https://api.example.com/health
-  gurl list
-  gurl run "health check"
-  gurl delete "old request"`,
+  apigent save "health check" https://api.example.com/health
+  apigent run "health check" --env dev
+  apigent --agent run "health check" --env dev   # what an agent runs
+  apigent mcp                                    # serve saved requests to MCP clients
+
+The old command name gurl, and agentgurl, still work.`,
 		Commands: []*cli.Command{
 			commands.InitCommand(),
 			commands.SaveCommand(db),
@@ -172,24 +178,37 @@ Quick Start:
 			websocket.WSCommand(db),
 			sse.SSECommand(db),
 			commands.CookiesCommand(cookieProvider),
+			commands.MCPCommand(db, envStorage),
+			commands.MigrateCommand(),
 			commands.DocsCommand(),
 		},
 	}
 }
 
-// agentBinaryName is the program name that turns on agent mode, so
-// `ln -s "$(command -v gurl)" ~/.local/bin/agentgurl` gives agents a gurl
-// that always runs with --agent.
-const agentBinaryName = "agentgurl"
-
-// invokedAsAgent reports whether gurl was started as agentgurl (or
-// agentgurl.exe).
+// invokedAsAgent reports whether the binary was started as agentapigent
+// or the pre-rename agentgurl (with or without .exe), so
+// `ln -s "$(command -v apigent)" ~/.local/bin/agentapigent` gives agents a
+// binary that always runs with --agent.
 func invokedAsAgent(arg0 string) bool {
-	name := filepath.Base(arg0)
-	if ext := filepath.Ext(name); strings.EqualFold(ext, ".exe") {
-		name = strings.TrimSuffix(name, ext)
+	return brand.IsAgentBinary(arg0)
+}
+
+// firstCommand returns the first command name in args (after the program
+// name and the global flags), or "".
+func firstCommand(args []string) string {
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			return ""
+		case arg == "--project-dir":
+			i++
+		case strings.HasPrefix(arg, "-"):
+		default:
+			return arg
+		}
 	}
-	return strings.EqualFold(name, agentBinaryName)
+	return ""
 }
 
 func projectDirFromArgs(args []string) string {

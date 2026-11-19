@@ -1,4 +1,4 @@
-// Package share encrypts gurl export bundles to a recipient's public key and
+// Package share encrypts apigent export bundles to a recipient's public key and
 // decrypts them with a local private key. Recipients are SSH keys (ed25519 or
 // RSA), age X25519 keys, or github:<user>, which resolves to the keys GitHub
 // publishes at https://github.com/<user>.keys. All crypto is filippo.io/age.
@@ -24,7 +24,10 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Kind marks a decrypted payload as a gurl share bundle.
+// Kind marks a decrypted payload as a apigent share bundle.
+//
+// The value predates the apigent rename and is frozen: bundles made by
+// older gurl releases must still be recognised.
 const Kind = "gurl-share"
 
 // GitHubKeysURL is the base URL for github:<user> lookups. Tests override it.
@@ -223,7 +226,7 @@ func Open(r io.Reader, identityPaths []string, passphrase func(path string) ([]b
 		tried = append(tried, path)
 	}
 	if len(ids) == 0 {
-		return nil, errors.New("no private key found: pass --identity <path> or set GURL_SHARE_IDENTITY")
+		return nil, errors.New("no private key found: pass --identity <path> or set APIGENT_SHARE_IDENTITY")
 	}
 
 	br := bufio.NewReader(r)

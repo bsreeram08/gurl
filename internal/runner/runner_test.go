@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sreeram/gurl/internal/assertions"
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/project"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/internal/storage/memstore"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/assertions"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/project"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/internal/storage/memstore"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // mockDB keeps requests and history in maps tests inspect directly;

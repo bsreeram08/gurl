@@ -1,10 +1,10 @@
 ---
 title: "Security"
-description: "How gurl encrypts secrets at rest and keeps them out of output, records and AI context windows."
+description: "How apigent encrypts secrets at rest and keeps them out of output, records and AI context windows."
 weight: 5
 ---
 
-gurl is built on one principle: credentials stay on your machine and out of anything gurl prints or stores.
+apigent is built on one principle: credentials stay on your machine and out of anything apigent prints or stores.
 
 | Page | Covers |
 |------|--------|
@@ -15,13 +15,13 @@ gurl is built on one principle: credentials stay on your machine and out of anyt
 
 **Secrets are encrypted at rest.** Environment and collection variables marked secret are encrypted with AES-256-GCM. The machine key is generated with `crypto/rand` on first use and stored with owner-only permissions; encrypted values are useless on another machine.
 
-**Secrets are entered without echo.** `gurl env set prod API_KEY=- --secret API_KEY` reads the value from stdin, prompting without echo on a terminal.
+**Secrets are entered without echo.** `apigent env set prod API_KEY=- --secret API_KEY` reads the value from stdin, prompting without echo on a terminal.
 
-**Auth is applied inside gurl.** Saved auth configs are filled from placeholders and applied to the outgoing request; the calling process never builds the credential string.
+**Auth is applied inside apigent.** Saved auth configs are filled from placeholders and applied to the outgoing request; the calling process never builds the credential string.
 
-**Output is masked.** `show`, `list --json`, `codegen`, `paste`, `env show`, dry runs and `run --json` replace secrets with `*****`, including their URL- and JSON-escaped forms. [Agent mode]({{< relref "/ai/agent-mode" >}}) also masks response bodies, headers, errors and `gurl exec` child output.
+**Output is masked.** `show`, `list --json`, `codegen`, `paste`, `env show`, dry runs and `run --json` replace secrets with `*****`, including their URL- and JSON-escaped forms. [Agent mode]({{< relref "/ai/agent-mode" >}}) also masks response bodies, headers, errors and `apigent exec` child output.
 
-**Execution records never store secrets.** Every run is recorded for `gurl diag`, with secrets masked before saving.
+**Execution records never store secrets.** Every run is recorded for `apigent diag`, with secrets masked before saving.
 
 | Layer | What it handles | Where secrets live |
 |-------|-----------------|--------------------|

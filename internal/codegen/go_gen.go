@@ -9,7 +9,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // GoGenerator generates Go net/http code
@@ -108,24 +108,24 @@ func main() {
 
 // GoCodeGenData holds template data for Go generation
 type GoCodeGenData struct {
-	URL              string
-	Method           string
-	Headers          []types.Header
-	Body             string
-	HasHeaders       bool
-	HasBody          bool
-	HasAuth          bool
-	AuthType         string
-	IncludeImports   bool
-	IncludeComments  bool
-	Comment          string
-	HasTimeout       bool
-	Timeout          string
-	HasAssertions    bool
+	URL                string
+	Method             string
+	Headers            []types.Header
+	Body               string
+	HasHeaders         bool
+	HasBody            bool
+	HasAuth            bool
+	AuthType           string
+	IncludeImports     bool
+	IncludeComments    bool
+	Comment            string
+	HasTimeout         bool
+	Timeout            string
+	HasAssertions      bool
 	HasStatusAssertion bool
-	ExpectedStatus   int
-	IsBinaryBody     bool
-	IsMultipartBody  bool
+	ExpectedStatus     int
+	IsBinaryBody       bool
+	IsMultipartBody    bool
 }
 
 // Generate creates Go net/http code from a SavedRequest
@@ -258,7 +258,7 @@ var variablePattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 func substituteURLVariables(url string, vars []types.Var) string {
 	result := url
 	for _, v := range vars {
-		pattern := regexp.MustCompile(`\{\{`+regexp.QuoteMeta(v.Name)+`\}\}`)
+		pattern := regexp.MustCompile(`\{\{` + regexp.QuoteMeta(v.Name) + `\}\}`)
 		result = pattern.ReplaceAllString(result, v.Example)
 	}
 	return result

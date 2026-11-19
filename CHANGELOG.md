@@ -2,10 +2,28 @@
 
 ## [Unreleased]
 
+gurl is now **apigent**: saved API requests your AI agents can run without ever seeing the keys. See `docs/adr/0001-rename-to-apigent.md`.
+
 ### Added
 
+- `apigent mcp [--env NAME] [--collection NAME]` serves saved requests as MCP tools over stdio, one tool per request.
+  - The environment is fixed when the server starts.
+  - A tool's arguments are the placeholders that the environment and collection leave undefined. Any other argument, such as `BASE_URL`, is refused, so an agent can't send a request's secrets to another host.
+  - Calls run as `run --agent`, so results are masked, recorded and can be inspected with `apigent diag`.
+- `apigent migrate [--dry-run] [--json]` moves `~/.local/share/gurl`, `~/.config/gurl`, `~/.gurl/plugins` and the current project's `.gurl/` to their apigent names. It renames directories atomically and never overwrites an existing destination.
+- Scripts can use `apigent.*` as well as `gurl.*`.
 - `import --base-url <url>` replaces an OpenAPI spec's server URL, for example `--base-url '{{BASE_URL}}'` so the imported requests follow the environment.
-- `import --collection <name>` puts the imported requests in that collection and creates it if needed; inside a `.gurl/` project it is created there, so the requests are written as files you can commit.
+- `import --collection <name>` puts the imported requests in that collection and creates it if needed; inside an `.apigent/` project it is created there, so the requests are written as files you can commit.
+
+### Changed
+
+- The binary, command tree, messages, User-Agent (`apigent/<version>`), release assets (`apigent-<os>-<arch>`), container image (`ghcr.io/bsreeram08/apigent`, which runs as user `apigent`) and Homebrew formula are now apigent.
+- New names, read before the old ones:
+  - `APIGENT_*` environment variables;
+  - `~/.local/share/apigent`, `~/.config/apigent` and `~/.apigent/plugins`;
+  - `.apigent/` projects and `.apigentrc`;
+  - `agentapigent`.
+- The Go module path is `github.com/bsreeram08/apigent`.
 
 ### Fixed
 
@@ -20,9 +38,22 @@
 - `import --format` is honored (it was accepted and ignored) and takes an importer name: `openapi`, `postman`, `insomnia`, `har`, `bruno`, `yaak`, `gurl`.
 - `collection run` and `run --chain`: a request that asserts its status (`status=402`, `status=404`) passes or fails on its assertions when the response is not 2xx. Before, every non-2xx response failed the request before its assertions ran, so a test could not expect an error status. The execution record (`history`, `diag`, the `[FAIL]` line) treats such an expected status as a success.
 - Assertion fields and values fill `{{placeholders}}` from the run's variables, including values extracted by earlier requests: `body.data.id={{itemId}}` compares against the extracted `itemId` instead of the literal text, and `body.data.items.{{itemId}}.name` looks up the extracted key.
-- In a `.gurl/` project, saving a request without an ID (as `import --force` does) replaces the request of the same name in its collection, as the database store does. Before, each re-import wrote a second file per request, so a collection imported twice listed every request twice.
+- In an `.apigent/` project, saving a request without an ID (as `import --force` does) replaces the request of the same name in its collection, as the database store does. Before, each re-import wrote a second file per request, so a collection imported twice listed every request twice.
 
+### Compatibility
 
+- Everything from gurl keeps working when the apigent equivalent is absent:
+  - the `gurl` and `agentgurl` command names;
+  - `GURL_*` variables;
+  - the old data, config and plugin directories;
+  - `.gurl/` projects and `.gurlrc`.
+- `init` reuses an existing `.gurl/` rather than creating `.apigent/` next to it.
+- Releases also publish each binary as `gurl-<os>-<arch>` (listed in `SHA256SUMS`), so `gurl update` from older releases still works.
+- The image is also pushed as `ghcr.io/bsreeram08/gurl`.
+- Homebrew moves `gurl` to `apigent` through `formula_renames.json` and keeps a `gurl` link. `install.sh` turns an existing gurl from this project into a link to apigent.
+- These keep their names so existing data and bundles stay readable: encrypted values (`gurlenc:v1:`), share bundles and signatures (`gurl-share`), the `gurl` keychain entry, and `.gurl` export files.
+- After `apigent migrate`, releases from before the rename no longer find the data.
+- Docker users who mount `/home/gurl/...` should mount `/home/apigent/...`.
 
 ## [v0.8.1] - 2026-10-26
 

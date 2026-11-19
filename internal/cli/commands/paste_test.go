@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 const clipboardTestSecret = "sk-test-123"

@@ -1,5 +1,5 @@
 ---
-title: "gurl diff"
+title: "apigent diff"
 description: "Compare responses for a request"
 ---
 
@@ -9,12 +9,12 @@ Compare the response bodies of the most recent executions of one request.
 ## Synopsis
 
 ```bash
-gurl diff <name> [flags]
+apigent diff <name> [flags]
 ```
 
 JSON bodies are compared structurally (RFC 6902 changes); other bodies get a text diff. `diff` always compares the newest entries. In [agent mode]({{< relref "/ai/agent-mode" >}}) it masks secrets using the secrets of both compared runs.
 
-To see why one run failed, including variable and header changes since the last success, use [`gurl diag`]({{< relref "/cli/diag" >}}).
+To see why one run failed, including variable and header changes since the last success, use [`apigent diag`]({{< relref "/cli/diag" >}}).
 
 ## Flags
 
@@ -28,19 +28,19 @@ To see why one run failed, including variable and header changes since the last 
 ### Compare the last two runs
 
 ```bash
-gurl diff get-user
+apigent diff get-user
 ```
 
 ### Compare the last three runs
 
 ```bash
-gurl diff get-user --limit 3
+apigent diff get-user --limit 3
 ```
 
 ### JSON for scripts
 
 ```bash
-gurl diff get-user --json
+apigent diff get-user --json
 ```
 
 ```json
@@ -57,6 +57,6 @@ When the bodies differ, the object also carries `changes` (RFC 6902 operations, 
 
 ## Related commands
 
-- [`gurl diag`]({{< relref "/cli/diag" >}}) - Inspect one execution against the last success
-- [`gurl history`]({{< relref "/cli/history" >}}) - List executions and ids
-- [`gurl timeline`]({{< relref "/cli/timeline" >}}) - Executions across all requests
+- [`apigent diag`]({{< relref "/cli/diag" >}}) - Inspect one execution against the last success
+- [`apigent history`]({{< relref "/cli/history" >}}) - List executions and ids
+- [`apigent timeline`]({{< relref "/cli/timeline" >}}) - Executions across all requests

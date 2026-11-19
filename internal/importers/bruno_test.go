@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // Sample .bru file content

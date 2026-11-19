@@ -1,6 +1,8 @@
 package cookies
 
 import (
+	"github.com/bsreeram08/apigent/internal/brand"
+
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,7 +10,6 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -307,13 +308,13 @@ func NewLMDBCookieDB() (*LMDBCookieDB, error) {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	dbDir := filepath.Join(homeDir, ".local", "share", "gurl")
+	dbDir := brand.DataDir(homeDir)
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create db directory: %w", err)
 	}
 
-	dbPath := filepath.Join(dbDir, "gurl-cookies.db")
-	if envPath := os.Getenv("GURL_COOKIE_DB_PATH"); envPath != "" {
+	dbPath := brand.CookieDBPath(dbDir)
+	if envPath := brand.Getenv("COOKIE_DB_PATH"); envPath != "" {
 		dbPath = envPath
 	}
 

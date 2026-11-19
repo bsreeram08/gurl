@@ -1,15 +1,15 @@
 ---
-title: "gurl rename"
+title: "apigent rename"
 description: "Rename a saved request"
 ---
 
 
-Give a saved request a new name. Scripts that call `gurl.setNextRequest("old-name")` are not updated, so change them too.
+Give a saved request a new name. Scripts that call `apigent.setNextRequest("old-name")` are not updated, so change them too.
 
 ## Synopsis
 
 ```bash
-gurl rename <old-name> <new-name>
+apigent rename <old-name> <new-name>
 ```
 
 ## Flags
@@ -26,18 +26,18 @@ None.
 ### Rename a request
 
 ```bash
-gurl rename "get user" "get-user"
+apigent rename "get user" "get-user"
 ```
 
 ### Rename, then confirm
 
 ```bash
-gurl rename "orders" "list-orders"
-gurl show "list-orders"
+apigent rename "orders" "list-orders"
+apigent show "list-orders"
 ```
 
 ## Related commands
 
-- [`gurl edit`]({{< relref "/cli/edit" >}}) - Change other fields
-- [`gurl delete`]({{< relref "/cli/delete" >}}) - Remove a request
-- [`gurl collection`]({{< relref "/cli/collection" >}}) - `collection rename` renames a collection
+- [`apigent edit`]({{< relref "/cli/edit" >}}) - Change other fields
+- [`apigent delete`]({{< relref "/cli/delete" >}}) - Remove a request
+- [`apigent collection`]({{< relref "/cli/collection" >}}) - `collection rename` renames a collection

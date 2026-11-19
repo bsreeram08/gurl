@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/plugins"
+	"github.com/bsreeram08/apigent/internal/plugins"
 )
 
 type SlackOutput struct{}

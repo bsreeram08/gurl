@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 // mockNTLMServer simulates an NTLM authentication server.

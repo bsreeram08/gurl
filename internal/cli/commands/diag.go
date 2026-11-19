@@ -13,10 +13,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 
@@ -53,7 +53,7 @@ func DiagCommand(db storage.DB, envs env.Store) *cli.Command {
 				id = c.Args().First()
 			}
 			if strings.TrimSpace(id) == "" {
-				return cli.Exit("execution id is required: gurl diag <id>", 2)
+				return cli.Exit("execution id is required: apigent diag <id>", 2)
 			}
 			rec, err := db.GetHistoryByID(id)
 			if err != nil {

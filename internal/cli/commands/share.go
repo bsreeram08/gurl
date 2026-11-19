@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"github.com/bsreeram08/apigent/internal/brand"
+
 	"bufio"
 	"bytes"
 	"context"
@@ -13,10 +15,10 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/share"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/share"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
@@ -61,9 +63,9 @@ func ShareCommand(db storage.DB) *cli.Command {
 			&cli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "Output file (default: stdout)"},
 			&cli.BoolFlag{Name: "with-secrets", Usage: "Include secret collection variable values"},
 			&cli.BoolFlag{Name: "binary", Usage: "Write raw age output instead of ASCII armor"},
-			&cli.StringFlag{Name: "sign", Usage: "SSH private key to sign with (default: $GURL_SHARE_IDENTITY, ~/.ssh/id_ed25519, ~/.ssh/id_rsa)"},
+			&cli.StringFlag{Name: "sign", Usage: "SSH private key to sign with (default: $APIGENT_SHARE_IDENTITY, ~/.ssh/id_ed25519, ~/.ssh/id_rsa)"},
 			&cli.BoolFlag{Name: "no-sign", Usage: "Send the bundle unsigned"},
-			&cli.StringFlag{Name: "from", Usage: "Who you are, e.g. github:<you>; the receiver checks the signature against those keys (or GURL_SHARE_FROM)"},
+			&cli.StringFlag{Name: "from", Usage: "Who you are, e.g. github:<you>; the receiver checks the signature against those keys (or APIGENT_SHARE_FROM)"},
 			&cli.BoolFlag{Name: "update-keys", Usage: "Accept and re-pin a recipient's changed GitHub keys"},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
@@ -73,7 +75,7 @@ func ShareCommand(db storage.DB) *cli.Command {
 			}
 			bundle.From = c.String("from")
 			if bundle.From == "" {
-				bundle.From = os.Getenv("GURL_SHARE_FROM")
+				bundle.From = brand.Getenv("SHARE_FROM")
 			}
 			pins, err := loadPins(c)
 			if err != nil {
@@ -222,7 +224,7 @@ func ReceiveCommand(db storage.DB) *cli.Command {
 		Usage:     "Decrypt a share bundle with your private key and import it",
 		ArgsUsage: "<path|->",
 		Flags: []cli.Flag{
-			&cli.StringSliceFlag{Name: "identity", Aliases: []string{"i"}, Usage: "Private key to decrypt with (repeatable; default: $GURL_SHARE_IDENTITY, ~/.ssh/id_ed25519, ~/.ssh/id_rsa)"},
+			&cli.StringSliceFlag{Name: "identity", Aliases: []string{"i"}, Usage: "Private key to decrypt with (repeatable; default: $APIGENT_SHARE_IDENTITY, ~/.ssh/id_ed25519, ~/.ssh/id_rsa)"},
 			&cli.BoolFlag{Name: "force", Aliases: []string{"f"}, Usage: "Overwrite existing requests with the same name"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "Show the bundle's contents without importing"},
 			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "Import without asking for confirmation"},
@@ -338,7 +340,7 @@ func argsAfterDash(args []string) bool {
 
 func receiveIdentities(c *cli.Command) ([]string, error) {
 	explicit := c.StringSlice("identity")
-	if env := os.Getenv("GURL_SHARE_IDENTITY"); env != "" {
+	if env := brand.Getenv("SHARE_IDENTITY"); env != "" {
 		explicit = append(explicit, env)
 	}
 	for _, p := range explicit {
@@ -409,7 +411,7 @@ func printBundlePreview(b *shareBundle) {
 		fmt.Printf("  %-7s %-24s %s%s\n", printable(req.Method), printable(req.Name), printable(req.URL), note)
 	}
 	if scripted > 0 {
-		fmt.Printf("⚠ %d request(s) carry scripts; they run on your machine when you run the request. Check them with 'gurl show' first.\n", scripted)
+		fmt.Printf("⚠ %d request(s) carry scripts; they run on your machine when you run the request. Check them with 'apigent show' first.\n", scripted)
 	}
 }
 
@@ -449,7 +451,7 @@ func signPayload(c *cli.Command, payload []byte) ([]byte, error) {
 	}
 	explicit := c.String("sign")
 	if explicit == "" {
-		explicit = os.Getenv("GURL_SHARE_IDENTITY")
+		explicit = brand.Getenv("SHARE_IDENTITY")
 	}
 	paths := share.DefaultIdentities()
 	if explicit != "" {
@@ -487,7 +489,7 @@ type signerStatus struct {
 // A signature that fails, or a key that isn't one of the claimed sender's,
 // is an error; an unsigned bundle is reported, not refused.
 func openBundle(ctx context.Context, plain []byte, pins *share.KnownKeys) (*shareBundle, signerStatus, error) {
-	notBundle := fmt.Errorf("not a gurl share bundle")
+	notBundle := fmt.Errorf("not a apigent share bundle")
 	var env signedEnvelope
 	if err := json.Unmarshal(plain, &env); err != nil {
 		return nil, signerStatus{}, notBundle

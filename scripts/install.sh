@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 #
-# Gurl Installer
-# GURL = Gurl's Universal Request Library
-# Usage: curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/install.sh | bash
+# apigent installer
+# Usage: curl -sL https://raw.githubusercontent.com/bsreeram08/apigent/master/scripts/install.sh | bash
 #
 
 set -euo pipefail
 
 # Configuration
-REPO="bsreeram08/gurl"
+REPO="bsreeram08/apigent"
+BINARY="apigent"
+# Pre-rename name; an existing gurl from this project becomes a link to apigent.
+LEGACY_BINARY="gurl"
 INSTALL_DIR="${INSTALL_DIR:-${HOME}/.local/bin}"
 VERSION="${VERSION:-latest}"
 
@@ -18,9 +20,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-log() { echo -e "${GREEN}[gurl]${NC} $1"; }
-warn() { echo -e "${YELLOW}[gurl]${NC} $1"; }
-error() { echo -e "${RED}[gurl]${NC} $1" >&2; }
+log() { echo -e "${GREEN}[apigent]${NC} $1"; }
+warn() { echo -e "${YELLOW}[apigent]${NC} $1"; }
+error() { echo -e "${RED}[apigent]${NC} $1" >&2; }
 
 validate_release_tag() {
     [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
@@ -126,7 +128,7 @@ install() {
         release_tag=$(resolve_release_tag "${VERSION}") || return 1
     fi
     
-    filename="gurl-${os}-${arch}"
+    filename="${BINARY}-${os}-${arch}"
     if [[ "${os}" == "windows" ]]; then
         filename="${filename}.exe"
     fi
@@ -140,18 +142,19 @@ install() {
     
     # Download
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "${url}" -o "${INSTALL_DIR}/gurl" || return 1
+        curl -fsSL "${url}" -o "${INSTALL_DIR}/${BINARY}" || return 1
     elif command -v wget >/dev/null 2>&1; then
-        wget -q "${url}" -O "${INSTALL_DIR}/gurl" || return 1
+        wget -q "${url}" -O "${INSTALL_DIR}/${BINARY}" || return 1
     else
         error "Neither curl nor wget found. Please install one of them."
         exit 1
     fi
     
     # Make executable
-    chmod +x "${INSTALL_DIR}/gurl"
+    chmod +x "${INSTALL_DIR}/${BINARY}"
     
-    log "Installed gurl ${release_tag} to ${INSTALL_DIR}/gurl"
+    log "Installed ${BINARY} ${release_tag} to ${INSTALL_DIR}/${BINARY}"
+    link_legacy_binary
     
     # Check if install dir is in PATH
     if [[ ":${PATH}:" != *":${INSTALL_DIR}:"* ]]; then
@@ -161,12 +164,23 @@ install() {
     fi
 }
 
+# link_legacy_binary points an existing gurl from this project at apigent,
+# so scripts that call gurl run the new binary. A gurl that is some other
+# tool is left alone.
+link_legacy_binary() {
+    local legacy="${INSTALL_DIR}/${LEGACY_BINARY}"
+    if [[ -e "$legacy" ]] && "$legacy" --version 2>/dev/null | grep -Eq "^(gurl|apigent) version"; then
+        ln -sf "${BINARY}" "$legacy"
+        log "Linked ${legacy} -> ${BINARY} (the old command name keeps working)"
+    fi
+}
+
 # Verify installation
 verify() {
     log "Verifying installation..."
-    if "${INSTALL_DIR}/gurl" --version >/dev/null 2>&1; then
+    if "${INSTALL_DIR}/${BINARY}" --version >/dev/null 2>&1; then
         log "Installation successful!"
-        "${INSTALL_DIR}/gurl" --version
+        "${INSTALL_DIR}/${BINARY}" --version
     else
         error "Installation verification failed."
         exit 1
@@ -175,7 +189,7 @@ verify() {
 
 # Main
 main() {
-    log "Gurl Installer - GURL = Gurl's Universal Request Library"
+    log "apigent installer"
     log "Repository: https://github.com/${REPO}"
     echo
     
@@ -183,7 +197,7 @@ main() {
     verify
     
     echo
-    log "Run 'gurl --help' to get started!"
+    log "Run '${BINARY} --help' to get started!"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

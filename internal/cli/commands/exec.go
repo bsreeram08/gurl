@@ -10,9 +10,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/resolve"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/resolve"
 	"github.com/urfave/cli/v3"
 )
 
@@ -26,8 +26,8 @@ func ExecCommand(db env.Store) *cli.Command {
 	return &cli.Command{
 		Name:  "exec",
 		Usage: "Run a command with environment variables injected (values are never printed)",
-		UsageText: "gurl exec [--env NAME] [--var KEY=VALUE ...] -- <command> [args...]\n\n" +
-			"   gurl exec --env prod -- sh -c 'curl -H \"Authorization: Bearer $API_KEY\" \"$BASE_URL/v1/charges\"'",
+		UsageText: "apigent exec [--env NAME] [--var KEY=VALUE ...] -- <command> [args...]\n\n" +
+			"   apigent exec --env prod -- sh -c 'curl -H \"Authorization: Bearer $API_KEY\" \"$BASE_URL/v1/charges\"'",
 		StopOnNthArg: &stopAtCommand,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -44,7 +44,7 @@ func ExecCommand(db env.Store) *cli.Command {
 		Action: func(ctx context.Context, c *cli.Command) error {
 			args := c.Args().Slice()
 			if len(args) == 0 {
-				return fmt.Errorf("command is required: gurl exec [--env NAME] -- <command> [args...]")
+				return fmt.Errorf("command is required: apigent exec [--env NAME] -- <command> [args...]")
 			}
 
 			envName := c.String("env")
@@ -54,7 +54,7 @@ func ExecCommand(db env.Store) *cli.Command {
 					return fmt.Errorf("failed to get active environment: %w", err)
 				}
 				if active == "" {
-					return fmt.Errorf("no environment selected: use --env NAME or 'gurl env switch NAME'")
+					return fmt.Errorf("no environment selected: use --env NAME or 'apigent env switch NAME'")
 				}
 				envName = active
 			}

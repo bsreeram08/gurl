@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bsreeram08/apigent/internal/storage"
 	"github.com/urfave/cli/v3"
-	"github.com/sreeram/gurl/internal/storage"
 )
 
 // RenameCommand creates the rename command

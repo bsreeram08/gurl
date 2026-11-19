@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/internal/assertions"
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/resolve"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/assertions"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/resolve"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // Attempt is one attempt to run a saved request, as recorded in its
@@ -180,7 +180,7 @@ func FailureNotice(rec *types.ExecutionHistory) string {
 		return ""
 	}
 	id := rec.ShortID()
-	return fmt.Sprintf("request failed: %s (id: %s) — inspect with: gurl diag %s", reason, id, id)
+	return fmt.Sprintf("request failed: %s (id: %s) — inspect with: apigent diag %s", reason, id, id)
 }
 
 // saveRecord stores the record of execution, if any, and returns it; nil

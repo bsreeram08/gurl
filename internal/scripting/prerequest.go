@@ -1,7 +1,7 @@
 package scripting
 
 import (
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 func RunPreRequest(engine *Engine, script string, req *client.Request) (*client.Request, error) {

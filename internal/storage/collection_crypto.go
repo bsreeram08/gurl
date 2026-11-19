@@ -1,14 +1,16 @@
 package storage
 
 import (
+	"github.com/bsreeram08/apigent/internal/brand"
+
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/sreeram/gurl/internal/secrets"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/secrets"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 const (
@@ -107,7 +109,7 @@ func (s *FileStore) decryptCollectionForUse(collection *types.Collection, dir st
 			_ = deleteCachedCollectionPassphraseKey(collection.ID, collection.Encryption)
 			return &CollectionLockedError{
 				Name: collection.Name,
-				Hint: fmt.Sprintf("cached passphrase key failed; run 'gurl collection unlock %s --passphrase ...' again", collection.Name),
+				Hint: fmt.Sprintf("cached passphrase key failed; run 'apigent collection unlock %s --passphrase ...' again", collection.Name),
 			}
 		}
 		return nil
@@ -163,7 +165,7 @@ func (s *FileStore) saveCollectionWithLocalKeyFallback(collection *types.Collect
 }
 
 func collectionLockedErrorForKeychain(collection *types.Collection, err error) *CollectionLockedError {
-	hint := fmt.Sprintf("run 'gurl collection unlock %s --passphrase ...' before using it", collection.Name)
+	hint := fmt.Sprintf("run 'apigent collection unlock %s --passphrase ...' before using it", collection.Name)
 	if err != nil && !errors.Is(err, errCachedCollectionKeyNotFound) {
 		hint = fmt.Sprintf("%s (keychain unavailable: %v)", hint, err)
 	}
@@ -200,7 +202,7 @@ func collectionLocalKeyPath(id string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
-	return filepath.Join(home, ".local", "share", "gurl", "keys", safePathComponent(id)+".key"), nil
+	return filepath.Join(brand.DataDir(home), "keys", safePathComponent(id)+".key"), nil
 }
 
 func getOrCreateCollectionLocalKey(id string) ([]byte, error) {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 func TestPreRequest_ModifyHeader(t *testing.T) {

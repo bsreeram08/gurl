@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/resolve"
-	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/resolve"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // runOutput is one object of `run --json` output: one per execution (chain

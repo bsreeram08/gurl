@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/Azure/go-ntlmssp"
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 type NTLMHandler struct{}

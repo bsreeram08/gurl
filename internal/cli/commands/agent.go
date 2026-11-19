@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"github.com/bsreeram08/apigent/internal/brand"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,7 +14,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-// Agent mode makes gurl drivable by AI agents: every command that supports
+// Agent mode makes apigent drivable by AI agents: every command that supports
 // --json prints JSON, nothing prompts, --reveal and the clipboard are
 // refused, and secrets are also masked inside response bodies.
 //
@@ -20,8 +22,8 @@ import (
 // only stops prompts: a command that would ask fails with an error naming
 // the flag or argument to pass instead.
 const (
-	AgentEnvVar   = "GURL_AGENT"
-	NoInputEnvVar = "GURL_NO_INPUT"
+	AgentEnvVar   = brand.EnvPrefix + "AGENT"
+	NoInputEnvVar = brand.EnvPrefix + "NO_INPUT"
 
 	agentFlag   = "agent"
 	noInputFlag = "no-input"
@@ -32,7 +34,7 @@ func GlobalFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.BoolFlag{
 			Name:  agentFlag,
-			Usage: "JSON output, no prompts, strict masking (or " + AgentEnvVar + "=1, or run as agentgurl)",
+			Usage: "JSON output, no prompts, strict masking (or " + AgentEnvVar + "=1, or run as agent" + brand.Name + ")",
 		},
 		&cli.BoolFlag{
 			Name:  noInputFlag,
@@ -41,12 +43,16 @@ func GlobalFlags() []cli.Flag {
 	}
 }
 
-// envEnabled reports whether the environment variable name is set to a true
-// value (1, true, yes, on).
+// envEnabled reports whether the environment variable name, or its
+// pre-rename GURL_ twin, is set to a true value (1, true, yes, on). Either
+// one is enough: these switches only make the CLI stricter.
 func envEnabled(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
-	case "1", "true", "yes", "on":
-		return true
+	legacy := strings.Replace(name, brand.EnvPrefix, brand.LegacyEnvPrefix, 1)
+	for _, n := range []string{name, legacy} {
+		switch strings.ToLower(strings.TrimSpace(os.Getenv(n))) {
+		case "1", "true", "yes", "on":
+			return true
+		}
 	}
 	return false
 }

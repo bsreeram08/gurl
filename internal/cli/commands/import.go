@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"github.com/bsreeram08/apigent/internal/brand"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/importers"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/importers"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 
@@ -189,7 +191,7 @@ func importCommandPassphrase(c *cli.Command) string {
 	if passphrase := c.String("passphrase"); passphrase != "" {
 		return passphrase
 	}
-	return os.Getenv("GURL_IMPORT_PASSPHRASE")
+	return brand.Getenv("IMPORT_PASSPHRASE")
 }
 
 func importCollectionRecords(db storage.DB, collection *types.Collection, requests []*types.SavedRequest, force bool) (int, int, error) {

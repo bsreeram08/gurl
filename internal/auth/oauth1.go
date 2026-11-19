@@ -12,13 +12,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 type OAuth1Handler struct{}
 
-func (h *OAuth1Handler) Name() string        { return "oauth1" }
-func (h *OAuth1Handler) Description() string { return "OAuth 1.0a signature-based authentication (RFC 5849)" }
+func (h *OAuth1Handler) Name() string { return "oauth1" }
+func (h *OAuth1Handler) Description() string {
+	return "OAuth 1.0a signature-based authentication (RFC 5849)"
+}
 
 func (h *OAuth1Handler) Params() []ParamDef {
 	return []ParamDef{

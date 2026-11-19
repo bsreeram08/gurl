@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 func sampleExchange() (*client.Request, *client.Response) {

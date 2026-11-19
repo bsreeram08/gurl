@@ -13,14 +13,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/internal/storage/memstore"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/internal/storage/memstore"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
-var failureNotice = regexp.MustCompile(`request failed: (.+) \(id: ([0-9a-f]{8})\) — inspect with: gurl diag ([0-9a-f]{8})`)
+var failureNotice = regexp.MustCompile(`request failed: (.+) \(id: ([0-9a-f]{8})\) — inspect with: apigent diag ([0-9a-f]{8})`)
 
 // captureStreams runs fn and returns what it wrote to stdout and stderr.
 func captureStreams(t *testing.T, fn func()) (stdout, stderr string) {

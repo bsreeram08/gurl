@@ -1,15 +1,15 @@
 ---
-title: "gurl edit"
+title: "apigent edit"
 description: "Edit a saved request"
 ---
 
 
-Change fields of a saved request from the command line. Only the fields you pass are changed; gurl prints the list of changes.
+Change fields of a saved request from the command line. Only the fields you pass are changed; apigent prints the list of changes.
 
 ## Synopsis
 
 ```bash
-gurl edit <name> [flags]
+apigent edit <name> [flags]
 ```
 
 ## Flags
@@ -41,30 +41,30 @@ gurl edit <name> [flags]
 ### Point a request at a new URL
 
 ```bash
-gurl edit "list-users" --url '{{BASE_URL}}/v2/users'
+apigent edit "list-users" --url '{{BASE_URL}}/v2/users'
 ```
 
 ### Add flow metadata for chaining
 
 ```bash
-gurl edit "get-profile" \
+apigent edit "get-profile" \
   --run-if "token != ''" \
   --extract userId=jsonpath:'$.id' \
-  --post-script "gurl.setVariable('seenProfile', 'true')"
+  --post-script "apigent.setVariable('seenProfile', 'true')"
 ```
 
 ### Replace or clear saved auth
 
 ```bash
-gurl edit "profile" --auth bearer --auth-param token='{{token}}'
-gurl edit "profile" --auth none
+apigent edit "profile" --auth bearer --auth-param token='{{token}}'
+apigent edit "profile" --auth none
 ```
 
 `--auth none` clears auth and cannot be combined with `--auth-param`.
 
 ## Related commands
 
-- [`gurl show`]({{< relref "/cli/show" >}}) - See what is saved
-- [`gurl save`]({{< relref "/cli/save" >}}) - Save a new request
-- [`gurl extract`]({{< relref "/cli/extract" >}}) - Test extraction rules
+- [`apigent show`]({{< relref "/cli/show" >}}) - See what is saved
+- [`apigent save`]({{< relref "/cli/save" >}}) - Save a new request
+- [`apigent extract`]({{< relref "/cli/extract" >}}) - Test extraction rules
 - [Chaining and extraction]({{< relref "/guides/chaining" >}}) - Guide

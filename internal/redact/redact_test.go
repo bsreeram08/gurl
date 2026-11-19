@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/resolve"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/resolve"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 func TestSavedRequest(t *testing.T) {

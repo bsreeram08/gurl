@@ -1,5 +1,5 @@
 ---
-title: "gurl delete"
+title: "apigent delete"
 description: "Remove a saved request"
 ---
 
@@ -9,7 +9,7 @@ Permanently remove a saved request. This cannot be undone.
 ## Synopsis
 
 ```bash
-gurl delete <name>
+apigent delete <name>
 ```
 
 ## Flags
@@ -26,18 +26,18 @@ None.
 ### Delete a request
 
 ```bash
-gurl delete "old-request"
+apigent delete "old-request"
 ```
 
 ### Check the name first
 
 ```bash
-gurl list --pattern old
-gurl delete "old-request"
+apigent list --pattern old
+apigent delete "old-request"
 ```
 
 ## Related commands
 
-- [`gurl rename`]({{< relref "/cli/rename" >}}) - Rename a request instead
-- [`gurl list`]({{< relref "/cli/list" >}}) - List saved requests
-- [`gurl collection`]({{< relref "/cli/collection" >}}) - `collection delete` removes a whole collection
+- [`apigent rename`]({{< relref "/cli/rename" >}}) - Rename a request instead
+- [`apigent list`]({{< relref "/cli/list" >}}) - List saved requests
+- [`apigent collection`]({{< relref "/cli/collection" >}}) - `collection delete` removes a whole collection

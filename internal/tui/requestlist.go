@@ -7,8 +7,8 @@ import (
 
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 const (
@@ -116,7 +116,7 @@ func (rl *RequestList) GetMessages() []tea.Msg { return nil }
 
 func (rl *RequestList) ViewTree() string {
 	if len(rl.items) == 0 {
-		return Style.PlainText.Render("\n  No requests saved.\n  Use 'gurl save' to add one.")
+		return Style.PlainText.Render("\n  No requests saved.\n  Use 'apigent save' to add one.")
 	}
 
 	var sb strings.Builder

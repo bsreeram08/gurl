@@ -3,7 +3,7 @@ package extract
 import (
 	"testing"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 func TestExtractor_ExtractsJSONPathValue(t *testing.T) {

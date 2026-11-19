@@ -12,19 +12,19 @@ Each value comes from one scope. When the same name is set in several scopes, th
 
 | Scope (lowest first) | Set with |
 |----------------------|----------|
-| 1. Environment | `--env NAME` or `gurl env switch NAME` |
-| 2. Collection | `gurl collection create/set-var` (the request's collection) |
+| 1. Environment | `--env NAME` or `apigent env switch NAME` |
+| 2. Collection | `apigent collection create/set-var` (the request's collection) |
 | 3. Data row | `--data rows.csv` / `rows.json` |
 | 4. CLI | `--var key=value` |
 | 5. Runtime | values extracted from a response or set by a script earlier in the same run |
 
-The scope a variable's final value came from is its **variable origin**. [`gurl diag`]({{< relref "/cli/diag" >}}) shows the origin of each variable in a recorded execution, and `--persist` uses it to decide where to write values back.
+The scope a variable's final value came from is its **variable origin**. [`apigent diag`]({{< relref "/cli/diag" >}}) shows the origin of each variable in a recorded execution, and `--persist` uses it to decide where to write values back.
 
 Collection values may reference environment keys, so one collection can serve several environments:
 
 ```bash
-gurl env create staging --var BASE_URL=https://staging.example.com
-gurl collection create "users-api" --var 'API_URL={{BASE_URL}}/v1'
+apigent env create staging --var BASE_URL=https://staging.example.com
+apigent collection create "users-api" --var 'API_URL={{BASE_URL}}/v1'
 ```
 
 ## Placeholder forms
@@ -42,11 +42,11 @@ gurl collection create "users-api" --var 'API_URL={{BASE_URL}}/v1'
 A bare `{{amount:num}}` makes the stored body invalid JSON. Quote it instead: in a JSON body, the quoted form `"{{amount:num}}"` (likewise `"{{x:bool}}"` and `"{{x:raw}}"`) drops the quotes when it is filled.
 
 ```bash
-gurl save "charge" '{{BASE_URL}}/charges' -X POST \
+apigent save "charge" '{{BASE_URL}}/charges' -X POST \
   -H 'Content-Type: application/json' \
   -d '{"amount":"{{amount:num}}","capture":"{{capture:bool}}"}'
 
-gurl run "charge" --env dev --var amount=5 --var capture=true --dry-run
+apigent run "charge" --env dev --var amount=5 --var capture=true --dry-run
 ```
 
 ```text
@@ -95,7 +95,7 @@ With `run --json`, these appear as structured `problems` entries (`kind`, `varia
 
 ## Keeping runtime values: --persist
 
-Values extracted from a response (`--extract`) or set by a script (`gurl.setVar`) live only for the current run. Without `--persist`, `run` drops them and prints a note such as `note: uid not saved; add --persist to use them in later runs`.
+Values extracted from a response (`--extract`) or set by a script (`apigent.setVar`) live only for the current run. Without `--persist`, `run` drops them and prints a note such as `note: uid not saved; add --persist to use them in later runs`.
 
 With `--persist`, each extracted or script-set value is written back to its variable origin:
 
@@ -113,4 +113,4 @@ CLI `--var` values and data-row values are never written back unless an extracti
 ## See also
 
 - [Chaining & extraction]({{< relref "/guides/chaining" >}})
-- [`gurl run`]({{< relref "/cli/run" >}}) and [`gurl docs`]({{< relref "/cli/docs" >}}) (its "Placeholders" and "Scope precedence" sections are the short version of this page)
+- [`apigent run`]({{< relref "/cli/run" >}}) and [`apigent docs`]({{< relref "/cli/docs" >}}) (its "Placeholders" and "Scope precedence" sections are the short version of this page)

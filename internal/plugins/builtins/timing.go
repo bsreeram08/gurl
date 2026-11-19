@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sreeram/gurl/internal/plugins"
+	"github.com/bsreeram08/apigent/internal/plugins"
 )
 
 // TimingMiddleware records request start time and computes elapsed time after response.

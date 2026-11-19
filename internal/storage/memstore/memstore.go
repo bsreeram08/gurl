@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/google/uuid"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
 )
 
 // DB implements storage.DB in memory.

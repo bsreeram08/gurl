@@ -1,6 +1,6 @@
-baseURL = 'https://bsreeram08.github.io/gurl/'
+baseURL = 'https://bsreeram08.github.io/apigent/'
 locale = 'en-us'
-title = 'gurl'
+title = 'apigent'
 theme = 'hextra'
 enableRobotsTXT = true
 
@@ -24,7 +24,7 @@ emDash = "---"
 
 [params]
 gurl_version = "dev"
-description = "CLI API workbench — save, run, and manage HTTP requests from the terminal"
+description = "Saved API requests your AI agents can run without ever seeing the keys"
 externalLinkDecoration = true
 displayUpdatedDate = false
 
@@ -58,7 +58,7 @@ display = "hover"
 
 [params.editURL]
 enable = true
-base = "https://github.com/bsreeram08/gurl/edit/master/docs/content"
+base = "https://github.com/bsreeram08/apigent/edit/master/docs/content"
 
 # Navbar. The sidebar is built from the content tree (sections ordered by
 # `weight` in each _index.md), because the home page has `type: docs`.
@@ -84,7 +84,7 @@ type = "search"
 [[menus.main]]
 name = "GitHub"
 weight = 4
-url = "https://github.com/bsreeram08/gurl"
+url = "https://github.com/bsreeram08/apigent"
 [menus.main.params]
 icon = "github"
 

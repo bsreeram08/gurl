@@ -1,27 +1,28 @@
 # AGENTS.md
 
-This guide is for AI coding agents working **on** the gurl repository. If you want to **use** gurl, run `gurl docs` instead.
+This guide is for AI coding agents working **on** the apigent repository (formerly gurl). If you want to **use** apigent, run `apigent docs` instead.
 
-gurl is a Go CLI: a terminal library of named HTTP requests, run against environments and collections. Module: `github.com/sreeram/gurl`. CLI framework: `urfave/cli/v3`. Storage: goleveldb plus optional `.gurl/` project files.
+apigent is a Go CLI: a terminal library of named HTTP requests, run against environments and collections, that AI agents can drive (`--agent`, `apigent mcp`) without seeing secrets. Module: `github.com/bsreeram08/apigent`. CLI framework: `urfave/cli/v3`. Storage: goleveldb plus optional `.apigent/` (or legacy `.gurl/`) project files.
 
 Read [CONTEXT.md](CONTEXT.md) first. It defines the terms used everywhere: saved request, placeholder, scope, variable origin, request resolution, resolution problem, alias, dry run, persist. Use those words, not "template" or "substitution".
 
 ## Commands
 
 ```bash
-go build -o gurl ./cmd/gurl
+go build -o apigent ./cmd/apigent
 go test ./...
 go test -race ./internal/<pkg>/...      # on every package you touched
 go vet ./...
-GURL_DB_PATH=/tmp/g.db GURL_COOKIE_DB_PATH=/tmp/gc.db ./gurl ...   # manual runs without touching real data
+APIGENT_DB_PATH=/tmp/v.db APIGENT_COOKIE_DB_PATH=/tmp/vc.db ./apigent ...   # manual runs without touching real data
 ```
 
 ## Layout
 
 | Path | Owns |
 |------|------|
-| `cmd/gurl/main.go` | `newApp`: the command tree; agent-mode detection (`agentgurl`) |
-| `internal/cli/commands/` | One file per command; `agent.go` (JSON / no-input / reveal rules); `docs.go`, `docs_sections.go` (`gurl docs`) |
+| `cmd/apigent/main.go` | `newApp`: the command tree; agent-mode detection (`agentapigent`, `agentgurl`) |
+| `internal/brand/` | The product name and every legacy (`gurl`) fallback: env vars, data/config/plugin dirs, project dir, binary names |
+| `internal/cli/commands/` | One file per command; `agent.go` (JSON / no-input / reveal rules); `docs.go`, `docs_sections.go` (`apigent docs`); `mcp.go` (MCP server) |
 | `internal/resolve/` | Request resolution, the only place placeholders are filled |
 | `internal/redact/` | Masking rules for everything printed or stored |
 | `internal/runner/` | Runs, chains, collection and data-driven runs, execution records, exit codes |
@@ -36,15 +37,17 @@ GURL_DB_PATH=/tmp/g.db GURL_COOKIE_DB_PATH=/tmp/gc.db ./gurl ...   # manual runs
 3. **Storage through interfaces.** Commands receive `storage.DB` and `env.Store` and never open the database themselves. Tests use `memstore.New()` and `env.NewMemoryStore()`.
 4. **Agent mode holds for every output path.** Use `jsonOutput(c)`, `canPrompt(c, ...)` / `noInput(c)` and `rejectReveal(c)` from `agent.go`. In JSON mode stdout carries only JSON, and errors are `{"ok":false,"error":"..."}`.
 5. **Exit codes:** 0 success, 1 error, 2 usage (`cli.Exit(msg, 2)`, as in `agent.go`). `collection run` maps results through `runner.DetermineExitCode` (3 means an empty collection). Changing a code breaks scripts, so treat it as a breaking change.
-6. **No real secrets in fixtures.** Use fakes like `sk-test-123` and assert that they don't appear in output.
+6. **Names go through `internal/brand`.** Don't hard-code `apigent`, `gurl`, `APIGENT_`/`GURL_` or data paths; use `brand.Getenv`, `brand.DataDir` and friends so legacy installs keep working. These identifiers are frozen and must not change: `gurlenc:v1:` (secret prefix), `gurl-share` (bundle kind and SSH signature namespace), the `gurl` keychain service, and the `.gurl` export format.
+7. **MCP tools can't override defined values.** A tool call may only set fillable placeholders; it runs through `run --agent` in a child process. Keep it that way.
+8. **No real secrets in fixtures.** Use fakes like `sk-test-123` and assert that they don't appear in output.
 
 ## Adding a command
 
 1. Create `internal/cli/commands/<name>.go` with a `func <Name>Command(db storage.DB, ...) *cli.Command` constructor. Give it `Usage`, `ArgsUsage` if it takes arguments, and a clear `Usage` on every flag.
-2. Register it in `newApp` in `cmd/gurl/main.go`.
+2. Register it in `newApp` in `cmd/apigent/main.go`.
 3. If it prints data, add `--json` (`-j`) and honor `jsonOutput(c)`. If it can prompt, gate the prompt with `canPrompt`. If it can show secrets, call `rejectReveal`.
-4. `gurl docs` is generated from the command tree, so a visible command and its flags appear automatically. Only add to `docs_sections.go` for a concept the flags can't describe, and keep it short.
-5. Keep `gurl docs --json` under the **32KB budget**. `TestDocsJSONListsEveryCommandCompactly` in `cmd/gurl/agent_test.go` enforces it and checks that every visible command is listed. Hidden commands (`Hidden: true`) are left out.
+4. `apigent docs` is generated from the command tree, so a visible command and its flags appear automatically. Only add to `docs_sections.go` for a concept the flags can't describe, and keep it short.
+5. Keep `apigent docs --json` under the **32KB budget**. `TestDocsJSONListsEveryCommandCompactly` in `cmd/apigent/agent_test.go` enforces it and checks that every visible command is listed. Hidden commands (`Hidden: true`) are left out.
 6. Add tests, an entry under `## [Unreleased]` in `CHANGELOG.md`, and README updates if users will notice the change.
 
 ## Commits
@@ -55,7 +58,7 @@ Conventional prefixes (`feat(scope):`, `fix:`, `docs:`, `test:`, `refactor:`, `c
 
 ### Issue tracker
 
-Issues live in GitHub Issues for bsreeram08/gurl, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues for bsreeram08/apigent, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

@@ -11,10 +11,10 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/resolve"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/resolve"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // RequestBuilder is a bubbletea sub-model for editing/sending HTTP requests

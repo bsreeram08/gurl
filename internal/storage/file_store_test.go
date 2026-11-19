@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/project"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/project"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 func TestFileStoreSavesCollectionAndRequests(t *testing.T) {

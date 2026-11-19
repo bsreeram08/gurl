@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sreeram/gurl/internal/secrets"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/secrets"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 type CollectionExport struct {

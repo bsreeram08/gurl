@@ -1,18 +1,19 @@
 package storage
 
 import (
+	"github.com/bsreeram08/apigent/internal/brand"
+
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/google/uuid"
-	"github.com/sreeram/gurl/pkg/types"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
@@ -89,13 +90,13 @@ func resolveDBPath() (string, error) {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	dbDir := filepath.Join(homeDir, ".local", "share", "gurl")
+	dbDir := brand.DataDir(homeDir)
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create db directory: %w", err)
 	}
 
-	dbPath := filepath.Join(dbDir, "gurl.db")
-	if envPath := os.Getenv("GURL_DB_PATH"); envPath != "" {
+	dbPath := brand.DBPath(dbDir)
+	if envPath := brand.Getenv("DB_PATH"); envPath != "" {
 		dbPath = envPath
 	}
 

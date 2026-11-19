@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/share"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/share"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"golang.org/x/crypto/ssh"
 )
 

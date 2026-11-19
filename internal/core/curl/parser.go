@@ -5,8 +5,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/kballard/go-shellquote"
-	"github.com/sreeram/gurl/pkg/types"
 )
 
 func expandANSICQuotes(s string) string {

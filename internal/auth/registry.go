@@ -3,7 +3,7 @@ package auth
 import (
 	"fmt"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 type Registry struct {

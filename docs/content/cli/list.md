@@ -1,5 +1,5 @@
 ---
-title: "gurl list"
+title: "apigent list"
 description: "List saved requests"
 ---
 
@@ -9,7 +9,7 @@ List saved requests, optionally filtered by text, collection or tag.
 ## Synopsis
 
 ```bash
-gurl list [flags]
+apigent list [flags]
 ```
 
 `--pattern` matches a substring of the request name, URL or any header value, so you can find requests by merchant ID, host or similar. Names are shown in full whenever stdout is not a terminal (or with `--wide`), so piped output is never truncated.
@@ -40,24 +40,24 @@ gurl list [flags]
 ### Find a request by a header value
 
 ```bash
-gurl list --pattern M-4242
+apigent list --pattern M-4242
 ```
 
 ### Requests in one collection, sorted by name
 
 ```bash
-gurl list --collection payments-api --sort name
+apigent list --collection payments-api --sort name
 ```
 
 ### Machine-readable list
 
 ```bash
-gurl list --json | jq -r '.[].name'
+apigent list --json | jq -r '.[].name'
 ```
 
 ## Related commands
 
-- [`gurl show`]({{< relref "/cli/show" >}}) - Show one request in full
-- [`gurl save`]({{< relref "/cli/save" >}}) - Save a new request
-- [`gurl collection`]({{< relref "/cli/collection" >}}) - Manage collections
+- [`apigent show`]({{< relref "/cli/show" >}}) - Show one request in full
+- [`apigent save`]({{< relref "/cli/save" >}}) - Save a new request
+- [`apigent collection`]({{< relref "/cli/collection" >}}) - Manage collections
 - [Header redaction]({{< relref "/security/header-redaction" >}}) - What gets masked

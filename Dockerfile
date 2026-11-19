@@ -15,19 +15,21 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
-    -ldflags="-s -w -X main.version=${VERSION} -X github.com/sreeram/gurl/internal/cli/commands.CurrentVersion=${VERSION}" \
-    -o /out/gurl ./cmd/gurl
+    -ldflags="-s -w -X main.version=${VERSION} -X github.com/bsreeram08/apigent/internal/cli/commands.CurrentVersion=${VERSION}" \
+    -o /out/apigent ./cmd/apigent
 
 FROM alpine:3.22
 
 RUN apk add --no-cache ca-certificates \
-    && addgroup -S gurl \
-    && adduser -S gurl -G gurl
+    && addgroup -S apigent \
+    && adduser -S apigent -G apigent
 
-USER gurl
+COPY --from=build /out/apigent /usr/local/bin/apigent
+# The pre-rename command name keeps working inside the image.
+RUN ln -s apigent /usr/local/bin/gurl
+
+USER apigent
 WORKDIR /work
 
-COPY --from=build /out/gurl /usr/local/bin/gurl
-
-ENTRYPOINT ["gurl"]
+ENTRYPOINT ["apigent"]
 CMD ["--help"]

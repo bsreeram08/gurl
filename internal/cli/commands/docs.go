@@ -10,9 +10,9 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-// DocsCommand prints one compact reference of gurl: every command and flag,
+// DocsCommand prints one compact reference of apigent: every command and flag,
 // generated from the command tree at runtime, plus the static sections in
-// docSections. `gurl docs <command>...` narrows it to one subtree.
+// docSections. `apigent docs <command>...` narrows it to one subtree.
 func DocsCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "docs",
@@ -32,7 +32,7 @@ func DocsCommand() *cli.Command {
 				return err
 			}
 			ref := docsReference{Commands: docCommands(target, path)}
-			// The static sections describe gurl as a whole; a narrowed
+			// The static sections describe apigent as a whole; a narrowed
 			// reference keeps only the commands.
 			if target == root {
 				ref.Sections = make(map[string]string, len(docSections))
@@ -54,7 +54,7 @@ type docsReference struct {
 }
 
 type docCommand struct {
-	// Path is the full invocation, e.g. "gurl collection run".
+	// Path is the full invocation, e.g. "apigent collection run".
 	Path    string    `json:"path"`
 	Aliases []string  `json:"aliases,omitempty"`
 	Usage   string    `json:"usage,omitempty"`
@@ -77,7 +77,7 @@ func findCommand(root *cli.Command, names []string) (*cli.Command, string, error
 	for _, name := range names {
 		sub := cmd.Command(name)
 		if sub == nil || sub.Hidden {
-			return nil, "", fmt.Errorf("unknown command %q: run gurl docs for the list", strings.TrimSpace(path+" "+name))
+			return nil, "", fmt.Errorf("unknown command %q: run apigent docs for the list", strings.TrimSpace(path+" "+name))
 		}
 		cmd, path = sub, path+" "+sub.Name
 	}

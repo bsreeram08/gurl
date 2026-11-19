@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 // mockDigestHandler simulates a server that challenges with Digest auth

@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // cookieServer sets a session cookie on /login and reports the session

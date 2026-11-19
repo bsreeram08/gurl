@@ -59,8 +59,11 @@ jobs:
             windows-latest) os_name="windows" ;;
             *) os_name="${{ matrix.os }}" ;;
           esac
-          name="gurl-${os_name}-${{ matrix.arch }}${ext}"
-          CGO_ENABLED=0 GOOS="$os_name" GOARCH="${{ matrix.arch }}" go build -ldflags="-s -w -X main.version=${VERSION} -X github.com/sreeram/gurl/internal/cli/commands.CurrentVersion=${VERSION}" -o "$name" ./cmd/gurl
+          name="apigent-${os_name}-${{ matrix.arch }}${ext}"
+          CGO_ENABLED=0 GOOS="$os_name" GOARCH="${{ matrix.arch }}" go build -ldflags="-s -w -X main.version=${VERSION} -X github.com/bsreeram08/apigent/internal/cli/commands.CurrentVersion=${VERSION}" -o "$name" ./cmd/apigent
+          # Same bytes under the pre-rename asset name, so `gurl update` in
+          # releases before the rename can still find and verify it.
+          cp "$name" "gurl-${os_name}-${{ matrix.arch }}${ext}"
 
       - name: Checksum
         run: |
@@ -70,16 +73,18 @@ jobs:
             windows-latest) os_name="windows" ;;
             *) os_name="${{ matrix.os }}" ;;
           esac
-          name="gurl-${os_name}-${{ matrix.arch }}"
           checksum_file="checksums-${os_name}-${{ matrix.arch }}.txt"
           mkdir -p checksums
-          # Use macOS-compatible sha256 command
-          if command -v shasum &>/dev/null; then
-            shasum -a 256 "$name" > "checksums/$checksum_file"
-          else
-            sha256sum "$name" > "checksums/$checksum_file"
-          fi
-          tar -czf "${name}.tar.gz" "$name"
+          : > "checksums/$checksum_file"
+          for name in "apigent-${os_name}-${{ matrix.arch }}" "gurl-${os_name}-${{ matrix.arch }}"; do
+            # Use macOS-compatible sha256 command
+            if command -v shasum &>/dev/null; then
+              shasum -a 256 "$name" >> "checksums/$checksum_file"
+            else
+              sha256sum "$name" >> "checksums/$checksum_file"
+            fi
+            tar -czf "${name}.tar.gz" "$name"
+          done
           echo "Created checksums/$checksum_file:"
           cat "checksums/$checksum_file"
 
@@ -87,8 +92,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: gurl-${{ matrix.os }}-${{ matrix.arch }}
+          name: apigent-${{ matrix.os }}-${{ matrix.arch }}
           path: |
+            apigent-linux-${{ matrix.arch }}
+            apigent-linux-${{ matrix.arch }}.tar.gz
             gurl-linux-${{ matrix.arch }}
             gurl-linux-${{ matrix.arch }}.tar.gz
             checksums/
@@ -98,8 +105,10 @@ jobs:
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: gurl-${{ matrix.os }}-${{ matrix.arch }}
+          name: apigent-${{ matrix.os }}-${{ matrix.arch }}
           path: |
+            apigent-darwin-${{ matrix.arch }}
+            apigent-darwin-${{ matrix.arch }}.tar.gz
             gurl-darwin-${{ matrix.arch }}
             gurl-darwin-${{ matrix.arch }}.tar.gz
             checksums/
@@ -115,7 +124,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: .
-          pattern: gurl-*
+          pattern: apigent-*
           merge-multiple: true
 
       - name: Merge checksums
@@ -132,6 +141,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            apigent-*
             gurl-*
             SHA256SUMS
         env:
@@ -155,10 +165,12 @@ jobs:
           IMAGE: ghcr.io/${{ github.repository }}
         run: |
           image="${IMAGE,,}"
-          tags="${image}:${VERSION}"
+          # Also publish under the pre-rename image name while users move over.
+          legacy="ghcr.io/bsreeram08/gurl"
+          tags="${image}:${VERSION},${legacy}:${VERSION}"
           # Pre-release tags (e.g. v1.0.0-rc.1) do not move :latest.
           if [[ "$VERSION" != *-* ]]; then
-            tags+=",${image}:latest"
+            tags+=",${image}:latest,${legacy}:latest"
           fi
           {
             echo "version=${VERSION}"
@@ -191,7 +203,7 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.meta.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.description=Smart curl saver and API companion for the terminal
+            org.opencontainers.image.description=Saved API requests your AI agents can run without ever seeing the keys
             org.opencontainers.image.licenses=MIT
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -221,65 +233,66 @@ jobs:
 
       - name: Download release tarballs
         run: |
-          curl -sLO "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-darwin-arm64.tar.gz"
-          curl -sLO "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-linux-amd64.tar.gz"
-          curl -sLO "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-linux-arm64.tar.gz"
+          for target in darwin-arm64 linux-amd64 linux-arm64; do
+            curl -fsSLO "https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/apigent-${target}.tar.gz"
+          done
 
       - name: Compute checksums
         run: |
           {
-            echo "SHA_DARWIN_ARM64=$(sha256sum gurl-darwin-arm64.tar.gz | cut -d' ' -f1)"
-            echo "SHA_LINUX_AMD64=$(sha256sum gurl-linux-amd64.tar.gz | cut -d' ' -f1)"
-            echo "SHA_LINUX_ARM64=$(sha256sum gurl-linux-arm64.tar.gz | cut -d' ' -f1)"
+            echo "SHA_DARWIN_ARM64=$(sha256sum apigent-darwin-arm64.tar.gz | cut -d' ' -f1)"
+            echo "SHA_LINUX_AMD64=$(sha256sum apigent-linux-amd64.tar.gz | cut -d' ' -f1)"
+            echo "SHA_LINUX_ARM64=$(sha256sum apigent-linux-arm64.tar.gz | cut -d' ' -f1)"
           } >> "$GITHUB_ENV"
 
       - name: Update formula
         run: |
           VERSION_NUM="${VERSION#v}"
           mkdir -p Formula
-          cat > Formula/gurl.rb << EOF
-          class Gurl < Formula
-            desc "Smart curl saver and API companion for the terminal"
-            homepage "https://github.com/bsreeram08/gurl"
+          cat > Formula/apigent.rb << EOF
+          class Apigent < Formula
+            desc "Saved API requests your AI agents can run without ever seeing the keys"
+            homepage "https://github.com/bsreeram08/apigent"
             version "${VERSION_NUM}"
             license "MIT"
 
             on_macos do
               if Hardware::CPU.arm?
-                url "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-darwin-arm64.tar.gz"
+                url "https://github.com/bsreeram08/apigent/releases/download/${VERSION}/apigent-darwin-arm64.tar.gz"
                 sha256 "${SHA_DARWIN_ARM64}"
               end
             end
 
             on_linux do
               if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-                url "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-linux-arm64.tar.gz"
+                url "https://github.com/bsreeram08/apigent/releases/download/${VERSION}/apigent-linux-arm64.tar.gz"
                 sha256 "${SHA_LINUX_ARM64}"
               elsif Hardware::CPU.intel?
-                url "https://github.com/bsreeram08/gurl/releases/download/${VERSION}/gurl-linux-amd64.tar.gz"
+                url "https://github.com/bsreeram08/apigent/releases/download/${VERSION}/apigent-linux-amd64.tar.gz"
                 sha256 "${SHA_LINUX_AMD64}"
               end
             end
 
             def install
-              bin.install Dir["gurl-*"].first => "gurl"
-            end
-
-            def post_install
-              (var/"gurl").mkpath
+              bin.install Dir["apigent-*"].first => "apigent"
+              # The pre-rename command name keeps working.
+              bin.install_symlink "apigent" => "gurl"
             end
 
             test do
-              system "#{bin}/gurl", "--version"
+              system "#{bin}/apigent", "--version"
             end
           end
           EOF
+          # brew upgrade moves existing "brew install gurl" users to apigent.
+          printf '{\n  "gurl": "apigent"\n}\n' > formula_renames.json
+          git rm -q --ignore-unmatch Formula/gurl.rb
 
       - name: Commit and push formula
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/gurl.rb
+          git add -A Formula formula_renames.json
           git diff --staged --quiet && echo "No changes" && exit 0
           git commit -m "chore: update formula to ${VERSION}"
           git push

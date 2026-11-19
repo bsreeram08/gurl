@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/sreeram/gurl/internal/secrets"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/secrets"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/zalando/go-keyring"
 )
 
+// The keychain service predates the apigent rename and is frozen, so
+// passphrases cached by gurl are still found.
 const collectionPassphraseKeyringService = "gurl"
 
 var errCachedCollectionKeyNotFound = errors.New("cached collection key not found")

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 type ProjectDB struct {
@@ -341,7 +341,7 @@ func (db *ProjectDB) UpdateCollection(collection *types.Collection) error {
 
 func (db *ProjectDB) MigrateCollectionToFiles(name string) (int, string, error) {
 	if !db.hasFileStore() {
-		return 0, "", fmt.Errorf("gurl project not found; run 'gurl init' or set GURL_PROJECT_DIR")
+		return 0, "", fmt.Errorf("apigent project not found; run 'apigent init' or set APIGENT_PROJECT_DIR")
 	}
 
 	var collection *types.Collection
@@ -378,7 +378,7 @@ func (db *ProjectDB) MigrateCollectionToFiles(name string) (int, string, error) 
 
 func (db *ProjectDB) UnlockCollection(name string, passphrase string) error {
 	if !db.hasFileStore() {
-		return fmt.Errorf("gurl project not found; run 'gurl init' or set GURL_PROJECT_DIR")
+		return fmt.Errorf("apigent project not found; run 'apigent init' or set APIGENT_PROJECT_DIR")
 	}
 	return db.files.UnlockCollection(name, passphrase)
 }

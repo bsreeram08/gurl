@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"github.com/bsreeram08/apigent/internal/brand"
+
 	"bufio"
 	"context"
 	"errors"
@@ -10,13 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/project"
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/internal/secrets"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/project"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/secrets"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )
@@ -369,7 +371,7 @@ func collectionMigrateCommand(db storage.DB) *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "project-dir",
-				Usage: "Project root for .gurl file storage",
+				Usage: "Project root for .apigent file storage",
 			},
 			&cli.StringFlag{
 				Name:  "passphrase",
@@ -680,7 +682,7 @@ func collectionPassphraseValue(c *cli.Command) string {
 	if passphrase := c.String("passphrase"); passphrase != "" {
 		return passphrase
 	}
-	return os.Getenv("GURL_IMPORT_PASSPHRASE")
+	return brand.Getenv("IMPORT_PASSPHRASE")
 }
 
 func collectionPassphrase(c *cli.Command, prompt string) (string, error) {
@@ -705,7 +707,7 @@ func collectionPassphrase(c *cli.Command, prompt string) (string, error) {
 
 // errPassphraseRequired is returned instead of prompting for a passphrase
 // in non-interactive mode.
-var errPassphraseRequired = errors.New("passphrase required: pass --passphrase or set GURL_IMPORT_PASSPHRASE")
+var errPassphraseRequired = errors.New("passphrase required: pass --passphrase or set APIGENT_IMPORT_PASSPHRASE")
 
 func isCollectionImportPassphraseRequired(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "passphrase is required to import collection secrets")

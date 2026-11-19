@@ -5,23 +5,23 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 var (
 	pickerSelected = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("212")).
 			Bold(true)
-	pickerNormal   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	pickerFilter   = lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
-	pickerBorder   = lipgloss.NewStyle().
+	pickerNormal = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	pickerFilter = lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
+	pickerBorder = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("238")).
 			Padding(0, 1)
 	pickerHint = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
 )
 
-// Picker is a minimal fuzzy-search request picker for gurl run.
+// Picker is a minimal fuzzy-search request picker for apigent run.
 type Picker struct {
 	all      []*types.SavedRequest
 	filtered []*types.SavedRequest

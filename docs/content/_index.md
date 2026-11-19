@@ -1,33 +1,33 @@
 ---
-title: "gurl"
-description: "CLI API workbench — save, run, and manage HTTP requests from the terminal"
+title: "apigent"
+description: "Saved API requests your AI agents can run without ever seeing the keys"
 layout: hextra-home
 type: docs
 cascade:
   - type: docs
 ---
 
-{{< hextra/hero-badge link="https://github.com/bsreeram08/gurl/releases" >}}
-  <span>v0.7 — agent mode, gurl docs, gurl diag</span>
+{{< hextra/hero-badge link="https://github.com/bsreeram08/apigent/releases" >}}
+  <span>Formerly gurl — now with an MCP server: apigent mcp</span>
 {{< /hextra/hero-badge >}}
 
 <div class="hx:mt-6 hx:mb-6">
 {{< hextra/hero-headline >}}
-  Named HTTP requests,&nbsp;<br class="hx:sm:block hx:hidden" />run from the terminal
+  Your agents run the request,&nbsp;<br class="hx:sm:block hx:hidden" />not the key
 {{< /hextra/hero-headline >}}
 </div>
 
 <div class="hx:mb-8">
 {{< hextra/hero-subtitle >}}
-  Save a request once, run it by name against any environment.&nbsp;<br class="hx:sm:block hx:hidden" />Secrets stay encrypted and masked. Built for humans and AI agents.
+  Save API requests once and keep secrets in environments.&nbsp;<br class="hx:sm:block hx:hidden" />Agents run them by name, from the CLI or as MCP tools, and never see a credential.
 {{< /hextra/hero-subtitle >}}
 </div>
 
-<div class="hx:mb-8 gurl-hero-code">
+<div class="hx:mb-8 apigent-hero-code">
 
 ```bash
-brew tap bsreeram08/gurl https://github.com/bsreeram08/gurl && brew install gurl
-gurl save "health" https://api.example.com/health && gurl run "health"
+brew tap bsreeram08/apigent https://github.com/bsreeram08/apigent && brew install apigent
+apigent save "health" https://api.example.com/health && apigent run "health"
 ```
 
 </div>
@@ -55,12 +55,12 @@ gurl save "health" https://api.example.com/health && gurl run "health"
   >}}
   {{< hextra/feature-card
     title="Diagnose failures"
-    subtitle="Every run is recorded. `gurl diag` shows the request as sent, variable origins, and what changed since the last success."
+    subtitle="Every run is recorded. `apigent diag` shows the request as sent, variable origins, and what changed since the last success."
     link="guides/diagnosing/"
   >}}
   {{< hextra/feature-card
     title="Agent mode"
-    subtitle="`--agent`: JSON-only output, no prompts, secrets masked everywhere. Agents start with `gurl docs`."
+    subtitle="`--agent`: JSON-only output, no prompts, secrets masked everywhere. Agents start with `apigent docs`."
     link="ai/agent-mode/"
   >}}
   {{< hextra/feature-card

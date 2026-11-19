@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/auth"
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/auth"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 func TestVarsPrecedenceAndOrigins(t *testing.T) {

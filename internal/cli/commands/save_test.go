@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/internal/storage/memstore"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/internal/storage/memstore"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 

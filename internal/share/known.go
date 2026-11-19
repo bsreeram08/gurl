@@ -1,6 +1,8 @@
 package share
 
 import (
+	"github.com/bsreeram08/apigent/internal/brand"
+
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,9 +26,10 @@ type KnownKeys struct {
 	changed bool
 }
 
-// DefaultKnownKeysPath is ~/.config/gurl/known_keys.json.
+// DefaultKnownKeysPath is ~/.config/apigent/known_keys.json, or the
+// ~/.config/gurl copy for an install that has not migrated.
 func DefaultKnownKeysPath() string {
-	return filepath.Join(os.Getenv("HOME"), ".config", "gurl", "known_keys.json")
+	return filepath.Join(brand.ConfigDir(os.Getenv("HOME")), "known_keys.json")
 }
 
 // LoadKnownKeys reads the pin file; a missing file is an empty set.

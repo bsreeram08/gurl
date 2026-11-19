@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // BrunoImporter handles Bruno .bru files
@@ -25,22 +25,22 @@ func (b *BrunoImporter) Extensions() []string {
 
 // BrunoRequest represents the parsed structure of a .bru file
 type BrunoRequest struct {
-	Name        string
-	Method      string
-	URL         string
-	Headers     []types.Header
-	Body        string
-	Auth        *BrunoAuth
-	Script      string
-	Vars        []BrunoVar
+	Name    string
+	Method  string
+	URL     string
+	Headers []types.Header
+	Body    string
+	Auth    *BrunoAuth
+	Script  string
+	Vars    []BrunoVar
 }
 
 // BrunoAuth represents Bruno authentication
 type BrunoAuth struct {
-	Type        string
-	Bearer      string
-	Basic       *BrunoBasicAuth
-	Digest      *BrunoDigestAuth
+	Type   string
+	Bearer string
+	Basic  *BrunoBasicAuth
+	Digest *BrunoDigestAuth
 }
 
 // BrunoBasicAuth represents basic auth in Bruno

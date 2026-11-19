@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // TestSubstitute tests the template variable substitution function

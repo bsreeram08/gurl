@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"gopkg.in/yaml.v3"
 )
 

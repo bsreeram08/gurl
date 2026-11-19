@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // PythonGenerator generates Python requests code
@@ -137,21 +137,21 @@ if __name__ == "__main__":
 
 // PythonCodeGenData holds template data for Python generation
 type PythonCodeGenData struct {
-	URL                 string
-	Method              string
-	MethodCall          string
-	Headers             []types.Header
-	Body                string
-	HasHeaders          bool
-	HasBody             bool
-	HasAuth             bool
-	AuthType            string
-	Comment             string
-	IsBinaryBody        bool
-	IsMultipartBody     bool
-	HasAssertions       bool
-	HasStatusAssertion  bool
-	ExpectedStatus      int
+	URL                string
+	Method             string
+	MethodCall         string
+	Headers            []types.Header
+	Body               string
+	HasHeaders         bool
+	HasBody            bool
+	HasAuth            bool
+	AuthType           string
+	Comment            string
+	IsBinaryBody       bool
+	IsMultipartBody    bool
+	HasAssertions      bool
+	HasStatusAssertion bool
+	ExpectedStatus     int
 }
 
 // Generate creates Python requests code from a SavedRequest
@@ -168,11 +168,11 @@ func (g *PythonGenerator) Generate(req *types.SavedRequest, opts *GenOptions) (s
 	isMultipart := isMultipartContentType(contentType)
 
 	data := PythonCodeGenData{
-		URL:            url,
-		Method:         req.Method,
-		Headers:        req.Headers,
-		HasHeaders:     len(req.Headers) > 0,
-		IsBinaryBody:   isBinary,
+		URL:             url,
+		Method:          req.Method,
+		Headers:         req.Headers,
+		HasHeaders:      len(req.Headers) > 0,
+		IsBinaryBody:    isBinary,
 		IsMultipartBody: isMultipart,
 	}
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/env"
+	"github.com/bsreeram08/apigent/internal/env"
 	"github.com/urfave/cli/v3"
 )
 

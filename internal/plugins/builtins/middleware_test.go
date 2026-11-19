@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/plugins"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/plugins"
 )
 
 // newTestRequestContext creates a RequestContext with a GET request for testing.
@@ -89,7 +89,7 @@ func TestMiddleware_UserAgent(t *testing.T) {
 
 	found := false
 	for _, h := range result.Request.Headers {
-		if h.Key == "User-Agent" && h.Value == "gurl/1.0.0" {
+		if h.Key == "User-Agent" && h.Value == "apigent/1.0.0" {
 			found = true
 			break
 		}

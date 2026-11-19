@@ -1,5 +1,5 @@
 // Package redact holds the rules that keep secret values out of everything
-// gurl prints or stores: saved requests shown or exported, dry-run previews
+// apigent prints or stores: saved requests shown or exported, dry-run previews
 // and execution records.
 //
 // A value is secret when its variable is marked secret, when its name looks
@@ -14,8 +14,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/resolve"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/apigent/internal/resolve"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // Mask is the placeholder shown in place of secret values.
