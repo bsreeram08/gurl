@@ -1,9 +1,13 @@
 package importers
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/sreeram/gurl/pkg/types"
 )
 
 const sampleOpenAPIYAML = `
@@ -159,8 +163,8 @@ func TestOpenAPIExtractPathParameters(t *testing.T) {
 	for _, req := range requests {
 		if req.Name == "getUser" {
 			found = true
-			if req.URL != "/users/{id}" {
-				t.Errorf("got URL %q, want /users/{id}", req.URL)
+			if req.URL != "/users/{{id}}" {
+				t.Errorf("got URL %q, want /users/{{id}}", req.URL)
 			}
 			break
 		}
@@ -575,7 +579,7 @@ func TestOpenAPIExtractBody(t *testing.T) {
 					},
 				},
 			},
-			want: "{ }",
+			want: "{}",
 		},
 		{
 			name: "text/plain content type (fallback)",
@@ -616,17 +620,17 @@ func TestOpenAPISchemaToExample(t *testing.T) {
 		{
 			name:   "object type",
 			schema: &Schema{Type: "object"},
-			expect: "{ }",
+			expect: "{}",
 		},
 		{
 			name:   "array type",
 			schema: &Schema{Type: "array"},
-			expect: "[ ]",
+			expect: "[]",
 		},
 		{
-			name:   "string type with example",
+			name:   "string type with example is a JSON string",
 			schema: &Schema{Type: "string", Example: "test"},
-			expect: "test",
+			expect: "\"test\"",
 		},
 		{
 			name:   "string type without example",
@@ -776,8 +780,8 @@ func TestOpenAPIOperationToRequestWithRequestBody(t *testing.T) {
 
 	req := o.operationToRequest(spec, "", "/users", opwm, tagMap, securitySchemeMap)
 
-	if req.Body != "{ }" {
-		t.Errorf("got body %q, want %q", req.Body, "{ }")
+	if req.Body != "{}" {
+		t.Errorf("got body %q, want %q", req.Body, "{}")
 	}
 }
 
@@ -800,5 +804,172 @@ func TestOpenAPIOperationToRequestWithPathParams(t *testing.T) {
 	// Should inherit tag from path
 	if len(req.Tags) != 1 || req.Tags[0] != "users" {
 		t.Errorf("got tags %v, want [users]", req.Tags)
+	}
+}
+
+// elysiaStyleSpec is shaped like the OpenAPI 3.1 documents that TypeBox-based
+// frameworks generate: list types, anyOf of consts, the same body under three
+// media types, a global bearer requirement and a public route.
+const elysiaStyleSpec = `{
+  "openapi": "3.1.0",
+  "info": {"title": "Shop API", "version": "1"},
+  "servers": [{"url": "https://api.example.com"}],
+  "components": {
+    "securitySchemes": {"bearerAuth": {"type": "http", "scheme": "bearer"}},
+    "schemas": {
+      "Address": {"type": "object", "properties": {"city": {"type": "string", "example": "Pune"}}}
+    }
+  },
+  "security": [{"bearerAuth": []}],
+  "paths": {
+    "/orders/{merchantId}": {
+      "post": {
+        "operationId": "postOrdersByMerchantId",
+        "tags": ["Orders"],
+        "parameters": [
+          {"name": "merchantId", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "storeId", "in": "query", "required": true, "schema": {"type": "string"}},
+          {"name": "limit", "in": "query", "schema": {"type": "number"}},
+          {"name": "page", "in": "query", "schema": {"type": "number", "default": 1}}
+        ],
+        "requestBody": {"content": {
+          "multipart/form-data": {"schema": {"type": "object", "properties": {"x": {"type": "string"}}}},
+          "application/json": {"schema": {
+            "type": "object",
+            "required": ["status", "items"],
+            "properties": {
+              "status": {"anyOf": [{"const": "OPEN", "type": "string"}, {"const": "CLOSED", "type": "string"}]},
+              "note": {"type": ["string", "null"]},
+              "placedAt": {"type": "string", "format": "date-time"},
+              "storeId": {"type": "string", "minLength": 18, "maxLength": 18},
+              "code": {"type": "string", "maxLength": 3},
+              "qty": {"type": "integer", "minimum": 1},
+              "seq": {"minimum": 1, "anyOf": [{"type": "string", "format": "integer", "default": 0}, {"type": "integer", "minimum": 1}]},
+              "amount": {"type": "number", "exclusiveMinimum": 0},
+              "items": {"type": "array", "items": {"type": "object", "properties": {"qty": {"type": "integer"}}}},
+              "address": {"$ref": "#/components/schemas/Address"},
+              "meta": {"allOf": [{"type": "object", "properties": {"a": {"type": "boolean"}}}, {"type": "object", "properties": {"b": {"type": "number", "example": 2}}}]}
+            }
+          }},
+          "application/x-www-form-urlencoded": {"schema": {"type": "object"}}
+        }}
+      }
+    },
+    "/auth/login": {
+      "post": {"operationId": "postAuthLogin", "security": [], "tags": ["Auth"]}
+    }
+  }
+}`
+
+func importElysiaStyleSpec(t *testing.T, o *OpenAPIImporter) map[string]*types.SavedRequest {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "spec.json")
+	if err := os.WriteFile(path, []byte(elysiaStyleSpec), 0644); err != nil {
+		t.Fatal(err)
+	}
+	reqs, err := o.Parse(path)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	byName := map[string]*types.SavedRequest{}
+	for _, r := range reqs {
+		byName[r.Name] = r
+	}
+	return byName
+}
+
+func headerValue(req *types.SavedRequest, key string) string {
+	for _, h := range req.Headers {
+		if strings.EqualFold(h.Key, key) {
+			return h.Value
+		}
+	}
+	return ""
+}
+
+func TestOpenAPIImportsOpenAPI31TypeLists(t *testing.T) {
+	reqs := importElysiaStyleSpec(t, &OpenAPIImporter{})
+	if len(reqs) != 2 {
+		t.Fatalf("got %d requests, want 2", len(reqs))
+	}
+}
+
+func TestOpenAPIBodyIsValidJSONWithContentType(t *testing.T) {
+	req := importElysiaStyleSpec(t, &OpenAPIImporter{})["postOrdersByMerchantId"]
+	if got := headerValue(req, "Content-Type"); got != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", got)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
+		t.Fatalf("body is not valid JSON: %v\n%s", err, req.Body)
+	}
+	want := map[string]any{
+		"status":   "OPEN",
+		"note":     "string",
+		"placedAt": "2024-01-01T00:00:00Z",
+		"storeId":  "stringxxxxxxxxxxxx",
+		"code":     "str",
+		"qty":      float64(1),
+		"seq":      float64(1),
+		"amount":   float64(1),
+		"items":    []any{map[string]any{"qty": float64(0)}},
+		"address":  map[string]any{"city": "Pune"},
+		"meta":     map[string]any{"a": true, "b": float64(2)},
+	}
+	gotJSON, _ := json.Marshal(body)
+	wantJSON, _ := json.Marshal(want)
+	if string(gotJSON) != string(wantJSON) {
+		t.Errorf("body = %s, want %s", gotJSON, wantJSON)
+	}
+}
+
+func TestOpenAPIParamsAndAuthArePlaceholders(t *testing.T) {
+	req := importElysiaStyleSpec(t, &OpenAPIImporter{})["postOrdersByMerchantId"]
+	// Path params become {{name}} placeholders; a required query param
+	// becomes a placeholder; optional ones appear only with a value.
+	if want := "https://api.example.com/orders/{{merchantId}}?storeId={{storeId}}&page=1"; req.URL != want {
+		t.Errorf("URL = %q, want %q", req.URL, want)
+	}
+	if req.AuthConfig == nil || req.AuthConfig.Type != "bearer" || req.AuthConfig.Params["token"] != "{{token}}" {
+		t.Errorf("auth = %+v, want bearer with {{token}}", req.AuthConfig)
+	}
+	if headerValue(req, "Authorization") != "" {
+		t.Error("the token must come from the auth config, not a literal header")
+	}
+	if req.Folder != "Orders" {
+		t.Errorf("folder = %q, want the first tag", req.Folder)
+	}
+}
+
+func TestOpenAPIPublicOperationHasNoAuth(t *testing.T) {
+	req := importElysiaStyleSpec(t, &OpenAPIImporter{})["postAuthLogin"]
+	if req.AuthConfig != nil {
+		t.Errorf("security: [] marks a public operation, got auth %+v", req.AuthConfig)
+	}
+}
+
+func TestOpenAPIBaseURLOverride(t *testing.T) {
+	req := importElysiaStyleSpec(t, &OpenAPIImporter{BaseURL: "{{BASE_URL}}"})["postAuthLogin"]
+	if req.URL != "{{BASE_URL}}/auth/login" {
+		t.Errorf("URL = %q, want {{BASE_URL}}/auth/login", req.URL)
+	}
+}
+
+func TestOpenAPIImportOrderIsStable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "spec.json")
+	if err := os.WriteFile(path, []byte(elysiaStyleSpec), 0644); err != nil {
+		t.Fatal(err)
+	}
+	first, err := (&OpenAPIImporter{}).Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		again, _ := (&OpenAPIImporter{}).Parse(path)
+		for j := range first {
+			if again[j].Name != first[j].Name || again[j].Body != first[j].Body || again[j].SortOrder != j+1 {
+				t.Fatalf("import %d differs at %d: %s vs %s", i, j, again[j].Name, first[j].Name)
+			}
+		}
 	}
 }

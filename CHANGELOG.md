@@ -2,9 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- `import --base-url <url>` replaces an OpenAPI spec's server URL, for example `--base-url '{{BASE_URL}}'` so the imported requests follow the environment.
+- `import --collection <name>` puts the imported requests in that collection and creates it if needed; inside a `.gurl/` project it is created there, so the requests are written as files you can commit.
+
 ### Fixed
 
+- `import` detects the format of a `.json` file from its content. OpenAPI, Postman, Insomnia, HAR and Yaak all use `.json`, and every `.json` file went to the importer registered last (Yaak), so an OpenAPI or Postman `.json` imported nothing ("No requests found to import"). A `.json` file of unknown shape now fails and asks for `--format`.
+- OpenAPI imports produce requests that run as imported:
+  - OpenAPI 3.1 specs with list types (`"type": ["string", "null"]`) import; they failed to parse.
+  - Example bodies are valid JSON: string examples are quoted, `$ref`, `allOf`, `anyOf`/`oneOf` and `const` are followed, placeholder values respect `minimum`, `exclusiveMinimum`, `minLength` and `maxLength`, keys are sorted, and the request gets the `Content-Type` of the media type the body was built from (JSON first).
+  - Path parameters become `{{name}}` placeholders. `{name}` was sent literally by `run`.
+  - A required query or header parameter without an example becomes a `{{name}}` placeholder; an optional one without an example or default is left out instead of being sent empty.
+  - Bearer and basic security schemes become an auth config with `{{token}}` or `{{username}}`/`{{password}}`, and an API key a `{{apiKey}}` header or query parameter, instead of the literal `Bearer <token>`. An operation with `security: []` (public) gets no auth.
+  - The first tag becomes the request's folder, and requests are imported in path order with a stable sort order.
+- `import --format` is honored (it was accepted and ignored) and takes an importer name: `openapi`, `postman`, `insomnia`, `har`, `bruno`, `yaak`, `gurl`.
 - In a `.gurl/` project, saving a request without an ID (as `import --force` does) replaces the request of the same name in its collection, as the database store does. Before, each re-import wrote a second file per request, so a collection imported twice listed every request twice.
+
 
 ## [v0.8.1] - 2026-10-26
 
