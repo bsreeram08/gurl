@@ -4,32 +4,32 @@ description: "One switch for AI agents: JSON output, no prompts, strict secret m
 weight: 2
 ---
 
-Agent mode makes gurl safe and predictable for an AI agent: every command that can print JSON does, nothing ever prompts, and secrets are masked everywhere, including response bodies.
+Agent mode makes valetkey safe and predictable for an AI agent: every command that can print JSON does, nothing ever prompts, and secrets are masked everywhere, including response bodies.
 
 ## Turn it on
 
 Use any one of these:
 
 ```bash
-gurl --agent run "get-user" --env staging      # flag, in any position
-GURL_AGENT=1 gurl run "get-user"               # environment variable
-ln -s "$(command -v gurl)" ~/.local/bin/agentgurl
-agentgurl run "get-user"                       # binary named agentgurl
+valetkey --agent run "get-user" --env staging      # flag, in any position
+VALETKEY_AGENT=1 valetkey run "get-user"               # environment variable
+ln -s "$(command -v valetkey)" ~/.local/bin/agentvaletkey
+agentvaletkey run "get-user"                       # binary named agentvaletkey
 ```
 
-The symlink is the most robust choice: give the agent `agentgurl` and it cannot forget the flag.
+The symlink is the most robust choice: give the agent `agentvaletkey` and it cannot forget the flag.
 
-## Step 1: read `gurl docs`
+## Step 1: read `valetkey docs`
 
 The first command an agent should run:
 
 ```bash
-agentgurl docs            # JSON: {"commands":[...],"sections":{...}}
-gurl docs                 # the same reference as compact text (~25KB)
-gurl docs run             # one command
+agentvaletkey docs            # JSON: {"commands":[...],"sections":{...}}
+valetkey docs                 # the same reference as compact text (~25KB)
+valetkey docs run             # one command
 ```
 
-It lists every command and subcommand with arguments and flags (type, default, aliases), generated from the binary itself, plus short sections on placeholders, scope precedence, extract rules, `--persist`, agent mode, the `run --json` shape, exit codes, `exec` and `diag`. See [`gurl docs`]({{< relref "/cli/docs" >}}).
+It lists every command and subcommand with arguments and flags (type, default, aliases), generated from the binary itself, plus short sections on placeholders, scope precedence, extract rules, `--persist`, agent mode, the `run --json` shape, exit codes, `exec` and `diag`. See [`valetkey docs`]({{< relref "/cli/docs" >}}).
 
 ## What agent mode changes
 
@@ -39,17 +39,17 @@ It lists every command and subcommand with arguments and flags (type, default, a
 | Prompts | `--no-input` is on: commands never prompt; they fail and name the flag or argument to pass |
 | Errors | Every error is printed on stdout as `{"ok":false,"error":"..."}` (and on stderr), usage errors included; help text is not printed on a usage error |
 | Masking | Secrets are masked in response bodies, response headers and errors too (`run`, `diag`, `diff`), and in the output of `exec` child processes |
-| Refused (exit 2) | `--reveal`, `paste`, `codegen --clipboard`, `run --output`; `gurl shell` refuses to start |
+| Refused (exit 2) | `--reveal`, `paste`, `codegen --clipboard`, `run --output`; `valetkey shell` refuses to start |
 
 ## No prompts: `--no-input`
 
-`--no-input` (or `GURL_NO_INPUT=1`) is implied by `--agent` and by `--json`. A command that would ask fails and says what to pass instead:
+`--no-input` (or `VALETKEY_NO_INPUT=1`) is implied by `--agent` and by `--json`. A command that would ask fails and says what to pass instead:
 
 ```json
-{"ok":false,"error":"request name is required: gurl run <name> (list names with: gurl list --json)"}
+{"ok":false,"error":"request name is required: valetkey run <name> (list names with: valetkey list --json)"}
 ```
 
-Other examples: saving into a collection that doesn't exist, `collection delete` without `--force`, a missing passphrase (`pass --passphrase or set GURL_IMPORT_PASSPHRASE`), `env set KEY=-` on a terminal.
+Other examples: saving into a collection that doesn't exist, `collection delete` without `--force`, a missing passphrase (`pass --passphrase or set VALETKEY_IMPORT_PASSPHRASE`), `env set KEY=-` on a terminal.
 
 ## Running requests: `run --json`
 
@@ -62,7 +62,7 @@ stdout carries one JSON object per execution and nothing else (NDJSON for `--cha
  "body":{"id":"u-123","auth":"Bearer *****"},"extracted":{"uid":"u-123"}}
 ```
 
-(Wrapped for reading; real output is one line.) The agent checks `ok`, reads `body`, and on failure reads `error`, `failure_phase` and `problems`, then calls `gurl diag <short_id>`. The full field list, problem kinds and failure phases are in [JSON output]({{< relref "/ai/json-output" >}}).
+(Wrapped for reading; real output is one line.) The agent checks `ok`, reads `body`, and on failure reads `error`, `failure_phase` and `problems`, then calls `valetkey diag <short_id>`. The full field list, problem kinds and failure phases are in [JSON output]({{< relref "/ai/json-output" >}}).
 
 ## Exit codes
 
@@ -71,11 +71,11 @@ stdout carries one JSON object per execution and nothing else (NDJSON for `--cha
 | 0 | Success. A non-2xx response is still 0 unless `--fail` is passed (`ok` is false in the JSON). |
 | 1 | Error: request or environment not found, resolution problems, transport error, script or extraction error, failed assertion, non-2xx with `--fail`, dry run with problems |
 | 2 | Usage: missing argument with `--no-input`, conflicting flags (`--persist --dry-run`), `--reveal` / `--output` / `paste` / `codegen --clipboard` in agent mode, `shell` with `--no-input` |
-| other | `gurl exec` exits with the child command's code |
+| other | `valetkey exec` exits with the child command's code |
 
 ## Strict masking
 
-Outside agent mode, gurl already masks secrets in everything it shows or stores about a request: saved requests, dry runs, execution records, and the URL, headers and errors of `run --json`. Response bodies are shown as received, because they are your API's data.
+Outside agent mode, valetkey already masks secrets in everything it shows or stores about a request: saved requests, dry runs, execution records, and the URL, headers and errors of `run --json`. Response bodies are shown as received, because they are your API's data.
 
 Agent mode also masks the body, response headers and errors, and `exec` output. "Secret" here means:
 
@@ -88,20 +88,20 @@ Values shorter than 4 characters are not replaced inside free text. Details: [Se
 
 ## A recommended agent loop
 
-1. `agentgurl docs` — learn the commands.
-2. `agentgurl list`, `agentgurl env list`, `agentgurl collection list` — discover what exists.
-3. `agentgurl show <request>` or `agentgurl collection show <collection>` — inspect before running.
-4. `agentgurl run <request> --env <env> --dry-run` — check that every placeholder resolves.
-5. `agentgurl run <request> --env <env>` — run the smallest request that answers the task.
-6. On failure: `agentgurl diag <short_id>`.
+1. `agentvaletkey docs` — learn the commands.
+2. `agentvaletkey list`, `agentvaletkey env list`, `agentvaletkey collection list` — discover what exists.
+3. `agentvaletkey show <request>` or `agentvaletkey collection show <collection>` — inspect before running.
+4. `agentvaletkey run <request> --env <env> --dry-run` — check that every placeholder resolves.
+5. `agentvaletkey run <request> --env <env>` — run the smallest request that answers the task.
+6. On failure: `agentvaletkey diag <short_id>`.
 7. Use `--persist` only when the task explicitly needs extracted values saved.
 
 {{< callout type="warning" >}}
-Keep secrets out of commands: an agent should never pass a token with `--var` (the token is then in its context anyway). Have a human store it once in an environment or collection: `gurl env set prod API_KEY=- --secret API_KEY`.
+Keep secrets out of commands: an agent should never pass a token with `--var` (the token is then in its context anyway). Have a human store it once in an environment or collection: `valetkey env set prod API_KEY=- --secret API_KEY`.
 {{< /callout >}}
 
 ## See also
 
 - [JSON output]({{< relref "/ai/json-output" >}})
 - [Memory safety for AI agents]({{< relref "/ai/memory-safety" >}})
-- [`gurl exec`]({{< relref "/cli/exec" >}}) — hand an environment to a script without printing it
+- [`valetkey exec`]({{< relref "/cli/exec" >}}) — hand an environment to a script without printing it

@@ -1,5 +1,5 @@
 ---
-title: "gurl delete"
+title: "valetkey delete"
 description: "Remove a saved request"
 ---
 
@@ -9,7 +9,7 @@ Permanently remove a saved request. This cannot be undone.
 ## Synopsis
 
 ```bash
-gurl delete <name>
+valetkey delete <name>
 ```
 
 ## Flags
@@ -26,18 +26,18 @@ None.
 ### Delete a request
 
 ```bash
-gurl delete "old-request"
+valetkey delete "old-request"
 ```
 
 ### Check the name first
 
 ```bash
-gurl list --pattern old
-gurl delete "old-request"
+valetkey list --pattern old
+valetkey delete "old-request"
 ```
 
 ## Related commands
 
-- [`gurl rename`]({{< relref "/cli/rename" >}}) - Rename a request instead
-- [`gurl list`]({{< relref "/cli/list" >}}) - List saved requests
-- [`gurl collection`]({{< relref "/cli/collection" >}}) - `collection delete` removes a whole collection
+- [`valetkey rename`]({{< relref "/cli/rename" >}}) - Rename a request instead
+- [`valetkey list`]({{< relref "/cli/list" >}}) - List saved requests
+- [`valetkey collection`]({{< relref "/cli/collection" >}}) - `collection delete` removes a whole collection

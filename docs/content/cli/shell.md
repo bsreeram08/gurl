@@ -1,5 +1,5 @@
 ---
-title: "gurl shell"
+title: "valetkey shell"
 description: "Launch the typed interactive shell"
 ---
 
@@ -9,12 +9,12 @@ A line-oriented REPL for browsing, editing and sending requests, without fullscr
 ## Synopsis
 
 ```bash
-gurl shell [--env <name>] [--request <name>] [--format <auto|json|table>]
+valetkey shell [--env <name>] [--request <name>] [--format <auto|json|table>]
 ```
 
-`gurl shell` is for humans. It refuses to start with `--no-input` or `--agent` (exit code 2): `gurl shell is interactive and cannot run with --no-input or --agent; use gurl run <name> instead`.
+`valetkey shell` is for humans. It refuses to start with `--no-input` or `--agent` (exit code 2): `valetkey shell is interactive and cannot run with --no-input or --agent; use valetkey run <name> instead`.
 
-Every `send` is recorded like a `run`, so failures can be inspected with [`gurl diag`]({{< relref "/cli/diag" >}}).
+Every `send` is recorded like a `run`, so failures can be inspected with [`valetkey diag`]({{< relref "/cli/diag" >}}).
 
 ### Shell commands
 
@@ -53,27 +53,27 @@ Every `send` is recorded like a `run`, so failures can be inspected with [`gurl 
 ### Open a request against staging
 
 ```bash
-gurl shell --env staging --request "create-order"
+valetkey shell --env staging --request "create-order"
 ```
 
 ### Send with one-off values
 
 ```text
-gurl> open create-order
-gurl[create-order]> send amount=10 currency=USD
+valetkey> open create-order
+valetkey[create-order]> send amount=10 currency=USD
 ```
 
 ### Build and save a new request
 
 ```text
-gurl> new health check
-gurl[health check]> set url https://api.example.com/health
-gurl[health check*]> send
-gurl[health check*]> save
+valetkey> new health check
+valetkey[health check]> set url https://api.example.com/health
+valetkey[health check*]> send
+valetkey[health check*]> save
 ```
 
 ## Related commands
 
-- [`gurl run`]({{< relref "/cli/run" >}}) - Non-interactive execution
-- [`gurl list`]({{< relref "/cli/list" >}}) - List saved requests
-- [`gurl env`]({{< relref "/cli/env" >}}) - Manage environments
+- [`valetkey run`]({{< relref "/cli/run" >}}) - Non-interactive execution
+- [`valetkey list`]({{< relref "/cli/list" >}}) - List saved requests
+- [`valetkey env`]({{< relref "/cli/env" >}}) - Manage environments

@@ -1,5 +1,5 @@
 ---
-title: "gurl show"
+title: "valetkey show"
 description: "Show details of a saved request"
 ---
 
@@ -9,7 +9,7 @@ Print everything stored on a saved request: method, URL, headers, body, auth, ex
 ## Synopsis
 
 ```bash
-gurl show <name> [flags]
+valetkey show <name> [flags]
 ```
 
 Values of credential headers, sensitive query parameters (for example `?token=...`) and secret auth params print as `*****`. Values that are placeholders such as `Bearer {{API_KEY}}` stay visible, because they only name a variable. Pass `--reveal` to print the literals; `--reveal` is refused in agent mode.
@@ -33,7 +33,7 @@ Values of credential headers, sensitive query parameters (for example `?token=..
 ### Inspect a request before running it
 
 ```bash
-gurl show literal
+valetkey show literal
 ```
 
 ```text
@@ -48,20 +48,20 @@ Headers:
 ### JSON for scripts
 
 ```bash
-gurl show "create-order" --json | jq .headers
+valetkey show "create-order" --json | jq .headers
 ```
 
 ### Reconstruct the curl command
 
 ```bash
-gurl show "create-order" --format curl
+valetkey show "create-order" --format curl
 ```
 
-Prints an equivalent `curl` command, masked the same way. For a copy-paste-ready command use [`gurl codegen -l curl`]({{< relref "/cli/codegen" >}}).
+Prints an equivalent `curl` command, masked the same way. For a copy-paste-ready command use [`valetkey codegen -l curl`]({{< relref "/cli/codegen" >}}).
 
 ## Related commands
 
-- [`gurl run`]({{< relref "/cli/run" >}}) - Execute a saved request (`--dry-run` previews the resolved request)
-- [`gurl edit`]({{< relref "/cli/edit" >}}) - Edit a saved request
-- [`gurl list`]({{< relref "/cli/list" >}}) - List saved requests
+- [`valetkey run`]({{< relref "/cli/run" >}}) - Execute a saved request (`--dry-run` previews the resolved request)
+- [`valetkey edit`]({{< relref "/cli/edit" >}}) - Edit a saved request
+- [`valetkey list`]({{< relref "/cli/list" >}}) - List saved requests
 - [Header redaction]({{< relref "/security/header-redaction" >}}) - What gets masked

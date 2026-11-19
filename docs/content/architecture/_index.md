@@ -1,21 +1,21 @@
 ---
 title: "Architecture"
-description: "How gurl is built: layers, storage, request lifecycle, plugins."
+description: "How valetkey is built: layers, storage, request lifecycle, plugins."
 weight: 6
 ---
 
-For contributors and plugin authors. You don't need this page to use gurl.
+For contributors and plugin authors. You don't need this page to use valetkey.
 
-Gurl CLI is a Go binary designed for single-file distribution. The architecture follows a layered approach where each layer depends only on the layers below it.
+valetkey CLI is a Go binary designed for single-file distribution. The architecture follows a layered approach where each layer depends only on the layers below it.
 
 ## Data Storage
 
-Gurl stores data in two locations:
+valetkey stores data in two locations:
 
 | Location | Path | Purpose |
 |----------|------|---------|
-| Database | `~/.local/share/gurl/gurl.db` | Requests, collections, environments, history |
-| Config | `~/.config/gurl/config.toml` | User preferences, plugin settings |
+| Database | `~/.local/share/valetkey/valetkey.db` | Requests, collections, environments, history |
+| Config | `~/.config/valetkey/config.toml` | User preferences, plugin settings |
 
 The database uses goleveldb (LevelDB port) for high-performance key-value storage. Configuration uses TOML for human-readable settings.
 
@@ -49,7 +49,7 @@ The database uses goleveldb (LevelDB port) for high-performance key-value storag
 
 ### Layer Descriptions
 
-**CLI Layer** - Uses urfave/cli for command-line argument parsing. Handles all user-facing commands like `gurl save`, `gurl run`, and `gurl edit`.
+**CLI Layer** - Uses urfave/cli for command-line argument parsing. Handles all user-facing commands like `valetkey save`, `valetkey run`, and `valetkey edit`.
 
 **Core Services Layer** - Contains the business logic. Request resolution (`internal/resolve`) turns a saved request plus its scopes into the request to send, or into the list of resolution problems; it is shared by `run`, `collection run`, the shell and the TUI. Masking rules (`internal/redact`) are shared by every command that shows or stores a request, and by execution records. Auth registry manages API keys, Bearer tokens, and basic auth. Formatter provides response rendering in multiple formats.
 
@@ -57,9 +57,9 @@ The database uses goleveldb (LevelDB port) for high-performance key-value storag
 
 **HTTP Client Layer** - Wraps Go's net/http with TLS configuration, timeout handling, proxy support, and cookie jar management.
 
-**Protocol Handlers Layer** - Extends beyond HTTP to support GraphQL, gRPC, WebSocket, and Server-Sent Events. Each handler translates between protocol-specific formats and Gurl's internal request/response model.
+**Protocol Handlers Layer** - Extends beyond HTTP to support GraphQL, gRPC, WebSocket, and Server-Sent Events. Each handler translates between protocol-specific formats and valetkey's internal request/response model.
 
-**Plugin System Layer** - Four plugin types: MiddlewarePlugin runs before/after requests, OutputPlugin formats responses, CommandPlugin adds new CLI commands, and AuthPlugin provides custom authentication handlers (added in v0.3.0). All plugins are discovered from `~/.config/gurl/plugins/`.
+**Plugin System Layer** - Four plugin types: MiddlewarePlugin runs before/after requests, OutputPlugin formats responses, CommandPlugin adds new CLI commands, and AuthPlugin provides custom authentication handlers (added in v0.3.0). All plugins are discovered from `~/.config/valetkey/plugins/`.
 
 **TUI Layer** - Built with bubbletea. The code exists but is not functional in the current release. The intended design is a full-screen three-pane workspace for browsing requests, editing them, and inspecting responses.
 
@@ -74,4 +74,4 @@ The database uses goleveldb (LevelDB port) for high-performance key-value storag
 7. Post-response scripting executes
 8. Assertions are evaluated
 9. Output plugin formats and displays the response
-10. The execution is recorded, with secrets masked, whether it succeeded or failed at any earlier step (inspect with `gurl diag`)
+10. The execution is recorded, with secrets masked, whether it succeeded or failed at any earlier step (inspect with `valetkey diag`)

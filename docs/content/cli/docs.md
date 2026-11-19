@@ -1,5 +1,5 @@
 ---
-title: "gurl docs"
+title: "valetkey docs"
 description: "Print a compact reference of every command, flag and concept"
 ---
 
@@ -9,10 +9,10 @@ Print one compact reference of every command, flag and concept. This is the firs
 ## Synopsis
 
 ```bash
-gurl docs [command [subcommand]] [flags]
+valetkey docs [command [subcommand]] [flags]
 ```
 
-`gurl docs` is generated from the binary's own command tree at runtime, so it always matches the installed version. It lists every command and subcommand with its arguments and flags (type, default, aliases), followed by short sections on:
+`valetkey docs` is generated from the binary's own command tree at runtime, so it always matches the installed version. It lists every command and subcommand with its arguments and flags (type, default, aliases), followed by short sections on:
 
 - agent mode
 - placeholders (typed and dynamic) and environment aliases
@@ -21,9 +21,9 @@ gurl docs [command [subcommand]] [flags]
 - `--persist`
 - the `run --json` shape
 - exit codes
-- `gurl exec` and `gurl diag`
+- `valetkey exec` and `valetkey diag`
 
-`gurl docs <command>` narrows the output to one command (for example `gurl docs run` or `gurl docs env set`).
+`valetkey docs <command>` narrows the output to one command (for example `valetkey docs run` or `valetkey docs env set`).
 
 ## Flags
 
@@ -43,17 +43,17 @@ The JSON shape is:
 ### Whole reference
 
 ```bash
-gurl docs
+valetkey docs
 ```
 
 ### One command
 
 ```bash
-gurl docs run
+valetkey docs run
 ```
 
 ```text
-gurl run  — Execute a saved request (aliases: r, execute)
+valetkey run  — Execute a saved request (aliases: r, execute)
   --env, -e <string>  Environment name to use for variable substitution
   --var, -v <[]string>  Variable substitution (--var key=value)
   ...
@@ -64,10 +64,10 @@ gurl run  — Execute a saved request (aliases: r, execute)
 ### JSON for agents
 
 ```bash
-gurl docs --json
+valetkey docs --json
 ```
 
 ## Related commands
 
-- [Agent mode]({{< relref "/ai/agent-mode" >}}) - How agents should drive gurl
+- [Agent mode]({{< relref "/ai/agent-mode" >}}) - How agents should drive valetkey
 - [CLI Reference]({{< relref "/cli" >}}) - All commands

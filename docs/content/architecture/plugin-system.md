@@ -5,7 +5,7 @@ weight: 1
 ---
 
 
-Gurl's plugin system lets you extend functionality through middleware, output, command, and auth plugin interfaces. Go plugins are discovered from `~/.config/gurl/plugins/` and loaded into the plugin registry on startup.
+valetkey's plugin system lets you extend functionality through middleware, output, command, and auth plugin interfaces. Go plugins are discovered from `~/.config/valetkey/plugins/` and loaded into the plugin registry on startup.
 
 ## Plugin Interfaces
 
@@ -23,7 +23,7 @@ type MiddlewarePlugin interface {
 
 ### OutputPlugin
 
-Formats and displays responses. Gurl includes built-in output plugins, but custom plugins can provide specialized formatting.
+Formats and displays responses. valetkey includes built-in output plugins, but custom plugins can provide specialized formatting.
 
 ```go
 type OutputPlugin interface {
@@ -109,12 +109,12 @@ Custom middleware inserts into this chain via the registry.
 Select an output plugin with the `--format` flag:
 
 ```bash
-gurl run "api" --format slack
+valetkey run "api" --format slack
 ```
 
 ## Plugin Discovery
 
-On startup, Gurl discovers shared objects at `~/.config/gurl/plugins/<name>/<name>.so`. If an enabled-plugin list is configured, only matching names are loaded. Each plugin file must export a `Plugin` symbol:
+On startup, valetkey discovers shared objects at `~/.config/valetkey/plugins/<name>/<name>.so`. If an enabled-plugin list is configured, only matching names are loaded. Each plugin file must export a `Plugin` symbol:
 
 ```go
 // plugin.go
@@ -127,7 +127,7 @@ var Plugin = MyMiddlewarePlugin{}
 
 ## Security
 
-Plugins run with the user's permissions. Gurl applies these safeguards:
+Plugins run with the user's permissions. valetkey applies these safeguards:
 
 - If an enabled list is configured, plugins not on that list are skipped
 - Middleware `BeforeRequest` and `AfterResponse` calls are wrapped in panic recovery
@@ -136,7 +136,7 @@ Plugins run with the user's permissions. Gurl applies these safeguards:
 
 ## Creating a Custom Plugin
 
-Custom plugins are currently low-level Go plugins, not a polished external SDK. A plugin must export a `Plugin` symbol whose value implements at least one known plugin interface. This example imports gurl's `internal/...` packages, so build it under the gurl module tree or another module path that Go permits to import those internal packages.
+Custom plugins are currently low-level Go plugins, not a polished external SDK. A plugin must export a `Plugin` symbol whose value implements at least one known plugin interface. This example imports valetkey's `internal/...` packages, so build it under the valetkey module tree or another module path that Go permits to import those internal packages.
 
 Minimal middleware plugin:
 
@@ -155,7 +155,7 @@ func (HeaderPlugin) Name() string { return "example-header" }
 func (HeaderPlugin) BeforeRequest(ctx *plugins.RequestContext) *plugins.RequestContext {
     if ctx != nil && ctx.Request != nil {
         ctx.Request.Headers = append(ctx.Request.Headers, client.Header{
-            Key:   "X-Gurl-Plugin",
+            Key:   "X-valetkey-Plugin",
             Value: "example-header",
         })
     }
@@ -172,14 +172,14 @@ var Plugin = HeaderPlugin{}
 Build and place the shared object where the loader expects it:
 
 ```bash
-mkdir -p ~/.config/gurl/plugins/example-header
-go build -buildmode=plugin -o ~/.config/gurl/plugins/example-header/example-header.so ./plugin.go
+mkdir -p ~/.config/valetkey/plugins/example-header
+go build -buildmode=plugin -o ~/.config/valetkey/plugins/example-header/example-header.so ./plugin.go
 ```
 
-The loader discovers enabled plugins at `~/.config/gurl/plugins/<name>/<name>.so`, looks up the exported `Plugin` symbol, and accepts values that implement `MiddlewarePlugin`, `OutputPlugin`, `CommandPlugin`, or `AuthPlugin`.
+The loader discovers enabled plugins at `~/.config/valetkey/plugins/<name>/<name>.so`, looks up the exported `Plugin` symbol, and accepts values that implement `MiddlewarePlugin`, `OutputPlugin`, `CommandPlugin`, or `AuthPlugin`.
 
 ## Current support
 
 The registry and loader can categorize values that implement `MiddlewarePlugin`, `OutputPlugin`, `CommandPlugin`, or `AuthPlugin`. Auth plugins are stored separately from middleware and can be listed or looked up through the registry.
 
-External plugin packaging is still low-level Go plugin support. The loader expects plugins under `~/.config/gurl/plugins/<name>/<name>.so` and a `Plugin` symbol that implements at least one known plugin interface. Go plugin loading is only supported on Linux amd64 and Linux arm64.
+External plugin packaging is still low-level Go plugin support. The loader expects plugins under `~/.config/valetkey/plugins/<name>/<name>.so` and a `Plugin` symbol that implements at least one known plugin interface. Go plugin loading is only supported on Linux amd64 and Linux arm64.

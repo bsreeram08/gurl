@@ -1,5 +1,5 @@
 ---
-title: "gurl grpc"
+title: "valetkey grpc"
 description: "Execute a gRPC request"
 ---
 
@@ -9,8 +9,8 @@ Call a gRPC method, or list a server's services through reflection.
 ## Synopsis
 
 ```bash
-gurl grpc <host:port> --service <name> --method <name> [--data <json> | --data-file <file>] [flags]
-gurl grpc <host:port> --list
+valetkey grpc <host:port> --service <name> --method <name> [--data <json> | --data-file <file>] [flags]
+valetkey grpc <host:port> --list
 ```
 
 The target (`host:port`) is required. `--service` and `--method` are required for calls.
@@ -43,25 +43,25 @@ The target (`host:port`) is required. `--service` and `--method` are required fo
 ### Discover services
 
 ```bash
-gurl grpc localhost:50051 --list
+valetkey grpc localhost:50051 --list
 ```
 
 ### Unary call with metadata
 
 ```bash
-gurl grpc localhost:50051 -s UserService -m GetUser \
+valetkey grpc localhost:50051 -s UserService -m GetUser \
   -d '{"id":"u-123"}' --metadata 'authorization:Bearer dev-token'
 ```
 
 ### Server-streaming call over mutual TLS
 
 ```bash
-gurl grpc api.example.com:443 -s Events -m Subscribe --call-type server-streaming \
+valetkey grpc api.example.com:443 -s Events -m Subscribe --call-type server-streaming \
   --cacert ca.pem --cert client.pem --key client-key.pem
 ```
 
 ## Related commands
 
-- [`gurl graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries
-- [`gurl ws`]({{< relref "/cli/ws" >}}) - WebSocket connections
-- [`gurl sse`]({{< relref "/cli/sse" >}}) - Server-Sent Events
+- [`valetkey graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries
+- [`valetkey ws`]({{< relref "/cli/ws" >}}) - WebSocket connections
+- [`valetkey sse`]({{< relref "/cli/sse" >}}) - Server-Sent Events

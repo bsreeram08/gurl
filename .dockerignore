@@ -10,5 +10,7 @@ dist
 coverage.out
 *.test
 *.tar.gz
-gurl
+/gurl
+/valetkey
 gurl-*
+valetkey-*

@@ -8,11 +8,11 @@ Every command an agent or script needs has `--json`. In [agent mode]({{< relref 
 
 ## run
 
-`gurl run --json` prints one object per execution on stdout and nothing else: one line for a single run, NDJSON (one line per step or row) for `--chain` and `--data`. With `--persist`, `persisted` is on the last line.
+`valetkey run --json` prints one object per execution on stdout and nothing else: one line for a single run, NDJSON (one line per step or row) for `--chain` and `--data`. With `--persist`, `persisted` is on the last line.
 
 | Field | Meaning |
 |-------|---------|
-| `id`, `short_id` | Execution record id; pass to `gurl diag` |
+| `id`, `short_id` | Execution record id; pass to `valetkey diag` |
 | `request`, `collection`, `environment`, `row` | What ran (`row` for `--data` iterations) |
 | `ok` | No error, no failed assertion, and a 2xx status |
 | `skipped`, `skip_reason` | The request was skipped (e.g. `run-if`) |
@@ -73,8 +73,8 @@ The message also goes to stderr.
 ## history and timeline
 
 ```bash
-gurl history "get-user" --json
-gurl timeline --since 24h --json
+valetkey history "get-user" --json
+valetkey timeline --since 24h --json
 ```
 
 An array, newest first:
@@ -89,7 +89,7 @@ An array, newest first:
 ## diff
 
 ```bash
-gurl diff "get-user" --json
+valetkey diff "get-user" --json
 ```
 
 ```json
@@ -103,19 +103,19 @@ When the responses differ, JSON bodies are compared as structured RFC 6902 chang
 
 ## diag
 
-`gurl diag <id> --json` prints `{"record": {...}, "compared_with": ...}`: the stored execution record (method, URL, headers, body, `vars` with `name`/`origin`/`value`, response headers, error, failure phase, assertions) and the comparison with the last success. See [`gurl diag`]({{< relref "/cli/diag" >}}).
+`valetkey diag <id> --json` prints `{"record": {...}, "compared_with": ...}`: the stored execution record (method, URL, headers, body, `vars` with `name`/`origin`/`value`, response headers, error, failure phase, assertions) and the comparison with the last success. See [`valetkey diag`]({{< relref "/cli/diag" >}}).
 
 ## Listing and inspecting
 
 | Command | Shape |
 |---------|-------|
-| `gurl list --json` | Array of saved requests; literal credential headers and sensitive query params masked |
-| `gurl show <name> --json` | One saved request, masked the same way |
-| `gurl env list --json` | `[{"name","active","variables"}]` (variables = count) |
-| `gurl env show <name> --json` | `{"name","id","variables":{...},"secrets":[...]}`, secrets masked |
-| `gurl collection list --json` | `[{"name","requests","variables","updated"}]` (counts) |
-| `gurl collection show <name> --json` | `{"name","id","variables":{...},"secrets":[...],"requests":[{"name","method","url"}]}`, secrets masked |
-| `gurl docs --json` | `{"commands":[{"path","usage","args","flags":[...]}],"sections":{...}}` |
+| `valetkey list --json` | Array of saved requests; literal credential headers and sensitive query params masked |
+| `valetkey show <name> --json` | One saved request, masked the same way |
+| `valetkey env list --json` | `[{"name","active","variables"}]` (variables = count) |
+| `valetkey env show <name> --json` | `{"name","id","variables":{...},"secrets":[...]}`, secrets masked |
+| `valetkey collection list --json` | `[{"name","requests","variables","updated"}]` (counts) |
+| `valetkey collection show <name> --json` | `{"name","id","variables":{...},"secrets":[...],"requests":[{"name","method","url"}]}`, secrets masked |
+| `valetkey docs --json` | `{"commands":[{"path","usage","args","flags":[...]}],"sections":{...}}` |
 
 `--reveal` (where supported) shows the masked values, and is refused in agent mode.
 

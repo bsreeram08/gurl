@@ -4,7 +4,7 @@ description: "Homebrew, install script, container image, pre-built binaries, or 
 weight: 1
 ---
 
-gurl ships as a single static binary with no runtime dependencies. Pick one install method, then [verify](#verify-installation) and continue to the [Quickstart]({{< relref "/docs/quickstart" >}}).
+valetkey ships as a single static binary with no runtime dependencies. Pick one install method, then [verify](#verify-installation) and continue to the [Quickstart]({{< relref "/docs/quickstart" >}}).
 
 ## Install
 
@@ -15,8 +15,8 @@ gurl ships as a single static binary with no runtime dependencies. Pick one inst
 macOS and Linux:
 
 ```bash
-brew tap bsreeram08/gurl https://github.com/bsreeram08/gurl
-brew install gurl
+brew tap bsreeram08/valetkey https://github.com/bsreeram08/valetkey
+brew install valetkey
 ```
 
 {{< /tab >}}
@@ -24,29 +24,29 @@ brew install gurl
 {{< tab name="Script" >}}
 
 ```bash
-curl -sL https://raw.githubusercontent.com/bsreeram08/gurl/master/scripts/install.sh | bash
+curl -sL https://raw.githubusercontent.com/bsreeram08/valetkey/master/scripts/install.sh | bash
 ```
 
-Detects your platform, downloads the matching binary from the [latest release](https://github.com/bsreeram08/gurl/releases/latest), and installs it to `/usr/local/bin`.
+Detects your platform, downloads the matching binary from the [latest release](https://github.com/bsreeram08/valetkey/releases/latest), and installs it to `/usr/local/bin`.
 
 {{< /tab >}}
 
 {{< tab name="Binary" >}}
 
-Download from [GitHub Releases](https://github.com/bsreeram08/gurl/releases/latest):
+Download from [GitHub Releases](https://github.com/bsreeram08/valetkey/releases/latest):
 
 ```bash
 # macOS (Apple Silicon)
-curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-darwin-arm64.tar.gz
-tar -xzf gurl-darwin-arm64.tar.gz && sudo mv gurl /usr/local/bin/gurl
+curl -LO https://github.com/bsreeram08/valetkey/releases/latest/download/valetkey-darwin-arm64.tar.gz
+tar -xzf valetkey-darwin-arm64.tar.gz && sudo mv valetkey /usr/local/bin/valetkey
 
 # Linux (x86_64)
-curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-amd64.tar.gz
-tar -xzf gurl-linux-amd64.tar.gz && sudo mv gurl /usr/local/bin/gurl
+curl -LO https://github.com/bsreeram08/valetkey/releases/latest/download/valetkey-linux-amd64.tar.gz
+tar -xzf valetkey-linux-amd64.tar.gz && sudo mv valetkey /usr/local/bin/valetkey
 
 # Linux (ARM64)
-curl -LO https://github.com/bsreeram08/gurl/releases/latest/download/gurl-linux-arm64.tar.gz
-tar -xzf gurl-linux-arm64.tar.gz && sudo mv gurl /usr/local/bin/gurl
+curl -LO https://github.com/bsreeram08/valetkey/releases/latest/download/valetkey-linux-arm64.tar.gz
+tar -xzf valetkey-linux-arm64.tar.gz && sudo mv valetkey /usr/local/bin/valetkey
 ```
 
 Each release also includes raw binaries and `SHA256SUMS`.
@@ -55,12 +55,12 @@ Each release also includes raw binaries and `SHA256SUMS`.
 
 {{< tab name="Docker" >}}
 
-Every release tag publishes a multi-arch image (`linux/amd64`, `linux/arm64`) to GitHub Container Registry: `ghcr.io/bsreeram08/gurl:latest` (newest stable release; pre-releases don't move it) and one tag per release, matching the [GitHub release](https://github.com/bsreeram08/gurl/releases) tag, e.g. `v0.7.0`.
+Every release tag publishes a multi-arch image (`linux/amd64`, `linux/arm64`) to GitHub Container Registry: `ghcr.io/bsreeram08/valetkey:latest` (newest stable release; pre-releases don't move it) and one tag per release, matching the [GitHub release](https://github.com/bsreeram08/valetkey/releases) tag, e.g. `v0.7.0`.
 
 ```bash
-docker run --rm ghcr.io/bsreeram08/gurl:latest --version
-docker run --rm -v "$PWD:/work" -w /work ghcr.io/bsreeram08/gurl:latest list
-docker run --rm ghcr.io/bsreeram08/gurl:v0.7.0 --version     # pinned, reproducible
+docker run --rm ghcr.io/bsreeram08/valetkey:latest --version
+docker run --rm -v "$PWD:/work" -w /work ghcr.io/bsreeram08/valetkey:latest list
+docker run --rm ghcr.io/bsreeram08/valetkey:v0.7.0 --version     # pinned, reproducible
 ```
 
 Keep the database, project files and key material across runs by mounting the host directories:
@@ -68,10 +68,10 @@ Keep the database, project files and key material across runs by mounting the ho
 ```bash
 docker run --rm \
   -v "$PWD:/work" \
-  -v "$HOME/.local/share/gurl:/home/gurl/.local/share/gurl" \
-  -v "$HOME/.config/gurl:/home/gurl/.config/gurl" \
+  -v "$HOME/.local/share/valetkey:/home/valetkey/.local/share/valetkey" \
+  -v "$HOME/.config/valetkey:/home/valetkey/.config/valetkey" \
   -w /work \
-  ghcr.io/bsreeram08/gurl:latest list
+  ghcr.io/bsreeram08/valetkey:latest list
 ```
 
 The package is public. If GitHub still shows it as private, log in with a token that has `read:packages`: `echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin`.
@@ -83,10 +83,10 @@ The package is public. If GitHub still shows it as private, log in with a token 
 Requires Go 1.25.0+.
 
 ```bash
-git clone https://github.com/bsreeram08/gurl.git
-cd gurl
-go build -o gurl ./cmd/valetkey
-sudo mv gurl /usr/local/bin/gurl
+git clone https://github.com/bsreeram08/valetkey.git
+cd valetkey
+go build -o valetkey ./cmd/valetkey
+sudo mv valetkey /usr/local/bin/valetkey
 ```
 
 {{< /tab >}}
@@ -96,37 +96,37 @@ sudo mv gurl /usr/local/bin/gurl
 ## Verify installation
 
 ```bash
-gurl --version
-gurl docs run      # prints the flags of `gurl run`
+valetkey --version
+valetkey docs run      # prints the flags of `valetkey run`
 ```
 
 ## Shell completion
 
 ```bash
 # Bash (~/.bashrc)
-source <(gurl completion bash)
+source <(valetkey completion bash)
 
 # Zsh (~/.zshrc)
-source <(gurl completion zsh)
+source <(valetkey completion zsh)
 
 # Fish (~/.config/fish/config.fish)
-gurl completion fish | source
+valetkey completion fish | source
 ```
 
-## Where gurl keeps data
+## Where valetkey keeps data
 
 | Path | Contents |
 |------|----------|
-| `~/.local/share/gurl/gurl.db` | Saved requests, environments, collections and execution records (LevelDB) |
-| `~/.local/share/gurl/.secret-key` | Machine key for encrypted secrets (mode 0600) |
-| `.gurl/` in a project | Project-backed collections and environments, created by `gurl init` |
+| `~/.local/share/valetkey/valetkey.db` | Saved requests, environments, collections and execution records (LevelDB) |
+| `~/.local/share/valetkey/.secret-key` | Machine key for encrypted secrets (mode 0600) |
+| `.valetkey/` in a project | Project-backed collections and environments, created by `valetkey init` |
 
 Configuration is loaded from the first file found:
 
-1. Path set in `$GURL_CONFIG_PATH`
-2. `.gurlrc` (current directory)
-3. `~/.gurlrc`
-4. `~/.config/gurl/config.toml`
+1. Path set in `$VALETKEY_CONFIG_PATH`
+2. `.valetkeyrc` (current directory)
+3. `~/.valetkeyrc`
+4. `~/.config/valetkey/config.toml`
 
 ```toml
 [general]
@@ -144,13 +144,13 @@ json_pretty = true
 
 | Installed with | Update with |
 |----------------|-------------|
-| Homebrew | `brew upgrade gurl` |
-| Install script or pre-built binary | `gurl update` |
-| Container image | `docker pull ghcr.io/bsreeram08/gurl:latest` (or bump your pinned tag) |
-| Source | `git pull && go build -o gurl ./cmd/valetkey` |
+| Homebrew | `brew upgrade valetkey` |
+| Install script or pre-built binary | `valetkey update` |
+| Container image | `docker pull ghcr.io/bsreeram08/valetkey:latest` (or bump your pinned tag) |
+| Source | `git pull && go build -o valetkey ./cmd/valetkey` |
 
-`gurl update` checks the latest release metadata and replaces the binary with the matching macOS or Linux asset for your CPU architecture. See [`gurl update`]({{< relref "/cli/update" >}}).
+`valetkey update` checks the latest release metadata and replaces the binary with the matching macOS or Linux asset for your CPU architecture. See [`valetkey update`]({{< relref "/cli/update" >}}).
 
 ## Next steps
 
-Continue to the [Quickstart]({{< relref "/docs/quickstart" >}}). AI agents should run `gurl docs` first; see [Agent mode]({{< relref "/ai/agent-mode" >}}).
+Continue to the [Quickstart]({{< relref "/docs/quickstart" >}}). AI agents should run `valetkey docs` first; see [Agent mode]({{< relref "/ai/agent-mode" >}}).

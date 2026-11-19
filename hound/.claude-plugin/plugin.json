@@ -8,8 +8,8 @@
     "email": "sreeram@sreerams.in",
     "url": "https://github.com/bsreeram08"
   },
-  "homepage": "https://github.com/bsreeram08/gurl/tree/main/hound",
-  "repository": "https://github.com/bsreeram08/gurl",
+  "homepage": "https://github.com/bsreeram08/valetkey/tree/main/hound",
+  "repository": "https://github.com/bsreeram08/valetkey",
   "license": "MIT",
   "keywords": ["code-review", "security", "go", "linting"]
 }

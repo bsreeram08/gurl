@@ -9,11 +9,11 @@ Assertions check a response without code; scripts run JavaScript before a reques
 
 ## Assertions
 
-Pass one or more `--assert` flags to `run` (all must pass), or save them on a request with `gurl edit --assert`:
+Pass one or more `--assert` flags to `run` (all must pass), or save them on a request with `valetkey edit --assert`:
 
 ```bash
-gurl run "get-user" --assert "status=200" --assert "body.$.email contains @"
-gurl edit "get-user" --assert "status=200"
+valetkey run "get-user" --assert "status=200" --assert "body.$.email contains @"
+valetkey edit "get-user" --assert "status=200"
 ```
 
 A failed assertion makes `run` exit 1, records the execution with failure phase `assertion`, and prints the failure notice with the execution id. With `--json`, results are in `"assertions":[{"name","passed","message"}]`.
@@ -52,13 +52,13 @@ An assertion that can't be parsed (`invalid assertion format`) stops the run wit
 
 ```bash
 # Validation error is returned as expected
-gurl run "invalid-order" --assert "status=400" --assert "body contains validation"
+valetkey run "invalid-order" --assert "status=400" --assert "body contains validation"
 
 # Header present and fast enough
-gurl run "health" --assert "headers.X-Request-Id exists" --assert "time<500"
+valetkey run "health" --assert "headers.X-Request-Id exists" --assert "time<500"
 
 # Extraction worked
-gurl run "login" --assert "extract:token != ''"
+valetkey run "login" --assert "extract:token != ''"
 ```
 
 ## Scripts
@@ -66,10 +66,10 @@ gurl run "login" --assert "extract:token != ''"
 Scripts are JavaScript (the goja runtime, ECMAScript 5.1+) saved on the request as inline source:
 
 ```bash
-gurl save "login" '{{BASE_URL}}/login' -X POST --extract 'token=jsonpath:$.token' \
-  --post-script 'gurl.setNextRequest("profile")'
+valetkey save "login" '{{BASE_URL}}/login' -X POST --extract 'token=jsonpath:$.token' \
+  --post-script 'valetkey.setNextRequest("profile")'
 
-gurl edit "profile" --pre-script 'gurl.request.headers.set("X-Request-Time", String(Date.now()))'
+valetkey edit "profile" --pre-script 'valetkey.request.headers.set("X-Request-Time", String(Date.now()))'
 ```
 
 - **Pre-request scripts** run before the request is sent: add headers, rewrite the URL or body, or skip the request.
@@ -77,47 +77,47 @@ gurl edit "profile" --pre-script 'gurl.request.headers.set("X-Request-Time", Str
 
 ### Script API
 
-Everything hangs off the global `gurl` object:
+Everything hangs off the global `valetkey` object:
 
 | API | Description |
 |-----|-------------|
-| `gurl.request.headers.get(name)` / `.set(name, value)` / `.remove(name)` | Read or change request headers (pre-request) |
-| `gurl.request.url`, `gurl.request.body`, `gurl.request.method` | Read or assign the URL, body and method |
-| `gurl.response.status`, `.statusText`, `.time`, `.size`, `.body` | Response fields (post-response) |
-| `gurl.response.json()`, `gurl.response.text()` | Parsed JSON body, raw text body |
-| `gurl.response.headers.get(name)` | Response header |
-| `gurl.setVar(name, value)`, `gurl.getVar(name)` | Set or read a runtime variable |
-| `gurl.setNextRequest(name)` | Run this saved request next (with `run --chain` or in a collection run) |
-| `gurl.skipRequest()` | Skip the current request |
-| `gurl.test(name, fn)`, `gurl.expect(value).to.equal(expected)` | Named checks inside a script |
+| `valetkey.request.headers.get(name)` / `.set(name, value)` / `.remove(name)` | Read or change request headers (pre-request) |
+| `valetkey.request.url`, `valetkey.request.body`, `valetkey.request.method` | Read or assign the URL, body and method |
+| `valetkey.response.status`, `.statusText`, `.time`, `.size`, `.body` | Response fields (post-response) |
+| `valetkey.response.json()`, `valetkey.response.text()` | Parsed JSON body, raw text body |
+| `valetkey.response.headers.get(name)` | Response header |
+| `valetkey.setVar(name, value)`, `valetkey.getVar(name)` | Set or read a runtime variable |
+| `valetkey.setNextRequest(name)` | Run this saved request next (with `run --chain` or in a collection run) |
+| `valetkey.skipRequest()` | Skip the current request |
+| `valetkey.test(name, fn)`, `valetkey.expect(value).to.equal(expected)` | Named checks inside a script |
 | `console.log`, `console.warn`, `console.error` | Logging |
 
-Variables set with `gurl.setVar` are runtime values: the highest scope, available to later requests in the same run, and written back only with `--persist` (which refuses values containing `{{`). See [Variables & placeholders]({{< relref "/guides/variables" >}}).
+Variables set with `valetkey.setVar` are runtime values: the highest scope, available to later requests in the same run, and written back only with `--persist` (which refuses values containing `{{`). See [Variables & placeholders]({{< relref "/guides/variables" >}}).
 
 ### Example: capture a value and pick the next request
 
 ```javascript
-var data = gurl.response.json();
+var data = valetkey.response.json();
 if (data.requiresProfile) {
-  gurl.setVar("USER_ID", String(data.userId));
-  gurl.setNextRequest("get-profile");
+  valetkey.setVar("USER_ID", String(data.userId));
+  valetkey.setNextRequest("get-profile");
 }
 ```
 
 ### Example: validate inside a script
 
 ```javascript
-var data = gurl.response.json();
-gurl.test("has users", function () {
-  gurl.expect(data.status).to.equal("success");
+var data = valetkey.response.json();
+valetkey.test("has users", function () {
+  valetkey.expect(data.status).to.equal("success");
 });
 ```
 
 ### Example: skip a request
 
 ```javascript
-if (gurl.getVar("SKIP_HEALTH_CHECK") === "true") {
-  gurl.skipRequest();
+if (valetkey.getVar("SKIP_HEALTH_CHECK") === "true") {
+  valetkey.skipRequest();
 }
 ```
 
@@ -126,9 +126,9 @@ if (gurl.getVar("SKIP_HEALTH_CHECK") === "true") {
 Scripts cannot read secret variables unless explicitly allowed, and URL changes are limited to `http` and `https`. See [Security]({{< relref "/security" >}}).
 
 > [!TIP]
-> Keep scripts small. If a script grows past a few lines, the logic probably belongs in your application or test code; use [`gurl exec`]({{< relref "/cli/exec" >}}) to hand it an environment instead.
+> Keep scripts small. If a script grows past a few lines, the logic probably belongs in your application or test code; use [`valetkey exec`]({{< relref "/cli/exec" >}}) to hand it an environment instead.
 
 ## See also
 
 - [Chaining & extraction]({{< relref "/guides/chaining" >}})
-- [`gurl run`]({{< relref "/cli/run" >}}), [`gurl edit`]({{< relref "/cli/edit" >}})
+- [`valetkey run`]({{< relref "/cli/run" >}}), [`valetkey edit`]({{< relref "/cli/edit" >}})

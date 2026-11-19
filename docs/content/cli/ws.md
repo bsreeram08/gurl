@@ -1,5 +1,5 @@
 ---
-title: "gurl ws"
+title: "valetkey ws"
 description: "Open a WebSocket connection"
 ---
 
@@ -9,8 +9,8 @@ Connect to a WebSocket endpoint, either interactively (stdin to the socket, mess
 ## Synopsis
 
 ```bash
-gurl ws <url> [flags]
-gurl ws <url> --send '<message>'
+valetkey ws <url> [flags]
+valetkey ws <url> --send '<message>'
 ```
 
 The URL is required. Without `--send`, the connection is interactive.
@@ -43,23 +43,23 @@ The URL is required. Without `--send`, the connection is interactive.
 ### Interactive session
 
 ```bash
-gurl ws wss://echo.example.com/socket --pretty --timestamp
+valetkey ws wss://echo.example.com/socket --pretty --timestamp
 ```
 
 ### Send one message and exit
 
 ```bash
-gurl ws wss://api.example.com/ws --send '{"type":"ping"}'
+valetkey ws wss://api.example.com/ws --send '{"type":"ping"}'
 ```
 
 ### Authenticated connection that reconnects
 
 ```bash
-gurl ws wss://api.example.com/stream -H 'Authorization:Bearer dev-token' --reconnect --max-retries 5
+valetkey ws wss://api.example.com/stream -H 'Authorization:Bearer dev-token' --reconnect --max-retries 5
 ```
 
 ## Related commands
 
-- [`gurl sse`]({{< relref "/cli/sse" >}}) - Server-Sent Events
-- [`gurl grpc`]({{< relref "/cli/grpc" >}}) - gRPC requests
-- [`gurl graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries
+- [`valetkey sse`]({{< relref "/cli/sse" >}}) - Server-Sent Events
+- [`valetkey grpc`]({{< relref "/cli/grpc" >}}) - gRPC requests
+- [`valetkey graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries

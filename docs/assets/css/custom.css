@@ -1,4 +1,4 @@
-/* gurl docs: brand accent and the version selector. Keep this file small. */
+/* valetkey docs: brand accent and the version selector. Keep this file small. */
 
 :root {
   /* Hextra derives its primary palette from these (teal accent). */
@@ -12,12 +12,12 @@
 }
 
 /* Landing page install snippet: never wider than the viewport; scroll inside. */
-.gurl-hero-code {
+.valetkey-hero-code {
   max-width: min(42rem, 100%);
   min-width: 0;
 }
 
-.gurl-hero-code pre {
+.valetkey-hero-code pre {
   overflow-x: auto;
 }
 

@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "gurl-plugins",
   "version": "1.0.0",
-  "description": "gurl — API development CLI plugins including brutal code review (hound), agent skills, and more.",
+  "description": "valetkey (formerly gurl): API tooling for AI agents, plus brutal code review (hound), agent skills, and more.",
   "owner": {
     "name": "Sree Ram",
     "email": "sreeram@sreerams.in",

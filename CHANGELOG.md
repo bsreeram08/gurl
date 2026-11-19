@@ -1,5 +1,43 @@
 # Changelog
 
+## [Unreleased]
+
+gurl is now **valetkey**: saved API requests your AI agents can run without ever seeing the keys. See `docs/adr/0001-rename-to-valetkey.md`.
+
+### Added
+
+- `valetkey mcp [--env NAME] [--collection NAME]` serves saved requests as MCP tools over stdio, one tool per request.
+  - The environment is fixed when the server starts.
+  - A tool's arguments are the placeholders that the environment and collection leave undefined. Any other argument, such as `BASE_URL`, is refused, so an agent can't send a request's secrets to another host.
+  - Calls run as `run --agent`, so results are masked, recorded and can be inspected with `valetkey diag`.
+- `valetkey migrate [--dry-run] [--json]` moves `~/.local/share/gurl`, `~/.config/gurl`, `~/.gurl/plugins` and the current project's `.gurl/` to their valetkey names. It renames directories atomically and never overwrites an existing destination.
+- Scripts can use `valetkey.*` as well as `gurl.*`.
+
+### Changed
+
+- The binary, command tree, messages, User-Agent (`valetkey/<version>`), release assets (`valetkey-<os>-<arch>`), container image (`ghcr.io/bsreeram08/valetkey`, which runs as user `valetkey`) and Homebrew formula are now valetkey.
+- New names, read before the old ones:
+  - `VALETKEY_*` environment variables;
+  - `~/.local/share/valetkey`, `~/.config/valetkey` and `~/.valetkey/plugins`;
+  - `.valetkey/` projects and `.valetkeyrc`;
+  - `agentvaletkey`.
+- The Go module path is `github.com/bsreeram08/valetkey`.
+
+### Compatibility
+
+- Everything from gurl keeps working when the valetkey equivalent is absent:
+  - the `gurl` and `agentgurl` command names;
+  - `GURL_*` variables;
+  - the old data, config and plugin directories;
+  - `.gurl/` projects and `.gurlrc`.
+- `init` reuses an existing `.gurl/` rather than creating `.valetkey/` next to it.
+- Releases also publish each binary as `gurl-<os>-<arch>` (listed in `SHA256SUMS`), so `gurl update` from older releases still works.
+- The image is also pushed as `ghcr.io/bsreeram08/gurl`.
+- Homebrew moves `gurl` to `valetkey` through `formula_renames.json` and keeps a `gurl` link. `install.sh` turns an existing gurl from this project into a link to valetkey.
+- These keep their names so existing data and bundles stay readable: encrypted values (`gurlenc:v1:`), share bundles and signatures (`gurl-share`), the `gurl` keychain entry, and `.gurl` export files.
+- After `valetkey migrate`, releases from before the rename no longer find the data.
+- Docker users who mount `/home/gurl/...` should mount `/home/valetkey/...`.
+
 ## [v0.8.1] - 2026-10-26
 
 ### Fixed

@@ -1,15 +1,15 @@
 ---
-title: "gurl edit"
+title: "valetkey edit"
 description: "Edit a saved request"
 ---
 
 
-Change fields of a saved request from the command line. Only the fields you pass are changed; gurl prints the list of changes.
+Change fields of a saved request from the command line. Only the fields you pass are changed; valetkey prints the list of changes.
 
 ## Synopsis
 
 ```bash
-gurl edit <name> [flags]
+valetkey edit <name> [flags]
 ```
 
 ## Flags
@@ -41,30 +41,30 @@ gurl edit <name> [flags]
 ### Point a request at a new URL
 
 ```bash
-gurl edit "list-users" --url '{{BASE_URL}}/v2/users'
+valetkey edit "list-users" --url '{{BASE_URL}}/v2/users'
 ```
 
 ### Add flow metadata for chaining
 
 ```bash
-gurl edit "get-profile" \
+valetkey edit "get-profile" \
   --run-if "token != ''" \
   --extract userId=jsonpath:'$.id' \
-  --post-script "gurl.setVariable('seenProfile', 'true')"
+  --post-script "valetkey.setVariable('seenProfile', 'true')"
 ```
 
 ### Replace or clear saved auth
 
 ```bash
-gurl edit "profile" --auth bearer --auth-param token='{{token}}'
-gurl edit "profile" --auth none
+valetkey edit "profile" --auth bearer --auth-param token='{{token}}'
+valetkey edit "profile" --auth none
 ```
 
 `--auth none` clears auth and cannot be combined with `--auth-param`.
 
 ## Related commands
 
-- [`gurl show`]({{< relref "/cli/show" >}}) - See what is saved
-- [`gurl save`]({{< relref "/cli/save" >}}) - Save a new request
-- [`gurl extract`]({{< relref "/cli/extract" >}}) - Test extraction rules
+- [`valetkey show`]({{< relref "/cli/show" >}}) - See what is saved
+- [`valetkey save`]({{< relref "/cli/save" >}}) - Save a new request
+- [`valetkey extract`]({{< relref "/cli/extract" >}}) - Test extraction rules
 - [Chaining and extraction]({{< relref "/guides/chaining" >}}) - Guide

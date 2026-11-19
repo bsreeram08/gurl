@@ -1,19 +1,19 @@
 ---
-title: "gurl auth"
+title: "valetkey auth"
 description: "Discover supported authentication types"
 ---
 
 
-List the built-in auth handlers and the parameters each one accepts, so you know what to pass to `--auth` and `--auth-param` on `gurl save` and `gurl edit`.
+List the built-in auth handlers and the parameters each one accepts, so you know what to pass to `--auth` and `--auth-param` on `valetkey save` and `valetkey edit`.
 
 ## Synopsis
 
 ```bash
-gurl auth list
-gurl auth info <type>
+valetkey auth list
+valetkey auth info <type>
 ```
 
-`gurl run` applies the auth saved on the request. Auth params may contain placeholders (`token='{{API_KEY}}'`); they are filled during request resolution, then the handler updates the outgoing request. Literal secret auth params are masked by `show`, `list --json`, `codegen` and `paste`.
+`valetkey run` applies the auth saved on the request. Auth params may contain placeholders (`token='{{API_KEY}}'`); they are filled during request resolution, then the handler updates the outgoing request. Literal secret auth params are masked by `show`, `list --json`, `codegen` and `paste`.
 
 | Type | Use it for |
 |------|------------|
@@ -33,7 +33,7 @@ gurl auth info <type>
 List the built-in auth types.
 
 ```bash
-gurl auth list
+valetkey auth list
 ```
 
 None.
@@ -43,7 +43,7 @@ None.
 Show the parameters for one auth type, marked required/optional and secret, with defaults.
 
 ```bash
-gurl auth info <type>
+valetkey auth info <type>
 ```
 
 None.
@@ -53,7 +53,7 @@ None.
 ### See what a handler needs
 
 ```bash
-gurl auth info bearer
+valetkey auth info bearer
 ```
 
 ```text
@@ -65,17 +65,17 @@ Parameters:
 ### Save bearer auth that reads a secret from the environment
 
 ```bash
-gurl save "profile" '{{BASE_URL}}/me' \
+valetkey save "profile" '{{BASE_URL}}/me' \
   --auth bearer \
   --auth-param token='{{API_KEY}}'
 
-gurl run "profile" --env prod
+valetkey run "profile" --env prod
 ```
 
 ### OAuth 2 client credentials
 
 ```bash
-gurl save "service-token" https://api.example.com/service \
+valetkey save "service-token" https://api.example.com/service \
   --auth oauth2 \
   --auth-param flow=client_credentials \
   --auth-param client_id='{{client_id}}' \
@@ -84,11 +84,11 @@ gurl save "service-token" https://api.example.com/service \
   --auth-param scope='read:orders'
 ```
 
-To change or clear saved auth, use `gurl edit <name> --auth ...` or `gurl edit <name> --auth none`.
+To change or clear saved auth, use `valetkey edit <name> --auth ...` or `valetkey edit <name> --auth none`.
 
 ## Related commands
 
-- [`gurl save`]({{< relref "/cli/save" >}}) - Save auth with a request
-- [`gurl edit`]({{< relref "/cli/edit" >}}) - Update or clear saved auth
-- [`gurl run`]({{< relref "/cli/run" >}}) - Execute a request with saved auth
+- [`valetkey save`]({{< relref "/cli/save" >}}) - Save auth with a request
+- [`valetkey edit`]({{< relref "/cli/edit" >}}) - Update or clear saved auth
+- [`valetkey run`]({{< relref "/cli/run" >}}) - Execute a request with saved auth
 - [Credential storage]({{< relref "/security/credential-storage" >}}) - Where auth params are stored

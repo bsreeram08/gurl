@@ -1,5 +1,5 @@
 ---
-title: "gurl diag"
+title: "valetkey diag"
 description: "Inspect one recorded execution"
 ---
 
@@ -9,8 +9,8 @@ Inspect one execution: the request as sent, the variables and where each came fr
 ## Synopsis
 
 ```bash
-gurl diag <id> [flags]
-gurl diag --id <id> [flags]
+valetkey diag <id> [flags]
+valetkey diag --id <id> [flags]
 ```
 
 Every execution of `run` (single requests, `--chain` steps and `--data` rows), `collection run` and shell `send` is recorded, including failures before a response: resolution problems, connection errors and timeouts, script errors, assertion failures and non-2xx responses. Dry runs are not recorded.
@@ -18,10 +18,10 @@ Every execution of `run` (single requests, `--chain` steps and `--data` rows), `
 A failed `run` prints the record id on stderr:
 
 ```text
-request failed: HTTP 500 (id: 7e0d3985) — inspect with: gurl diag 7e0d3985
+request failed: HTTP 500 (id: 7e0d3985) — inspect with: valetkey diag 7e0d3985
 ```
 
-`collection run` prints the id next to each failed request, `gurl history <name>` lists ids, and `run --json` includes `id` and `short_id` in the JSON object. Any unique prefix of an id works.
+`collection run` prints the id next to each failed request, `valetkey history <name>` lists ids, and `run --json` includes `id` and `short_id` in the JSON object. Any unique prefix of an id works.
 
 `diag` prints:
 
@@ -47,7 +47,7 @@ Records never contain secrets: secret and credential-looking values are masked b
 ### Inspect a failure
 
 ```bash
-gurl diag 7e0d3985
+valetkey diag 7e0d3985
 ```
 
 ```text
@@ -80,17 +80,17 @@ Compared with last success
 ### JSON for scripts and agents
 
 ```bash
-gurl diag 7e0d3985 --json
+valetkey diag 7e0d3985 --json
 ```
 
 ### Full response body
 
 ```bash
-gurl diag --id 7e0d3985 --full
+valetkey diag --id 7e0d3985 --full
 ```
 
 ## Related commands
 
-- [`gurl run`]({{< relref "/cli/run" >}}) - Execute a request
-- [`gurl history`]({{< relref "/cli/history" >}}) - List execution ids for a request
-- [`gurl diff`]({{< relref "/cli/diff" >}}) - Compare the latest responses
+- [`valetkey run`]({{< relref "/cli/run" >}}) - Execute a request
+- [`valetkey history`]({{< relref "/cli/history" >}}) - List execution ids for a request
+- [`valetkey diff`]({{< relref "/cli/diff" >}}) - Compare the latest responses

@@ -1,5 +1,5 @@
 ---
-title: "gurl sse"
+title: "valetkey sse"
 description: "Connect to a Server-Sent Events endpoint"
 ---
 
@@ -9,7 +9,7 @@ Connect to a Server-Sent Events (SSE) endpoint and print events as they arrive.
 ## Synopsis
 
 ```bash
-gurl sse <url> [flags]
+valetkey sse <url> [flags]
 ```
 
 The URL is required.
@@ -37,23 +37,23 @@ The URL is required.
 ### Follow a stream
 
 ```bash
-gurl sse https://api.example.com/events --json --timestamp
+valetkey sse https://api.example.com/events --json --timestamp
 ```
 
 ### Only one event type
 
 ```bash
-gurl sse https://api.example.com/events --event order.created
+valetkey sse https://api.example.com/events --event order.created
 ```
 
 ### Resume from the last event you saw
 
 ```bash
-gurl sse https://api.example.com/events -H 'Authorization:Bearer dev-token' --last-event-id 1042
+valetkey sse https://api.example.com/events -H 'Authorization:Bearer dev-token' --last-event-id 1042
 ```
 
 ## Related commands
 
-- [`gurl ws`]({{< relref "/cli/ws" >}}) - WebSocket connections
-- [`gurl grpc`]({{< relref "/cli/grpc" >}}) - gRPC requests
-- [`gurl graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries
+- [`valetkey ws`]({{< relref "/cli/ws" >}}) - WebSocket connections
+- [`valetkey grpc`]({{< relref "/cli/grpc" >}}) - gRPC requests
+- [`valetkey graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries
