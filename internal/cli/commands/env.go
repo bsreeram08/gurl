@@ -24,7 +24,7 @@ func EnvCommand(db env.Store) *cli.Command {
 				Name:    "create",
 				Aliases: []string{"new", "add"},
 				Usage:   "Create a new environment",
-				UsageText: "gurl env create <name> [--var KEY=VALUE ...] [--secret KEY ...]\n" +
+				UsageText: "valetkey env create <name> [--var KEY=VALUE ...] [--secret KEY ...]\n" +
 					"   Use KEY=- to read one value from stdin (prompted without echo on a terminal).",
 				Flags: []cli.Flag{
 					&cli.StringSliceFlag{
@@ -262,8 +262,8 @@ func EnvCommand(db env.Store) *cli.Command {
 			{
 				Name:  "set",
 				Usage: "Set a variable in an environment",
-				UsageText: "gurl env set <env> KEY=VALUE [KEY=VALUE ...]\n" +
-					"   gurl env set <env> KEY VALUE\n" +
+				UsageText: "valetkey env set <env> KEY=VALUE [KEY=VALUE ...]\n" +
+					"   valetkey env set <env> KEY VALUE\n" +
 					"   Use - as the value (KEY=-) to read it from stdin (prompted without echo on a terminal).",
 				Flags: []cli.Flag{
 					&cli.StringSliceFlag{
@@ -504,7 +504,7 @@ func commandReader(c *cli.Command) io.Reader {
 func readStdinValue(r io.Reader, key string, prompt bool) (string, error) {
 	if f, ok := r.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
 		if !prompt {
-			return "", fmt.Errorf("value for %s must be piped on stdin with --no-input (e.g. printf %%s \"$VALUE\" | gurl env set <env> %s=-)", key, key)
+			return "", fmt.Errorf("value for %s must be piped on stdin with --no-input (e.g. printf %%s \"$VALUE\" | valetkey env set <env> %s=-)", key, key)
 		}
 		fmt.Fprintf(os.Stderr, "Value for %s: ", key)
 		b, err := term.ReadPassword(int(f.Fd()))

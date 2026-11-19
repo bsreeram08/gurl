@@ -341,7 +341,7 @@ func (db *ProjectDB) UpdateCollection(collection *types.Collection) error {
 
 func (db *ProjectDB) MigrateCollectionToFiles(name string) (int, string, error) {
 	if !db.hasFileStore() {
-		return 0, "", fmt.Errorf("gurl project not found; run 'gurl init' or set GURL_PROJECT_DIR")
+		return 0, "", fmt.Errorf("valetkey project not found; run 'valetkey init' or set VALETKEY_PROJECT_DIR")
 	}
 
 	var collection *types.Collection
@@ -378,7 +378,7 @@ func (db *ProjectDB) MigrateCollectionToFiles(name string) (int, string, error) 
 
 func (db *ProjectDB) UnlockCollection(name string, passphrase string) error {
 	if !db.hasFileStore() {
-		return fmt.Errorf("gurl project not found; run 'gurl init' or set GURL_PROJECT_DIR")
+		return fmt.Errorf("valetkey project not found; run 'valetkey init' or set VALETKEY_PROJECT_DIR")
 	}
 	return db.files.UnlockCollection(name, passphrase)
 }

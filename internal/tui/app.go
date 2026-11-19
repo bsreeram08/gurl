@@ -244,7 +244,7 @@ func (im *ImportModal) View() tea.View {
 		lines = append(lines, "")
 	}
 
-	formats := "  Supported: .json (Insomnia/Postman/HAR), .yaml/.yml (OpenAPI), .toml (Gurl), .bru (Bruno)"
+	formats := "  Supported: .json (Insomnia/Postman/HAR), .yaml/.yml (OpenAPI), .toml (valetkey), .bru (Bruno)"
 	lines = append(lines, Style.Hint.Render(formats))
 	lines = append(lines, "")
 	lines = append(lines, Style.Hint.Render("  Enter import  ·  Esc cancel"))
@@ -1412,7 +1412,7 @@ func (m *App) renderWelcome() string {
 	var sb strings.Builder
 	sb.WriteString("\n")
 	sb.WriteString("\n")
-	sb.WriteString(Style.WelcomeText.Render("  Welcome to Gurl"))
+	sb.WriteString(Style.WelcomeText.Render("  Welcome to valetkey"))
 	sb.WriteString("\n")
 	sb.WriteString("\n")
 	sb.WriteString(Style.PlainText.Render("  j/k moves through saved requests in the left pane"))

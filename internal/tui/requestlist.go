@@ -116,7 +116,7 @@ func (rl *RequestList) GetMessages() []tea.Msg { return nil }
 
 func (rl *RequestList) ViewTree() string {
 	if len(rl.items) == 0 {
-		return Style.PlainText.Render("\n  No requests saved.\n  Use 'gurl save' to add one.")
+		return Style.PlainText.Render("\n  No requests saved.\n  Use 'valetkey save' to add one.")
 	}
 
 	var sb strings.Builder

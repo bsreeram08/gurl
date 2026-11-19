@@ -17,7 +17,7 @@ func TestInitCreatesProjectLayout(t *testing.T) {
 	for _, path := range []string{
 		proj.CollectionsDir(),
 		proj.EnvironmentsDir(),
-		filepath.Join(proj.GurlDir, ".gitignore"),
+		filepath.Join(proj.Dir, ".gitignore"),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected %s to exist: %v", path, err)
@@ -57,5 +57,25 @@ func TestDiscoverUsesEnvOverride(t *testing.T) {
 	}
 	if proj == nil || proj.Root != root {
 		t.Fatalf("expected env project root %s, got %+v", root, proj)
+	}
+}
+
+func TestDiscoverFindsLegacyGurlDirAndPrefersValetkey(t *testing.T) {
+	t.Setenv(EnvProjectDir, "")
+	t.Setenv("GURL_PROJECT_DIR", "")
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, LegacyDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	proj, err := Discover(root, "")
+	if err != nil || proj == nil || proj.Dir != filepath.Join(root, LegacyDirName) {
+		t.Fatalf("want legacy .gurl project, got %+v, %v", proj, err)
+	}
+	if err := os.Mkdir(filepath.Join(root, DirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	proj, err = Discover(root, "")
+	if err != nil || proj == nil || proj.Dir != filepath.Join(root, DirName) {
+		t.Fatalf("want .valetkey to win, got %+v, %v", proj, err)
 	}
 }

@@ -10,13 +10,13 @@ import (
 
 func TestRunSupportsShellCompletion(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("GURL_DB_PATH", filepath.Join(t.TempDir(), "gurl.db"))
-	t.Setenv("GURL_COOKIE_DB_PATH", filepath.Join(t.TempDir(), "gurl-cookies.db"))
-	t.Setenv("GURL_PLUGIN_DIR", t.TempDir())
+	t.Setenv("VALETKEY_DB_PATH", filepath.Join(t.TempDir(), "valetkey.db"))
+	t.Setenv("VALETKEY_COOKIE_DB_PATH", filepath.Join(t.TempDir(), "valetkey-cookies.db"))
+	t.Setenv("VALETKEY_PLUGIN_DIR", t.TempDir())
 
 	for _, shell := range []string{"bash", "zsh", "fish"} {
 		t.Run(shell, func(t *testing.T) {
-			stdout, stderr, err := runWithArgs(t, []string{"gurl", "completion", shell})
+			stdout, stderr, err := runWithArgs(t, []string{"valetkey", "completion", shell})
 			if err != nil {
 				t.Fatalf("expected completion to run for %s: %v\nstderr: %s", shell, err, stderr)
 			}

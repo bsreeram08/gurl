@@ -25,7 +25,7 @@ func PasteCommand(db storage.DB) *cli.Command {
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			if agentMode(c) {
-				return cli.Exit("paste is not allowed in agent mode (it copies to the clipboard); use: gurl show <name> --format curl", 2)
+				return cli.Exit("paste is not allowed in agent mode (it copies to the clipboard); use: valetkey show <name> --format curl", 2)
 			}
 			args := c.Args()
 			if args.Len() < 1 {

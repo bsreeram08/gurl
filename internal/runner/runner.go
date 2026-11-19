@@ -431,7 +431,7 @@ func (r *Runner) runIteration(ctx context.Context, requests []*types.SavedReques
 		if !config.DryRun {
 			if rec := r.saveRecord(execution, config.Environment); rec != nil && rec.Failed() {
 				id := rec.ShortID()
-				fmt.Fprintf(os.Stderr, "  [FAIL] %s: %s (id: %s) — inspect with: gurl diag %s\n", req.Name, FailureReason(rec), id, id)
+				fmt.Fprintf(os.Stderr, "  [FAIL] %s: %s (id: %s) — inspect with: valetkey diag %s\n", req.Name, FailureReason(rec), id, id)
 			}
 		}
 		if config.DryRun {

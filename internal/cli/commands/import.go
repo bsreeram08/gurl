@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"github.com/bsreeram08/valetkey/internal/brand"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -153,7 +155,7 @@ func importCommandPassphrase(c *cli.Command) string {
 	if passphrase := c.String("passphrase"); passphrase != "" {
 		return passphrase
 	}
-	return os.Getenv("GURL_IMPORT_PASSPHRASE")
+	return brand.Getenv("IMPORT_PASSPHRASE")
 }
 
 func importCollectionRecords(db storage.DB, collection *types.Collection, requests []*types.SavedRequest, force bool) (int, int, error) {

@@ -178,7 +178,7 @@ func FailureNotice(rec *types.ExecutionHistory) string {
 		return ""
 	}
 	id := rec.ShortID()
-	return fmt.Sprintf("request failed: %s (id: %s) — inspect with: gurl diag %s", reason, id, id)
+	return fmt.Sprintf("request failed: %s (id: %s) — inspect with: valetkey diag %s", reason, id, id)
 }
 
 // saveRecord stores the record of execution, if any, and returns it; nil

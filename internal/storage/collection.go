@@ -9,8 +9,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/google/uuid"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
@@ -310,7 +310,7 @@ func decryptDBCollectionForUse(collection *types.Collection) error {
 	if collection.Encryption != nil && collection.Encryption.Mode == CollectionEncryptionModePassphrase {
 		return &CollectionLockedError{
 			Name: collection.Name,
-			Hint: fmt.Sprintf("run 'gurl collection import ... --passphrase ...' to bind it locally"),
+			Hint: fmt.Sprintf("run 'valetkey collection import ... --passphrase ...' to bind it locally"),
 		}
 	}
 
@@ -319,7 +319,7 @@ func decryptDBCollectionForUse(collection *types.Collection) error {
 		if os.IsNotExist(err) {
 			return &CollectionLockedError{
 				Name: collection.Name,
-				Hint: fmt.Sprintf("missing local collection key; restore ~/.local/share/gurl/keys/%s.key or re-import", safePathComponent(collection.ID)),
+				Hint: fmt.Sprintf("missing local collection key; restore ~/.local/share/valetkey/keys/%s.key or re-import", safePathComponent(collection.ID)),
 			}
 		}
 		return err

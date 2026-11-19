@@ -14,13 +14,13 @@ import (
 func TestUpdate_ChecksumVerification(t *testing.T) {
 	// Test that a correct checksum passes
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/gurl-darwin-arm64" {
+		if r.URL.Path == "/valetkey-darwin-arm64" {
 			w.Write([]byte("fake-binary-content"))
 			return
 		}
 		if r.URL.Path == "/SHA256SUMS" {
 			// SHA256 of "fake-binary-content" is deterministic
-			w.Write([]byte("a8d5b5e8e0c1c8e8f8a8d5b5e8e0c1c8e8f8a8d5b5e8e0c1c8e8f8a8d5b5e8e0  gurl-darwin-arm64\n"))
+			w.Write([]byte("a8d5b5e8e0c1c8e8f8a8d5b5e8e0c1c8e8f8a8d5b5e8e0c1c8e8f8a8d5b5e8e0  valetkey-darwin-arm64\n"))
 			return
 		}
 		http.NotFound(w, r)
@@ -45,7 +45,7 @@ func TestUpdateFailsBeforeDownloadWhenLatestStatusIsNotOK(t *testing.T) {
 
 	var err error
 	output := captureUpdateStdout(t, func() {
-		err = updateGurl()
+		err = selfUpdate()
 	})
 	if err == nil {
 		t.Fatal("expected update to fail for non-200 latest release response")
@@ -57,7 +57,7 @@ func TestUpdateFailsBeforeDownloadWhenLatestStatusIsNotOK(t *testing.T) {
 	if transport.downloadRequested {
 		t.Fatalf("expected no download request, got %s", transport.downloadURL)
 	}
-	if strings.Contains(output, "/releases/download/v/gurl-") {
+	if strings.Contains(output, "/releases/download/v/valetkey-") {
 		t.Fatalf("expected no bare-v download URL in output, got %q", output)
 	}
 }
@@ -70,14 +70,14 @@ func TestUpdateUsesPublicLatestRedirectFallbackWhenAPIForbiddenAndCurrentIsLates
 		latestStatus:     http.StatusForbidden,
 		latestBody:       `{"message":"rate limit exceeded"}`,
 		fallbackStatus:   http.StatusFound,
-		fallbackLocation: "https://github.com/bsreeram08/gurl/releases/tag/v0.2.1",
+		fallbackLocation: "https://github.com/bsreeram08/valetkey/releases/tag/v0.2.1",
 		downloadStatus:   http.StatusTeapot,
 	}
 	http.DefaultTransport = transport
 
 	var err error
 	output := captureUpdateStdout(t, func() {
-		err = updateGurl()
+		err = selfUpdate()
 	})
 	if err != nil {
 		t.Fatalf("expected update to succeed via public latest redirect fallback, got %v", err)
@@ -103,7 +103,7 @@ func TestUpdateFailsClearlyWhenAPIForbiddenAndPublicFallbackHasNoTag(t *testing.
 		fallbackStatus   int
 		fallbackLocation string
 	}{
-		{name: "redirect without tag", fallbackStatus: http.StatusFound, fallbackLocation: "https://github.com/bsreeram08/gurl/releases"},
+		{name: "redirect without tag", fallbackStatus: http.StatusFound, fallbackLocation: "https://github.com/bsreeram08/valetkey/releases"},
 		{name: "missing location", fallbackStatus: http.StatusFound, fallbackLocation: ""},
 	}
 
@@ -123,7 +123,7 @@ func TestUpdateFailsClearlyWhenAPIForbiddenAndPublicFallbackHasNoTag(t *testing.
 
 			var err error
 			output := captureUpdateStdout(t, func() {
-				err = updateGurl()
+				err = selfUpdate()
 			})
 			if err == nil {
 				t.Fatal("expected update to fail when public latest redirect fallback has no tag")
@@ -141,7 +141,7 @@ func TestUpdateFailsClearlyWhenAPIForbiddenAndPublicFallbackHasNoTag(t *testing.
 			if transport.downloadRequested {
 				t.Fatalf("expected no download request, got %s", transport.downloadURL)
 			}
-			if strings.Contains(output, "/releases/download/v/gurl-") {
+			if strings.Contains(output, "/releases/download/v/valetkey-") {
 				t.Fatalf("expected no bare-v download URL in output, got %q", output)
 			}
 		})
@@ -172,7 +172,7 @@ func TestUpdateFailsBeforeDownloadWhenLatestTagNameIsMissingOrEmpty(t *testing.T
 
 			var err error
 			output := captureUpdateStdout(t, func() {
-				err = updateGurl()
+				err = selfUpdate()
 			})
 			if err == nil {
 				t.Fatal("expected update to fail for missing latest release tag")
@@ -184,7 +184,7 @@ func TestUpdateFailsBeforeDownloadWhenLatestTagNameIsMissingOrEmpty(t *testing.T
 			if transport.downloadRequested {
 				t.Fatalf("expected no download request, got %s", transport.downloadURL)
 			}
-			if strings.Contains(output, "/releases/download/v/gurl-") {
+			if strings.Contains(output, "/releases/download/v/valetkey-") {
 				t.Fatalf("expected no bare-v download URL in output, got %q", output)
 			}
 		})
@@ -207,7 +207,7 @@ func TestUpdateDownloadURLUsesFullReleaseTag(t *testing.T) {
 
 	var err error
 	output := captureUpdateStdout(t, func() {
-		err = updateGurl()
+		err = selfUpdate()
 	})
 	if err == nil {
 		t.Fatal("expected update to stop at mocked checksum error")
@@ -219,10 +219,10 @@ func TestUpdateDownloadURLUsesFullReleaseTag(t *testing.T) {
 	if !transport.downloadRequested {
 		t.Fatal("expected download request for newer release")
 	}
-	if !strings.Contains(transport.downloadURL, "/releases/download/v0.2.0/gurl-") {
+	if !strings.Contains(transport.downloadURL, "/releases/download/v0.2.0/valetkey-") {
 		t.Fatalf("expected full tag in download URL, got %s", transport.downloadURL)
 	}
-	if strings.Contains(transport.downloadURL, "/releases/download/v/gurl-") {
+	if strings.Contains(transport.downloadURL, "/releases/download/v/valetkey-") {
 		t.Fatalf("expected no bare-v download URL, got %s", transport.downloadURL)
 	}
 	if !transport.checksumRequested {
@@ -231,7 +231,7 @@ func TestUpdateDownloadURLUsesFullReleaseTag(t *testing.T) {
 	if !strings.Contains(transport.checksumURL, "/releases/download/v0.2.0/SHA256SUMS") {
 		t.Fatalf("expected full tag in checksum URL, got %s", transport.checksumURL)
 	}
-	if !strings.Contains(output, "/releases/download/v0.2.0/gurl-") {
+	if !strings.Contains(output, "/releases/download/v0.2.0/valetkey-") {
 		t.Fatalf("expected printed download URL to include full tag, got %q", output)
 	}
 }
@@ -254,9 +254,9 @@ type recordingUpdateTransport struct {
 
 func (t *recordingUpdateTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	switch {
-	case req.URL.Host == "api.github.com" && req.URL.Path == "/repos/bsreeram08/gurl/releases/latest":
+	case req.URL.Host == "api.github.com" && req.URL.Path == "/repos/bsreeram08/valetkey/releases/latest":
 		return stringResponse(req, t.latestStatus, t.latestBody), nil
-	case req.URL.Host == "github.com" && req.URL.Path == "/bsreeram08/gurl/releases/latest":
+	case req.URL.Host == "github.com" && req.URL.Path == "/bsreeram08/valetkey/releases/latest":
 		t.fallbackRequested = true
 		t.fallbackURL = req.URL.String()
 		resp := stringResponse(req, t.fallbackStatus, "")

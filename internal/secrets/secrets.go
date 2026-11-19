@@ -16,6 +16,8 @@ import (
 )
 
 const (
+	// Frozen since before the valetkey rename: values already stored with
+	// this prefix must still decrypt.
 	EncryptedPrefix = "gurlenc:v1:"
 	NonceSize       = 12
 	KeySize         = 32

@@ -20,7 +20,7 @@ import (
 	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
-var failureNotice = regexp.MustCompile(`request failed: (.+) \(id: ([0-9a-f]{8})\) — inspect with: gurl diag ([0-9a-f]{8})`)
+var failureNotice = regexp.MustCompile(`request failed: (.+) \(id: ([0-9a-f]{8})\) — inspect with: valetkey diag ([0-9a-f]{8})`)
 
 // captureStreams runs fn and returns what it wrote to stdout and stderr.
 func captureStreams(t *testing.T, fn func()) (stdout, stderr string) {

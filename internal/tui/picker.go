@@ -21,7 +21,7 @@ var (
 	pickerHint = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
 )
 
-// Picker is a minimal fuzzy-search request picker for gurl run.
+// Picker is a minimal fuzzy-search request picker for valetkey run.
 type Picker struct {
 	all      []*types.SavedRequest
 	filtered []*types.SavedRequest

@@ -120,7 +120,7 @@ func RunCommand(db storage.DB, envStorage env.Store, runnerOpts ...runner.Option
 			var name string
 			if args.Len() < 1 {
 				if noInput(c) {
-					return cli.Exit("request name is required: gurl run <name> (list names with: gurl list --json)", 2)
+					return cli.Exit("request name is required: valetkey run <name> (list names with: valetkey list --json)", 2)
 				}
 				requests, err := db.ListRequests(nil)
 				if err != nil {

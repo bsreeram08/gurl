@@ -53,7 +53,7 @@ func DiagCommand(db storage.DB, envs env.Store) *cli.Command {
 				id = c.Args().First()
 			}
 			if strings.TrimSpace(id) == "" {
-				return cli.Exit("execution id is required: gurl diag <id>", 2)
+				return cli.Exit("execution id is required: valetkey diag <id>", 2)
 			}
 			rec, err := db.GetHistoryByID(id)
 			if err != nil {

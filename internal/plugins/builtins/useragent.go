@@ -15,14 +15,14 @@ type UserAgentMiddleware struct {
 // Name returns the plugin name.
 func (u *UserAgentMiddleware) Name() string { return "user-agent" }
 
-// BeforeRequest sets the User-Agent header to "gurl/{Version}" if not already set.
+// BeforeRequest sets the User-Agent header to "valetkey/{Version}" if not already set.
 func (u *UserAgentMiddleware) BeforeRequest(ctx *plugins.RequestContext) *plugins.RequestContext {
 	if ctx == nil || ctx.Request == nil {
 		return ctx
 	}
 
 	if !hasHeader(ctx.Request.Headers, "User-Agent") {
-		userAgent := "gurl/" + u.Version
+		userAgent := "valetkey/" + u.Version
 		ctx.Request.Headers = append(ctx.Request.Headers, client.Header{
 			Key:   "User-Agent",
 			Value: userAgent,

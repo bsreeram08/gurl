@@ -1,11 +1,12 @@
 package main
 
 import (
+	"github.com/bsreeram08/valetkey/internal/brand"
+
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -39,14 +40,14 @@ func (h cookieJarHolder) GetCookieJar() *cookies.CookieJar {
 }
 
 func getPluginDir() string {
-	if dir := os.Getenv("GURL_PLUGIN_DIR"); dir != "" {
+	if dir := brand.Getenv("PLUGIN_DIR"); dir != "" {
 		return dir
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".gurl", "plugins")
+	return brand.PluginDir(home)
 }
 
 func main() {
@@ -117,28 +118,30 @@ func run() error {
 	return app.Run(ctx, args)
 }
 
-// newApp builds the gurl command tree.
+// newApp builds the valetkey command tree.
 func newApp(db storage.DB, envStorage env.Store, cookieProvider commands.CookieJarProvider, runnerOpts ...runner.Option) *cli.Command {
 	return &cli.Command{
-		Name:                  "gurl",
-		Usage:                 "Smart curl saver - Your named request library",
+		Name:                  brand.Name,
+		Usage:                 "Saved API requests your AI agents can run without ever seeing the keys",
 		Version:               version,
 		EnableShellCompletion: true,
 		Flags: append([]cli.Flag{
 			&cli.StringFlag{
 				Name:  "project-dir",
-				Usage: "Project root containing .gurl file storage",
+				Usage: "Project root containing a .valetkey (or legacy .gurl) directory",
 			},
 		}, commands.GlobalFlags()...),
-		Description: `gurl replaces your chaotic curl history with an intelligent, 
-named request library. Save requests with memorable names 
-and run them whenever you need.
+		Description: `valetkey is a library of named HTTP requests for people and AI agents.
+You save requests and keep secrets in environments; agents run them by
+name and get JSON back, but never see the keys.
 
 Quick Start:
-  gurl save "health check" https://api.example.com/health
-  gurl list
-  gurl run "health check"
-  gurl delete "old request"`,
+  valetkey save "health check" https://api.example.com/health
+  valetkey run "health check" --env dev
+  valetkey --agent run "health check" --env dev   # what an agent runs
+  valetkey mcp                                    # serve saved requests to MCP clients
+
+The old command name gurl, and agentgurl, still work.`,
 		Commands: []*cli.Command{
 			commands.InitCommand(),
 			commands.SaveCommand(db),
@@ -172,24 +175,18 @@ Quick Start:
 			websocket.WSCommand(db),
 			sse.SSECommand(db),
 			commands.CookiesCommand(cookieProvider),
+			commands.MigrateCommand(),
 			commands.DocsCommand(),
 		},
 	}
 }
 
-// agentBinaryName is the program name that turns on agent mode, so
-// `ln -s "$(command -v gurl)" ~/.local/bin/agentgurl` gives agents a gurl
-// that always runs with --agent.
-const agentBinaryName = "agentgurl"
-
-// invokedAsAgent reports whether gurl was started as agentgurl (or
-// agentgurl.exe).
+// invokedAsAgent reports whether the binary was started as agentvaletkey
+// or the pre-rename agentgurl (with or without .exe), so
+// `ln -s "$(command -v valetkey)" ~/.local/bin/agentvaletkey` gives agents a
+// binary that always runs with --agent.
 func invokedAsAgent(arg0 string) bool {
-	name := filepath.Base(arg0)
-	if ext := filepath.Ext(name); strings.EqualFold(ext, ".exe") {
-		name = strings.TrimSuffix(name, ext)
-	}
-	return strings.EqualFold(name, agentBinaryName)
+	return brand.IsAgentBinary(arg0)
 }
 
 func projectDirFromArgs(args []string) string {

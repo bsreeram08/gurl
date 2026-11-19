@@ -1,12 +1,14 @@
 package config
 
 import (
+	"github.com/bsreeram08/valetkey/internal/brand"
+
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/pelletier/go-toml/v2"
 	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // Loader handles loading configuration from TOML files
@@ -17,10 +19,14 @@ type Loader struct {
 // NewLoader creates a new config loader
 func NewLoader() *Loader {
 	return &Loader{
+		// New names first; the pre-rename gurl names still load.
 		configPaths: []string{
+			".valetkeyrc",
 			".gurlrc",
+			filepath.Join(os.Getenv("HOME"), ".valetkeyrc"),
 			filepath.Join(os.Getenv("HOME"), ".gurlrc"),
-			filepath.Join(os.Getenv("HOME"), ".config", "gurl", "config.toml"),
+			filepath.Join(brand.NewConfigDir(os.Getenv("HOME")), "config.toml"),
+			filepath.Join(brand.LegacyConfigDir(os.Getenv("HOME")), "config.toml"),
 		},
 	}
 }
@@ -29,10 +35,10 @@ func NewLoader() *Loader {
 func (l *Loader) Load() (*types.Config, error) {
 	config := DefaultConfig()
 
-	// Check GURL_CONFIG_PATH environment variable first
-	if envPath := os.Getenv("GURL_CONFIG_PATH"); envPath != "" {
+	// Check VALETKEY_CONFIG_PATH (or GURL_CONFIG_PATH) first
+	if envPath := brand.Getenv("CONFIG_PATH"); envPath != "" {
 		if err := l.loadFile(envPath, config); err != nil {
-			return nil, fmt.Errorf("loading config from GURL_CONFIG_PATH: %w", err)
+			return nil, fmt.Errorf("loading config from %s: %w", brand.Env("CONFIG_PATH"), err)
 		}
 		return config, nil
 	}

@@ -89,7 +89,7 @@ func TestMiddleware_UserAgent(t *testing.T) {
 
 	found := false
 	for _, h := range result.Request.Headers {
-		if h.Key == "User-Agent" && h.Value == "gurl/1.0.0" {
+		if h.Key == "User-Agent" && h.Value == "valetkey/1.0.0" {
 			found = true
 			break
 		}

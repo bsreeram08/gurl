@@ -1,5 +1,5 @@
 // Package redact holds the rules that keep secret values out of everything
-// gurl prints or stores: saved requests shown or exported, dry-run previews
+// valetkey prints or stores: saved requests shown or exported, dry-run previews
 // and execution records.
 //
 // A value is secret when its variable is marked secret, when its name looks

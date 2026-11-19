@@ -17,6 +17,8 @@ import (
 // Signatures use OpenSSH's SSHSIG format (PROTOCOL.sshsig), so a bundle's
 // signature can also be checked with `ssh-keygen -Y verify -n gurl-share`.
 const (
+	// Frozen since before the valetkey rename: changing it would make
+	// every existing signature fail to verify.
 	sigNamespace = "gurl-share"
 	sigMagic     = "SSHSIG"
 	sigHash      = "sha512"

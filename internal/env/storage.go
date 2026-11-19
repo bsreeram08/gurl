@@ -27,7 +27,7 @@ type Store interface {
 
 var _ Store = (*EnvStorage)(nil)
 
-// EnvStorage stores environments in LMDB and, inside a gurl project, in
+// EnvStorage stores environments in LMDB and, inside a valetkey project, in
 // project files.
 type EnvStorage struct {
 	db     *storage.LMDB

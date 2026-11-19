@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"github.com/bsreeram08/valetkey/internal/brand"
+
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -25,22 +27,22 @@ var CurrentVersion = "dev"
 func UpdateCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "update",
-		Usage: "Update gurl to the latest version",
+		Usage: "Update " + brand.Name + " to the latest version",
 		Action: func(ctx context.Context, c *cli.Command) error {
-			return updateGurl()
+			return selfUpdate()
 		},
 	}
 }
 
 const (
 	owner        = "bsreeram08"
-	repo         = "gurl"
+	repo         = brand.Name
 	latestURL    = "https://api.github.com/repos/%s/%s/releases/latest"
 	latestWebURL = "https://github.com/%s/%s/releases/latest"
-	downloadURL  = "https://github.com/%s/%s/releases/download/%s/gurl-%s-%s"
+	downloadURL  = "https://github.com/%s/%s/releases/download/%s/" + brand.Name + "-%s-%s"
 )
 
-func updateGurl() error {
+func selfUpdate() error {
 	currentVersion := CurrentVersion
 	fmt.Printf("Current version: %s\n", currentVersion)
 
@@ -104,7 +106,7 @@ func updateGurl() error {
 	}
 
 	// Create temp file
-	tmpFile, err := os.CreateTemp("", "gurl-update-*")
+	tmpFile, err := os.CreateTemp("", brand.Name+"-update-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -137,9 +139,9 @@ func updateGurl() error {
 	}
 
 	// Parse SHA256SUMS — format: "<hash>  <binary-name>" per line
-	// e.g., "abc123def...  gurl-darwin-arm64"
+	// e.g., "abc123def...  valetkey-darwin-arm64"
 	expectedHash := ""
-	binaryName := fmt.Sprintf("gurl-%s-%s", osName, arch)
+	binaryName := fmt.Sprintf("%s-%s-%s", brand.Name, osName, arch)
 	for _, line := range strings.Split(string(checksumBody), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -183,10 +185,15 @@ func updateGurl() error {
 	// Replace current binary
 	selfPath, err := os.Executable()
 	if err != nil {
-		// Fallback: try to find gurl in PATH
-		path, err := exec.LookPath("gurl")
+		// Fallback: find the binary in PATH under its new or old name.
+		var path string
+		for _, name := range brand.BinaryNames {
+			if path, err = exec.LookPath(name); err == nil {
+				break
+			}
+		}
 		if err != nil {
-			return fmt.Errorf("could not find gurl executable: %w", err)
+			return fmt.Errorf("could not find %s executable: %w", brand.Name, err)
 		}
 		selfPath = path
 	}
@@ -211,7 +218,7 @@ func updateGurl() error {
 	os.Remove(backupPath)
 
 	fmt.Printf("Successfully updated to %s!\n", releaseTag)
-	fmt.Println("Run 'gurl --version' to verify.")
+	fmt.Println("Run '" + brand.Name + " --version' to verify.")
 
 	return nil
 }

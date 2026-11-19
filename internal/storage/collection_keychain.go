@@ -12,6 +12,8 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
+// The keychain service predates the valetkey rename and is frozen, so
+// passphrases cached by gurl are still found.
 const collectionPassphraseKeyringService = "gurl"
 
 var errCachedCollectionKeyNotFound = errors.New("cached collection key not found")

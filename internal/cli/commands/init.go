@@ -11,11 +11,11 @@ import (
 func InitCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "init",
-		Usage: "Initialize a gurl project",
+		Usage: "Initialize a valetkey project",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "project-dir",
-				Usage: "Project root for .gurl file storage",
+				Usage: "Project root for .valetkey file storage",
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
@@ -23,7 +23,7 @@ func InitCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("✓ Initialized gurl project at %s\n", proj.GurlDir)
+			fmt.Printf("✓ Initialized valetkey project at %s\n", proj.Dir)
 			return nil
 		},
 	}
