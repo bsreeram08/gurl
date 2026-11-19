@@ -17,6 +17,7 @@ import (
 	"github.com/bsreeram08/apigent/internal/brand"
 	"github.com/bsreeram08/apigent/internal/env"
 	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/resolve"
 	"github.com/bsreeram08/apigent/internal/runner"
 	"github.com/bsreeram08/apigent/internal/storage"
 	"github.com/bsreeram08/apigent/pkg/types"
@@ -240,13 +241,27 @@ func (s *mcpServer) tools(ctx context.Context) ([]toolEntry, error) {
 		return nil, fmt.Errorf("listing saved requests: %w", err)
 	}
 	sort.Slice(reqs, func(i, j int) bool { return reqs[i].Name < reqs[j].Name })
+	var e *env.Environment
+	if s.envName != "" {
+		found, err := s.envStorage.GetEnvByName(s.envName)
+		if err != nil || found == nil {
+			return nil, fmt.Errorf("environment '%s' not found", s.envName)
+		}
+		e = found
+	}
+	// Each store lookup opens the database, so look up the environment once
+	// and each collection's variables once per listing, not once per request.
+	scopes := map[string]resolve.Scopes{}
+	planner := runner.NewRunner(s.db, s.envStorage)
 	used := map[string]bool{}
 	entries := make([]toolEntry, 0, len(reqs))
 	for _, req := range reqs {
-		fillable, err := s.fillable(ctx, req)
-		if err != nil {
-			return nil, err
+		sc, ok := scopes[req.Collection]
+		if !ok {
+			sc = runner.ScopesFor(s.db, e, req.Collection, map[string]string{})
+			scopes[req.Collection] = sc
 		}
+		fillable := fillable(ctx, planner, req, sc)
 		props := map[string]any{}
 		for _, name := range fillable {
 			props[name] = map[string]any{"type": "string", "description": "Value for the {{" + name + "}} placeholder"}
@@ -277,20 +292,11 @@ func (s *mcpServer) tools(ctx context.Context) ([]toolEntry, error) {
 }
 
 // fillable lists the placeholders of req that the pinned environment and
-// the request's collection leave undefined: the only values a tool call
-// may supply. It plans the request without sending it.
-func (s *mcpServer) fillable(ctx context.Context, req *types.SavedRequest) ([]string, error) {
-	var e *env.Environment
-	if s.envName != "" {
-		found, err := s.envStorage.GetEnvByName(s.envName)
-		if err != nil || found == nil {
-			return nil, fmt.Errorf("environment '%s' not found", s.envName)
-		}
-		e = found
-	}
-	scopes := runner.ScopesFor(s.db, e, req.Collection, map[string]string{})
-	plan := runner.NewRunner(s.db, s.envStorage).PlanSavedRequest(ctx, req, scopes)
-	return plan.Result.Problems.Missing(), nil
+// the request's collection (in scopes) leave undefined: the only values a
+// tool call may supply. It plans the request without sending it.
+func fillable(ctx context.Context, planner *runner.Runner, req *types.SavedRequest, scopes resolve.Scopes) []string {
+	plan := planner.PlanSavedRequest(ctx, req, scopes)
+	return plan.Result.Problems.Missing()
 }
 
 func (s *mcpServer) listTools(ctx context.Context) (any, *rpcError) {
