@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/bsreeram08/valetkey/internal/assertions"
 	"github.com/bsreeram08/valetkey/internal/auth"
 	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/valetkey/internal/core/template"
 	"github.com/bsreeram08/valetkey/internal/env"
 	"github.com/bsreeram08/valetkey/internal/extract"
 	"github.com/bsreeram08/valetkey/internal/resolve"
@@ -680,13 +682,15 @@ func (r *Runner) runRequestLifecycle(ctx context.Context, req *types.SavedReques
 	result.DirtyVars = nonEmptyMap(dirtyVars)
 	result.DirtyVarOrigins = nonEmptyOriginMap(dirtyVarOrigins)
 
-	if result.StatusCode < 200 || result.StatusCode >= 300 {
+	// A non-2xx response fails the request, unless the request asserts its
+	// status: then the assertions decide, so a test can expect a 402 or 404.
+	if (result.StatusCode < 200 || result.StatusCode >= 300) && !assertsStatus(effectiveReq.Assertions) {
 		result.Passed = false
 		return execution
 	}
 
 	if len(effectiveReq.Assertions) > 0 {
-		assertResults := r.eval.Evaluate(&resp, convertAssertions(effectiveReq.Assertions), extractedVars)
+		assertResults := r.eval.Evaluate(&resp, fillAssertionValues(convertAssertions(effectiveReq.Assertions), varValues(scopes)), extractedVars)
 		result.AssertionResults = assertResults
 
 		allPassed := true
@@ -865,6 +869,33 @@ func convertClientHeadersToTypes(headers []client.Header) []types.Header {
 		result[i] = types.Header{Key: h.Key, Value: h.Value}
 	}
 	return result
+}
+
+// assertsStatus reports whether any assertion checks the response status.
+func assertsStatus(list []types.Assertion) bool {
+	for _, a := range list {
+		if field := strings.TrimSpace(a.Field); field == "status" || field == "status_code" {
+			return true
+		}
+	}
+	return false
+}
+
+// fillAssertionValues replaces {{name}} placeholders in assertion fields and
+// expected values with the current variables (environment, collection, CLI
+// and values extracted earlier in the run), so a step can assert what an
+// earlier step returned, e.g. body.data.items.{{itemId}}.name={{name}}.
+// Unknown placeholders are left as written.
+func fillAssertionValues(list []assertions.Assertion, vars map[string]string) []assertions.Assertion {
+	for i := range list {
+		if strings.Contains(list[i].Field, "{{") {
+			list[i].Field = template.ResolveKnown(list[i].Field, vars)
+		}
+		if strings.Contains(list[i].Value, "{{") {
+			list[i].Value = template.ResolveKnown(list[i].Value, vars)
+		}
+	}
+	return list
 }
 
 func convertAssertions(typeAssertions []types.Assertion) []assertions.Assertion {

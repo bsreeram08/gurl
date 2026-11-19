@@ -268,3 +268,76 @@ func TestAutoDetectImportWithUnsupported(t *testing.T) {
 		t.Error("expected error for unsupported format")
 	}
 }
+
+// TestDetectPicksImporterFromContent covers the formats that share .json:
+// before detection, every .json file went to whichever importer registered
+// the extension last.
+func TestDetectPicksImporterFromContent(t *testing.T) {
+	tests := []struct {
+		name    string
+		file    string
+		content string
+		want    string
+	}{
+		{"openapi json", "spec.json", `{"openapi":"3.1.0","info":{"title":"x"},"paths":{}}`, "openapi"},
+		{"openapi yaml", "spec.yaml", "openapi: 3.0.0\npaths: {}\n", "openapi"},
+		{"postman", "coll.json", `{"info":{"name":"x","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":[]}`, "postman"},
+		{"insomnia", "export.json", `{"_type":"export","resources":[]}`, "insomnia"},
+		{"har", "trace.json", `{"log":{"version":"1.2","entries":[]}}`, "har"},
+		{"yaak", "yaak.json", `{"version":"1","collections":[]}`, "yaak"},
+		{"bruno by extension", "req.bru", "meta {\n  name: x\n}\n", "bruno"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), tt.file)
+			if err := os.WriteFile(path, []byte(tt.content), 0644); err != nil {
+				t.Fatal(err)
+			}
+			im, err := Detect(path)
+			if err != nil {
+				t.Fatalf("Detect: %v", err)
+			}
+			if im.Name() != tt.want {
+				t.Errorf("Detect(%s) = %s, want %s", tt.file, im.Name(), tt.want)
+			}
+		})
+	}
+}
+
+func TestDetectRejectsUnknownJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "x.json")
+	if err := os.WriteFile(path, []byte(`{"hello":"world"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Detect(path); err == nil {
+		t.Fatal("expected an error for a JSON document of unknown format")
+	}
+}
+
+func TestImportOpenAPIJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "spec.json")
+	spec := `{"openapi":"3.1.0","info":{"title":"Pets"},"paths":{"/pets":{"get":{"operationId":"listPets"}}}}`
+	if err := os.WriteFile(path, []byte(spec), 0644); err != nil {
+		t.Fatal(err)
+	}
+	reqs, err := Import(path)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if len(reqs) != 1 || reqs[0].Name != "listPets" {
+		t.Fatalf("Import returned %+v, want the listPets operation", reqs)
+	}
+}
+
+func TestImportAsUsesNamedFormat(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "spec.txt.json")
+	if err := os.WriteFile(path, []byte(`{"hello":"world"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ImportAs(path, "postman"); err != nil {
+		t.Fatalf("ImportAs postman: %v", err)
+	}
+	if _, err := ImportAs(path, "nope"); err == nil {
+		t.Fatal("expected an error for an unknown format")
+	}
+}

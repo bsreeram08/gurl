@@ -58,6 +58,17 @@ Write them back to their variable origin at the end of the run with `--persist` 
 valetkey collection run "checkout" --env staging --persist
 ```
 
+Assertions can use those values too, and a request that asserts its status may expect an error:
+
+```bash
+gurl save "read-order" '{{BASE_URL}}/orders/{{orderId}}' -c checkout
+gurl edit "read-order" -a 'status=200' -a 'body.data.id={{orderId}}'
+gurl save "locked-account" '{{BASE_URL}}/billing' -c checkout
+gurl edit "locked-account" -a 'status=402' -a 'body.errorCodes[0]=ACCESS_ENDED'
+```
+
+Without a status assertion, any non-2xx response fails the request.
+
 See [Chaining & extraction]({{< relref "/guides/chaining" >}}).
 
 ## Data-driven runs

@@ -80,3 +80,47 @@ func TestFileStoreUsesSafeCollectionDirectory(t *testing.T) {
 		t.Fatalf("collection name was split as a raw path: %s", path)
 	}
 }
+
+// A request saved without an ID replaces the request of the same name in its
+// collection, as it does in the LevelDB store. `import --force` relies on
+// this: before, every re-import added a second file for each request.
+func TestFileStoreSaveWithoutIDReplacesSameName(t *testing.T) {
+	proj, err := project.Init(t.TempDir())
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	store := NewFileStore(proj)
+	if err := store.SaveCollection(types.NewCollection("payments")); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+	if err := store.SaveCollection(types.NewCollection("orders")); err != nil {
+		t.Fatalf("SaveCollection failed: %v", err)
+	}
+
+	first := &types.SavedRequest{Name: "list", URL: "https://api.example.com/v1", Method: "GET", Collection: "payments"}
+	if err := store.SaveRequest(first); err != nil {
+		t.Fatalf("SaveRequest failed: %v", err)
+	}
+	second := &types.SavedRequest{Name: "list", URL: "https://api.example.com/v2", Method: "GET", Collection: "payments"}
+	if err := store.SaveRequest(second); err != nil {
+		t.Fatalf("SaveRequest failed: %v", err)
+	}
+	other := &types.SavedRequest{Name: "list", URL: "https://api.example.com/orders", Method: "GET", Collection: "orders"}
+	if err := store.SaveRequest(other); err != nil {
+		t.Fatalf("SaveRequest failed: %v", err)
+	}
+
+	if second.ID != first.ID {
+		t.Fatalf("expected the second save to reuse ID %q, got %q", first.ID, second.ID)
+	}
+	if other.ID == first.ID {
+		t.Fatal("a request of the same name in another collection must not be replaced")
+	}
+	requests, err := store.ListRequests(&ListOptions{Collection: "payments"})
+	if err != nil {
+		t.Fatalf("ListRequests failed: %v", err)
+	}
+	if len(requests) != 1 || requests[0].URL != "https://api.example.com/v2" {
+		t.Fatalf("expected one request with the new URL, got %+v", requests)
+	}
+}

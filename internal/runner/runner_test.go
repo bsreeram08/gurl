@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bsreeram08/valetkey/internal/assertions"
+	"github.com/bsreeram08/valetkey/internal/client"
 	"github.com/bsreeram08/valetkey/internal/env"
 	"github.com/bsreeram08/valetkey/internal/project"
 	"github.com/bsreeram08/valetkey/internal/storage"
@@ -2773,5 +2774,115 @@ func TestRunner_DataFileWithDelay(t *testing.T) {
 
 	if elapsed < 20*time.Millisecond {
 		t.Errorf("expected delay between data iterations, elapsed=%v", elapsed)
+	}
+}
+
+func TestRunner_StatusAssertionDecidesNon2xx(t *testing.T) {
+	db := newMockDB()
+	envStorage := env.NewMemoryStore()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = w.Write([]byte(`{"errorCodes":["ACCESS_ENDED"]}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID: "req-expects-402", Name: "expects-402", URL: ts.URL, Method: "GET", Collection: "status-flow", SortOrder: 1,
+		Assertions: []types.Assertion{{Field: "status", Op: "=", Value: "402"}, {Field: "body", Op: "contains", Value: "ACCESS_ENDED"}},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID: "req-expects-200", Name: "expects-200", URL: ts.URL, Method: "GET", Collection: "status-flow", SortOrder: 2,
+		Assertions: []types.Assertion{{Field: "status", Op: "=", Value: "200"}},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID: "req-no-status-assertion", Name: "no-status-assertion", URL: ts.URL, Method: "GET", Collection: "status-flow", SortOrder: 3,
+		Assertions: []types.Assertion{{Field: "body", Op: "contains", Value: "ACCESS_ENDED"}},
+	})
+
+	results, err := NewRunner(db, envStorage).Run(context.Background(), RunConfig{CollectionName: "status-flow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	byName := map[string]*RequestResult{}
+	for _, rr := range results[0].RequestResults {
+		byName[rr.RequestName] = rr
+	}
+	if !byName["expects-402"].Passed {
+		t.Errorf("a request that asserts status=402 should pass on a 402: %+v", byName["expects-402"])
+	}
+	if byName["expects-200"].Passed {
+		t.Error("a request that asserts status=200 must fail on a 402")
+	}
+	if byName["no-status-assertion"].Passed {
+		t.Error("without a status assertion a non-2xx response still fails the request")
+	}
+}
+
+func TestRunner_AssertionValuesUseExtractedVariables(t *testing.T) {
+	db := newMockDB()
+	envStorage := env.NewMemoryStore()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/create" {
+			_, _ = w.Write([]byte(`{"data":{"id":"item_42"}}`))
+			return
+		}
+		if r.URL.Path == "/menu" {
+			_, _ = w.Write([]byte(`{"data":{"item_42":{"name":"Cold Brew"}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"id":"item_42","owner":"someone-else"}}`))
+	}))
+	defer ts.Close()
+
+	db.SaveRequest(&types.SavedRequest{
+		ID: "req-create", Name: "create", URL: ts.URL + "/create", Method: "POST", Collection: "chain-flow", SortOrder: 1,
+		Extracts: []types.Extract{{Name: "itemId", Source: "jsonpath:$.data.id"}},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID: "req-read", Name: "read", URL: ts.URL + "/items/{{itemId}}", Method: "GET", Collection: "chain-flow", SortOrder: 2,
+		Assertions: []types.Assertion{{Field: "body.data.id", Op: "=", Value: "{{itemId}}"}},
+	})
+	db.SaveRequest(&types.SavedRequest{
+		ID: "req-read-owner", Name: "read-owner", URL: ts.URL + "/items/{{itemId}}", Method: "GET", Collection: "chain-flow", SortOrder: 3,
+		Assertions: []types.Assertion{{Field: "body.data.owner", Op: "=", Value: "{{itemId}}"}},
+	})
+
+	db.SaveRequest(&types.SavedRequest{
+		ID: "req-menu", Name: "menu", URL: ts.URL + "/menu", Method: "GET", Collection: "chain-flow", SortOrder: 4,
+		Assertions: []types.Assertion{{Field: "body.data.{{itemId}}.name", Op: "=", Value: "Cold Brew"}},
+	})
+
+	results, err := NewRunner(db, envStorage).Run(context.Background(), RunConfig{CollectionName: "chain-flow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	byName := map[string]*RequestResult{}
+	for _, rr := range results[0].RequestResults {
+		byName[rr.RequestName] = rr
+	}
+	if !byName["read"].Passed {
+		t.Errorf("body.data.id = {{itemId}} should compare against the extracted value: %+v", byName["read"])
+	}
+	if byName["read-owner"].Passed {
+		t.Error("an assertion against a different extracted value must fail")
+	}
+	if !byName["menu"].Passed {
+		t.Errorf("placeholders in the assertion field should be filled too: %+v", byName["menu"])
+	}
+}
+
+func TestAttemptRecordExpectedErrorStatusIsNotAFailure(t *testing.T) {
+	statusOK := assertions.Result{Assertion: assertions.Assertion{Field: "status", Op: "=", Value: "402"}, Passed: true}
+	expected := Attempt{Saved: &types.SavedRequest{Name: "locked"}, Response: &client.Response{StatusCode: 402}, Assertions: []assertions.Result{statusOK}}
+	if rec := expected.Record(); rec.Failed() {
+		t.Errorf("a 402 that the request asserts is not a failure: phase %q", rec.FailurePhase)
+	}
+	unexpected := Attempt{Saved: &types.SavedRequest{Name: "locked"}, Response: &client.Response{StatusCode: 402}}
+	if rec := unexpected.Record(); !rec.Failed() {
+		t.Error("a 402 without a status assertion is still a failure")
 	}
 }
