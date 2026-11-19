@@ -101,10 +101,13 @@ type ExecutionHistory struct {
 	// Error is why the attempt failed before or after the response;
 	// FailurePhase is where (e.g. "request_build", "http", "assertion",
 	// "status" for a non-2xx response).
-	Error        string            `json:"error,omitempty"`
-	FailurePhase string            `json:"failure_phase,omitempty"`
-	Assertions   []AssertionRecord `json:"assertions,omitempty"`
-	Vars         []VarRecord       `json:"vars,omitempty"`
+	Error        string `json:"error,omitempty"`
+	FailurePhase string `json:"failure_phase,omitempty"`
+	// StatusAsserted is set when an assertion checked the status, so a
+	// non-2xx status the request expected is not a failure.
+	StatusAsserted bool              `json:"status_asserted,omitempty"`
+	Assertions     []AssertionRecord `json:"assertions,omitempty"`
+	Vars           []VarRecord       `json:"vars,omitempty"`
 }
 
 // AssertionRecord is the outcome of one assertion in an execution record.
@@ -149,7 +152,7 @@ func (h *ExecutionHistory) Time() time.Time {
 // Failed reports whether the execution failed: an error, a failure phase
 // (such as a failed assertion) or a non-2xx status.
 func (h *ExecutionHistory) Failed() bool {
-	return h.Error != "" || h.FailurePhase != "" || h.StatusCode < 200 || h.StatusCode >= 300
+	return h.Error != "" || h.FailurePhase != "" || (!h.StatusAsserted && (h.StatusCode < 200 || h.StatusCode >= 300))
 }
 
 // ShortID is the first 8 characters of the record ID, enough to name it on
