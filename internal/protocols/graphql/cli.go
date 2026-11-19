@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bsreeram08/valetkey/internal/formatter"
-	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/apigent/internal/formatter"
+	"github.com/bsreeram08/apigent/internal/storage"
 	"github.com/urfave/cli/v3"
 )
 

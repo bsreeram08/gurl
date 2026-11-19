@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 // BasicHandler supports Basic authentication with configurable charset encoding

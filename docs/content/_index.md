@@ -1,5 +1,5 @@
 ---
-title: "valetkey"
+title: "apigent"
 description: "Saved API requests your AI agents can run without ever seeing the keys"
 layout: hextra-home
 type: docs
@@ -7,8 +7,8 @@ cascade:
   - type: docs
 ---
 
-{{< hextra/hero-badge link="https://github.com/bsreeram08/valetkey/releases" >}}
-  <span>Formerly gurl — now with an MCP server: valetkey mcp</span>
+{{< hextra/hero-badge link="https://github.com/bsreeram08/apigent/releases" >}}
+  <span>Formerly gurl — now with an MCP server: apigent mcp</span>
 {{< /hextra/hero-badge >}}
 
 <div class="hx:mt-6 hx:mb-6">
@@ -23,11 +23,11 @@ cascade:
 {{< /hextra/hero-subtitle >}}
 </div>
 
-<div class="hx:mb-8 valetkey-hero-code">
+<div class="hx:mb-8 apigent-hero-code">
 
 ```bash
-brew tap bsreeram08/valetkey https://github.com/bsreeram08/valetkey && brew install valetkey
-valetkey save "health" https://api.example.com/health && valetkey run "health"
+brew tap bsreeram08/apigent https://github.com/bsreeram08/apigent && brew install apigent
+apigent save "health" https://api.example.com/health && apigent run "health"
 ```
 
 </div>
@@ -55,12 +55,12 @@ valetkey save "health" https://api.example.com/health && valetkey run "health"
   >}}
   {{< hextra/feature-card
     title="Diagnose failures"
-    subtitle="Every run is recorded. `valetkey diag` shows the request as sent, variable origins, and what changed since the last success."
+    subtitle="Every run is recorded. `apigent diag` shows the request as sent, variable origins, and what changed since the last success."
     link="guides/diagnosing/"
   >}}
   {{< hextra/feature-card
     title="Agent mode"
-    subtitle="`--agent`: JSON-only output, no prompts, secrets masked everywhere. Agents start with `valetkey docs`."
+    subtitle="`--agent`: JSON-only output, no prompts, secrets masked everywhere. Agents start with `apigent docs`."
     link="ai/agent-mode/"
   >}}
   {{< hextra/feature-card

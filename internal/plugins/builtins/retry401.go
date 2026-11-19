@@ -1,7 +1,7 @@
 package builtins
 
 import (
-	"github.com/bsreeram08/valetkey/internal/plugins"
+	"github.com/bsreeram08/apigent/internal/plugins"
 )
 
 // Retry401Middleware flags 401 responses for retry by the execution engine.

@@ -1,5 +1,5 @@
 ---
-title: "valetkey sse"
+title: "apigent sse"
 description: "Connect to a Server-Sent Events endpoint"
 ---
 
@@ -9,7 +9,7 @@ Connect to a Server-Sent Events (SSE) endpoint and print events as they arrive.
 ## Synopsis
 
 ```bash
-valetkey sse <url> [flags]
+apigent sse <url> [flags]
 ```
 
 The URL is required.
@@ -37,23 +37,23 @@ The URL is required.
 ### Follow a stream
 
 ```bash
-valetkey sse https://api.example.com/events --json --timestamp
+apigent sse https://api.example.com/events --json --timestamp
 ```
 
 ### Only one event type
 
 ```bash
-valetkey sse https://api.example.com/events --event order.created
+apigent sse https://api.example.com/events --event order.created
 ```
 
 ### Resume from the last event you saw
 
 ```bash
-valetkey sse https://api.example.com/events -H 'Authorization:Bearer dev-token' --last-event-id 1042
+apigent sse https://api.example.com/events -H 'Authorization:Bearer dev-token' --last-event-id 1042
 ```
 
 ## Related commands
 
-- [`valetkey ws`]({{< relref "/cli/ws" >}}) - WebSocket connections
-- [`valetkey grpc`]({{< relref "/cli/grpc" >}}) - gRPC requests
-- [`valetkey graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries
+- [`apigent ws`]({{< relref "/cli/ws" >}}) - WebSocket connections
+- [`apigent grpc`]({{< relref "/cli/grpc" >}}) - gRPC requests
+- [`apigent graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 // AWSv4Handler supports AWS Signature Version 4 with configurable clock skew handling

@@ -42,21 +42,21 @@ func TestDataDirPrefersNewThenLegacy(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(NewDataDir(home), "gurl.db")); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := DBPath(DataDir(home)), filepath.Join(NewDataDir(home), "valetkey.db"); got != want {
+	if got, want := DBPath(DataDir(home)), filepath.Join(NewDataDir(home), "apigent.db"); got != want {
 		t.Fatalf("new db path: got %s, want %s", got, want)
 	}
-	if got, want := CookieDBPath(DataDir(home)), filepath.Join(NewDataDir(home), "valetkey-cookies.db"); got != want {
+	if got, want := CookieDBPath(DataDir(home)), filepath.Join(NewDataDir(home), "apigent-cookies.db"); got != want {
 		t.Fatalf("new cookie db path: got %s, want %s", got, want)
 	}
 }
 
 func TestGetenvFallsBackToLegacy(t *testing.T) {
-	t.Setenv("VALETKEY_DB_PATH", "")
+	t.Setenv("APIGENT_DB_PATH", "")
 	t.Setenv("GURL_DB_PATH", "/old")
 	if got := Getenv("DB_PATH"); got != "/old" {
 		t.Fatalf("got %q, want legacy value", got)
 	}
-	t.Setenv("VALETKEY_DB_PATH", "/new")
+	t.Setenv("APIGENT_DB_PATH", "/new")
 	if got := Getenv("DB_PATH"); got != "/new" {
 		t.Fatalf("got %q, want new value to win", got)
 	}
@@ -64,11 +64,11 @@ func TestGetenvFallsBackToLegacy(t *testing.T) {
 
 func TestIsAgentBinary(t *testing.T) {
 	for name, want := range map[string]bool{
-		"/usr/local/bin/agentvaletkey": true,
-		"agentgurl":                    true,
-		"AgentValetkey.exe":            true,
-		"valetkey":                     false,
-		"gurl":                         false,
+		"/usr/local/bin/agentapigent": true,
+		"agentgurl":                   true,
+		"AgentApigent.exe":            true,
+		"apigent":                     false,
+		"gurl":                        false,
 	} {
 		if got := IsAgentBinary(name); got != want {
 			t.Errorf("IsAgentBinary(%q) = %v, want %v", name, got, want)

@@ -1,5 +1,5 @@
 ---
-title: "valetkey timeline"
+title: "apigent timeline"
 description: "Show the global execution timeline"
 ---
 
@@ -9,10 +9,10 @@ Show recent executions across all requests, newest first.
 ## Synopsis
 
 ```bash
-valetkey timeline [flags]
+apigent timeline [flags]
 ```
 
-Each entry carries the execution id, so any row can be opened with `valetkey diag <id>`. Failed attempts without a response are included with their error.
+Each entry carries the execution id, so any row can be opened with `apigent diag <id>`. Failed attempts without a response are included with their error.
 
 ## Flags
 
@@ -33,25 +33,25 @@ Each entry carries the execution id, so any row can be opened with `valetkey dia
 ### Last 24 hours
 
 ```bash
-valetkey timeline --since 24h
+apigent timeline --since 24h
 ```
 
 ### Only requests matching a name
 
 ```bash
-valetkey timeline --filter users
+apigent timeline --filter users
 ```
 
 ### JSON for scripts
 
 ```bash
-valetkey timeline --json --limit 2
+apigent timeline --json --limit 2
 ```
 
-The JSON is an array of the same objects as [`valetkey history --json`]({{< relref "/cli/history" >}}): `id`, `short_id`, `request`, `time`, `ok`, `status`, `duration_ms`, `size_bytes`, and `error` / `failure_phase` for failures.
+The JSON is an array of the same objects as [`apigent history --json`]({{< relref "/cli/history" >}}): `id`, `short_id`, `request`, `time`, `ok`, `status`, `duration_ms`, `size_bytes`, and `error` / `failure_phase` for failures.
 
 ## Related commands
 
-- [`valetkey history`]({{< relref "/cli/history" >}}) - History for one request
-- [`valetkey diag`]({{< relref "/cli/diag" >}}) - Inspect one execution
-- [`valetkey diff`]({{< relref "/cli/diff" >}}) - Compare responses
+- [`apigent history`]({{< relref "/cli/history" >}}) - History for one request
+- [`apigent diag`]({{< relref "/cli/diag" >}}) - Inspect one execution
+- [`apigent diff`]({{< relref "/cli/diff" >}}) - Compare responses

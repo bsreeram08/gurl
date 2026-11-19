@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/client"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 type mockDBWithHistory struct {

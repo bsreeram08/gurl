@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"github.com/bsreeram08/valetkey/internal/brand"
+	"github.com/bsreeram08/apigent/internal/brand"
 
 	"context"
 	"crypto/sha256"
@@ -139,7 +139,7 @@ func selfUpdate() error {
 	}
 
 	// Parse SHA256SUMS — format: "<hash>  <binary-name>" per line
-	// e.g., "abc123def...  valetkey-darwin-arm64"
+	// e.g., "abc123def...  apigent-darwin-arm64"
 	expectedHash := ""
 	binaryName := fmt.Sprintf("%s-%s-%s", brand.Name, osName, arch)
 	for _, line := range strings.Split(string(checksumBody), "\n") {

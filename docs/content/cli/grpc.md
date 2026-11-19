@@ -1,5 +1,5 @@
 ---
-title: "valetkey grpc"
+title: "apigent grpc"
 description: "Execute a gRPC request"
 ---
 
@@ -9,8 +9,8 @@ Call a gRPC method, or list a server's services through reflection.
 ## Synopsis
 
 ```bash
-valetkey grpc <host:port> --service <name> --method <name> [--data <json> | --data-file <file>] [flags]
-valetkey grpc <host:port> --list
+apigent grpc <host:port> --service <name> --method <name> [--data <json> | --data-file <file>] [flags]
+apigent grpc <host:port> --list
 ```
 
 The target (`host:port`) is required. `--service` and `--method` are required for calls.
@@ -43,25 +43,25 @@ The target (`host:port`) is required. `--service` and `--method` are required fo
 ### Discover services
 
 ```bash
-valetkey grpc localhost:50051 --list
+apigent grpc localhost:50051 --list
 ```
 
 ### Unary call with metadata
 
 ```bash
-valetkey grpc localhost:50051 -s UserService -m GetUser \
+apigent grpc localhost:50051 -s UserService -m GetUser \
   -d '{"id":"u-123"}' --metadata 'authorization:Bearer dev-token'
 ```
 
 ### Server-streaming call over mutual TLS
 
 ```bash
-valetkey grpc api.example.com:443 -s Events -m Subscribe --call-type server-streaming \
+apigent grpc api.example.com:443 -s Events -m Subscribe --call-type server-streaming \
   --cacert ca.pem --cert client.pem --key client-key.pem
 ```
 
 ## Related commands
 
-- [`valetkey graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries
-- [`valetkey ws`]({{< relref "/cli/ws" >}}) - WebSocket connections
-- [`valetkey sse`]({{< relref "/cli/sse" >}}) - Server-Sent Events
+- [`apigent graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries
+- [`apigent ws`]({{< relref "/cli/ws" >}}) - WebSocket connections
+- [`apigent sse`]({{< relref "/cli/sse" >}}) - Server-Sent Events

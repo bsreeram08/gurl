@@ -5,18 +5,18 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/apigent/internal/storage"
 	"github.com/urfave/cli/v3"
 )
 
-const removedTUIMessage = "valetkey tui has been removed. Use `valetkey shell` for the new typed interactive flow."
+const removedTUIMessage = "apigent tui has been removed. Use `apigent shell` for the new typed interactive flow."
 
 // TUICommand is kept only as a hidden compatibility stub.
 func TUICommand(db storage.DB) *cli.Command {
 	return &cli.Command{
 		Name:    "tui",
 		Aliases: []string{"ui"},
-		Usage:   "Removed; use `valetkey shell` instead",
+		Usage:   "Removed; use `apigent shell` instead",
 		Hidden:  true,
 		Action: func(ctx context.Context, c *cli.Command) error {
 			return fmt.Errorf(removedTUIMessage)

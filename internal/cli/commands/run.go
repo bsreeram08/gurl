@@ -12,17 +12,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bsreeram08/valetkey/internal/assertions"
-	"github.com/bsreeram08/valetkey/internal/client"
-	"github.com/bsreeram08/valetkey/internal/env"
-	"github.com/bsreeram08/valetkey/internal/formatter"
-	"github.com/bsreeram08/valetkey/internal/plugins"
-	"github.com/bsreeram08/valetkey/internal/plugins/builtins"
-	"github.com/bsreeram08/valetkey/internal/redact"
-	"github.com/bsreeram08/valetkey/internal/resolve"
-	"github.com/bsreeram08/valetkey/internal/runner"
-	"github.com/bsreeram08/valetkey/internal/storage"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/assertions"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/formatter"
+	"github.com/bsreeram08/apigent/internal/plugins"
+	"github.com/bsreeram08/apigent/internal/plugins/builtins"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/resolve"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )
@@ -120,7 +120,7 @@ func RunCommand(db storage.DB, envStorage env.Store, runnerOpts ...runner.Option
 			var name string
 			if args.Len() < 1 {
 				if noInput(c) {
-					return cli.Exit("request name is required: valetkey run <name> (list names with: valetkey list --json)", 2)
+					return cli.Exit("request name is required: apigent run <name> (list names with: apigent list --json)", 2)
 				}
 				requests, err := db.ListRequests(nil)
 				if err != nil {

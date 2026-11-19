@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 func TestSequenceSetCommand(t *testing.T) {
@@ -46,9 +46,9 @@ func TestSequenceSetCommand(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:  "fails for non-existent request",
-			setup: func(db *mockDB) {},
-			args:  []string{"set", "nonexistent", "5"},
+			name:    "fails for non-existent request",
+			setup:   func(db *mockDB) {},
+			args:    []string{"set", "nonexistent", "5"},
 			wantErr: true,
 		},
 	}
@@ -112,9 +112,9 @@ func TestSequenceListCommand(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:  "shows empty message for non-existent collection",
-			setup: func(db *mockDB) {},
-			args:  []string{"list", "nonexistent"},
+			name:    "shows empty message for non-existent collection",
+			setup:   func(db *mockDB) {},
+			args:    []string{"list", "nonexistent"},
 			wantErr: false,
 		},
 	}

@@ -11,6 +11,6 @@ coverage.out
 *.test
 *.tar.gz
 /gurl
-/valetkey
+/apigent
 gurl-*
-valetkey-*
+apigent-*

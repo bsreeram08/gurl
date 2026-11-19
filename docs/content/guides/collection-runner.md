@@ -4,16 +4,16 @@ description: "Run a group of requests in order, feed CSV/JSON rows, and produce 
 weight: 4
 ---
 
-A collection groups saved requests and carries its own variables and secrets. `valetkey collection run` executes its requests in order, once per iteration or data row, and reports pass/fail for each.
+A collection groups saved requests and carries its own variables and secrets. `apigent collection run` executes its requests in order, once per iteration or data row, and reports pass/fail for each.
 
 ## Build a collection
 
 ```bash
-valetkey collection create "checkout" --var CURRENCY=EUR --secret API_KEY=sk-test-...
-valetkey save "create-order" '{{BASE_URL}}/orders' -X POST -c checkout \
+apigent collection create "checkout" --var CURRENCY=EUR --secret API_KEY=sk-test-...
+apigent save "create-order" '{{BASE_URL}}/orders' -X POST -c checkout \
   --extract 'orderId=jsonpath:$.id'
-valetkey save "capture-payment" '{{BASE_URL}}/orders/{{orderId}}/capture' -X POST -c checkout
-valetkey collection show "checkout"          # requests and variables (secrets masked)
+apigent save "capture-payment" '{{BASE_URL}}/orders/{{orderId}}/capture' -X POST -c checkout
+apigent collection show "checkout"          # requests and variables (secrets masked)
 ```
 
 Collection variables sit between environment and data-row values in [scope precedence]({{< relref "/guides/variables#where-values-come-from-scopes" >}}), and may reference environment keys (`API_URL={{BASE_URL}}/v1`).
@@ -21,50 +21,50 @@ Collection variables sit between environment and data-row values in [scope prece
 ## Set the order
 
 ```bash
-valetkey sequence set "create-order" 1
-valetkey sequence set "capture-payment" 2
-valetkey sequence list "checkout"
+apigent sequence set "create-order" 1
+apigent sequence set "capture-payment" 2
+apigent sequence list "checkout"
 ```
 
 ## Preview, then run
 
 ```bash
-valetkey collection run "checkout" --env staging --dry-run
-valetkey collection run "checkout" --env staging
+apigent collection run "checkout" --env staging --dry-run
+apigent collection run "checkout" --env staging
 ```
 
 A dry run prints the request order and each resolved request without sending anything, running post-response scripts, recording history, writing reports or persisting variables.
 
-A failed request prints its execution id on stderr, ready for [`valetkey diag`]({{< relref "/cli/diag" >}}):
+A failed request prints its execution id on stderr, ready for [`apigent diag`]({{< relref "/cli/diag" >}}):
 
 ```text
-  [FAIL] capture-payment: HTTP 500 (id: 01dda65f) — inspect with: valetkey diag 01dda65f
+  [FAIL] capture-payment: HTTP 500 (id: 01dda65f) — inspect with: apigent diag 01dda65f
 ```
 
-`valetkey collection run` exits 1 when any request fails.
+`apigent collection run` exits 1 when any request fails.
 
 ## Flow variables across requests
 
 Extraction rules and scripts share one map of runtime values. A value extracted by one request is available to later requests' placeholders, assertions, scripts and `run-if` checks:
 
 ```bash
-valetkey edit "create-order" --post-script "valetkey.setNextRequest('capture-payment')"
-valetkey edit "capture-payment" --run-if "orderId != ''"
+apigent edit "create-order" --post-script "apigent.setNextRequest('capture-payment')"
+apigent edit "capture-payment" --run-if "orderId != ''"
 ```
 
 Write them back to their variable origin at the end of the run with `--persist` (not combinable with `--dry-run`):
 
 ```bash
-valetkey collection run "checkout" --env staging --persist
+apigent collection run "checkout" --env staging --persist
 ```
 
 Assertions can use those values too, and a request that asserts its status may expect an error:
 
 ```bash
-gurl save "read-order" '{{BASE_URL}}/orders/{{orderId}}' -c checkout
-gurl edit "read-order" -a 'status=200' -a 'body.data.id={{orderId}}'
-gurl save "locked-account" '{{BASE_URL}}/billing' -c checkout
-gurl edit "locked-account" -a 'status=402' -a 'body.errorCodes[0]=ACCESS_ENDED'
+apigent save "read-order" '{{BASE_URL}}/orders/{{orderId}}' -c checkout
+apigent edit "read-order" -a 'status=200' -a 'body.data.id={{orderId}}'
+apigent save "locked-account" '{{BASE_URL}}/billing' -c checkout
+apigent edit "locked-account" -a 'status=402' -a 'body.errorCodes[0]=ACCESS_ENDED'
 ```
 
 Without a status assertion, any non-2xx response fails the request.
@@ -82,8 +82,8 @@ bob@example.com,Bob
 ```
 
 ```bash
-valetkey collection run "signup" --data users.csv --env staging
-valetkey run "create-user" --data users.json      # a single request works too
+apigent collection run "signup" --data users.csv --env staging
+apigent run "create-user" --data users.json      # a single request works too
 ```
 
 JSON data is an array of objects: `[{"email": "alice@example.com", "name": "Alice"}]`.
@@ -104,7 +104,7 @@ Reporters are `console`, `junit`, `json` and `html`; repeat `--reporter` for sev
 
 ```bash
 mkdir -p reports
-valetkey collection run "api-tests" --env ci --reporter junit --reporter json --reporter-output reports --ci
+apigent collection run "api-tests" --env ci --reporter junit --reporter json --reporter-output reports --ci
 ```
 
 ```yaml
@@ -112,7 +112,7 @@ valetkey collection run "api-tests" --env ci --reporter junit --reporter json --
 - name: Run API tests
   run: |
     mkdir -p reports
-    valetkey collection run "api-tests" --env ci --reporter junit --reporter-output reports --bail
+    apigent collection run "api-tests" --env ci --reporter junit --reporter-output reports --bail
 - name: Publish test results
   uses: dorny/test-reporter@v1
   with:
@@ -125,9 +125,9 @@ Add `--verbose` to print request and response headers and bodies for each reques
 
 ## File-backed reloads
 
-For project-backed collections (`valetkey init`, `valetkey collection migrate`), a long collection run watches the collection files. The current iteration always uses the snapshot it started with; changes (debounced) apply from the next iteration or data row.
+For project-backed collections (`apigent init`, `apigent collection migrate`), a long collection run watches the collection files. The current iteration always uses the snapshot it started with; changes (debounced) apply from the next iteration or data row.
 
 ## See also
 
-- [`valetkey collection`]({{< relref "/cli/collection" >}}) — every subcommand and flag, including sharing collections through git with passphrase-encrypted secrets
-- [`valetkey sequence`]({{< relref "/cli/sequence" >}})
+- [`apigent collection`]({{< relref "/cli/collection" >}}) — every subcommand and flag, including sharing collections through git with passphrase-encrypted secrets
+- [`apigent sequence`]({{< relref "/cli/sequence" >}})

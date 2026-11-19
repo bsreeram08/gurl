@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 type DigestHandler struct {

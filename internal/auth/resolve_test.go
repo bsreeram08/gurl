@@ -3,7 +3,7 @@ package auth
 import (
 	"testing"
 
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // BDD test scenarios for auth inheritance resolution:

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // Sample .bru file content

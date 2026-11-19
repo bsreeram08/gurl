@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 // mockTokenHandler simulates an OAuth2 token endpoint

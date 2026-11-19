@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/sergi/go-diff/diffmatchpatch"
-	"github.com/bsreeram08/valetkey/pkg/types"
 	"github.com/wI2L/jsondiff"
 )
 

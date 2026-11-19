@@ -1,5 +1,5 @@
 ---
-title: "valetkey docs"
+title: "apigent docs"
 description: "Print a compact reference of every command, flag and concept"
 ---
 
@@ -9,10 +9,10 @@ Print one compact reference of every command, flag and concept. This is the firs
 ## Synopsis
 
 ```bash
-valetkey docs [command [subcommand]] [flags]
+apigent docs [command [subcommand]] [flags]
 ```
 
-`valetkey docs` is generated from the binary's own command tree at runtime, so it always matches the installed version. It lists every command and subcommand with its arguments and flags (type, default, aliases), followed by short sections on:
+`apigent docs` is generated from the binary's own command tree at runtime, so it always matches the installed version. It lists every command and subcommand with its arguments and flags (type, default, aliases), followed by short sections on:
 
 - agent mode
 - placeholders (typed and dynamic) and environment aliases
@@ -21,9 +21,9 @@ valetkey docs [command [subcommand]] [flags]
 - `--persist`
 - the `run --json` shape
 - exit codes
-- `valetkey exec` and `valetkey diag`
+- `apigent exec` and `apigent diag`
 
-`valetkey docs <command>` narrows the output to one command (for example `valetkey docs run` or `valetkey docs env set`).
+`apigent docs <command>` narrows the output to one command (for example `apigent docs run` or `apigent docs env set`).
 
 ## Flags
 
@@ -43,17 +43,17 @@ The JSON shape is:
 ### Whole reference
 
 ```bash
-valetkey docs
+apigent docs
 ```
 
 ### One command
 
 ```bash
-valetkey docs run
+apigent docs run
 ```
 
 ```text
-valetkey run  — Execute a saved request (aliases: r, execute)
+apigent run  — Execute a saved request (aliases: r, execute)
   --env, -e <string>  Environment name to use for variable substitution
   --var, -v <[]string>  Variable substitution (--var key=value)
   ...
@@ -64,10 +64,10 @@ valetkey run  — Execute a saved request (aliases: r, execute)
 ### JSON for agents
 
 ```bash
-valetkey docs --json
+apigent docs --json
 ```
 
 ## Related commands
 
-- [Agent mode]({{< relref "/ai/agent-mode" >}}) - How agents should drive valetkey
+- [Agent mode]({{< relref "/ai/agent-mode" >}}) - How agents should drive apigent
 - [CLI Reference]({{< relref "/cli" >}}) - All commands

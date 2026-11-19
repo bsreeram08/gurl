@@ -6,12 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bsreeram08/valetkey/internal/brand"
-	"github.com/bsreeram08/valetkey/internal/project"
+	"github.com/bsreeram08/apigent/internal/brand"
+	"github.com/bsreeram08/apigent/internal/project"
 	"github.com/urfave/cli/v3"
 )
 
-// migrationStep moves one pre-rename location to its valetkey name.
+// migrationStep moves one pre-rename location to its apigent name.
 type migrationStep struct {
 	What   string `json:"what"`
 	From   string `json:"from"`
@@ -72,15 +72,15 @@ func pathExists(path string) bool {
 }
 
 // MigrateCommand moves data, config, plugins and the current project from
-// their pre-rename gurl locations to the valetkey ones.
+// their pre-rename gurl locations to the apigent ones.
 func MigrateCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "migrate",
-		Usage: "Move data, config, plugins and the current project from gurl locations to valetkey ones",
+		Usage: "Move data, config, plugins and the current project from gurl locations to apigent ones",
 		Description: `Moves ~/.local/share/gurl, ~/.config/gurl, ~/.gurl/plugins and the current
-project's .gurl directory to their valetkey names. Nothing is copied or
+project's .gurl directory to their apigent names. Nothing is copied or
 deleted, and a location whose new name already exists is left alone.
-valetkey reads the old locations until you migrate, so this is optional.
+apigent reads the old locations until you migrate, so this is optional.
 Releases of gurl before the rename do not read the new locations.`,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: "dry-run", Usage: "Show what would move without moving it"},

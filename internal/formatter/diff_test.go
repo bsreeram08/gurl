@@ -3,7 +3,7 @@ package formatter
 import (
 	"testing"
 
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 func TestDiffJSON_FieldAdded(t *testing.T) {

@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"github.com/bsreeram08/valetkey/internal/brand"
+	"github.com/bsreeram08/apigent/internal/brand"
 
 	"context"
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-// Agent mode makes valetkey drivable by AI agents: every command that supports
+// Agent mode makes apigent drivable by AI agents: every command that supports
 // --json prints JSON, nothing prompts, --reveal and the clipboard are
 // refused, and secrets are also masked inside response bodies.
 //

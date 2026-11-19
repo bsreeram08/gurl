@@ -1,5 +1,5 @@
 ---
-title: "valetkey show"
+title: "apigent show"
 description: "Show details of a saved request"
 ---
 
@@ -9,7 +9,7 @@ Print everything stored on a saved request: method, URL, headers, body, auth, ex
 ## Synopsis
 
 ```bash
-valetkey show <name> [flags]
+apigent show <name> [flags]
 ```
 
 Values of credential headers, sensitive query parameters (for example `?token=...`) and secret auth params print as `*****`. Values that are placeholders such as `Bearer {{API_KEY}}` stay visible, because they only name a variable. Pass `--reveal` to print the literals; `--reveal` is refused in agent mode.
@@ -33,7 +33,7 @@ Values of credential headers, sensitive query parameters (for example `?token=..
 ### Inspect a request before running it
 
 ```bash
-valetkey show literal
+apigent show literal
 ```
 
 ```text
@@ -48,20 +48,20 @@ Headers:
 ### JSON for scripts
 
 ```bash
-valetkey show "create-order" --json | jq .headers
+apigent show "create-order" --json | jq .headers
 ```
 
 ### Reconstruct the curl command
 
 ```bash
-valetkey show "create-order" --format curl
+apigent show "create-order" --format curl
 ```
 
-Prints an equivalent `curl` command, masked the same way. For a copy-paste-ready command use [`valetkey codegen -l curl`]({{< relref "/cli/codegen" >}}).
+Prints an equivalent `curl` command, masked the same way. For a copy-paste-ready command use [`apigent codegen -l curl`]({{< relref "/cli/codegen" >}}).
 
 ## Related commands
 
-- [`valetkey run`]({{< relref "/cli/run" >}}) - Execute a saved request (`--dry-run` previews the resolved request)
-- [`valetkey edit`]({{< relref "/cli/edit" >}}) - Edit a saved request
-- [`valetkey list`]({{< relref "/cli/list" >}}) - List saved requests
+- [`apigent run`]({{< relref "/cli/run" >}}) - Execute a saved request (`--dry-run` previews the resolved request)
+- [`apigent edit`]({{< relref "/cli/edit" >}}) - Edit a saved request
+- [`apigent list`]({{< relref "/cli/list" >}}) - List saved requests
 - [Header redaction]({{< relref "/security/header-redaction" >}}) - What gets masked

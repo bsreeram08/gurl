@@ -3,9 +3,9 @@ package commands
 import (
 	"errors"
 
-	"github.com/bsreeram08/valetkey/internal/storage"
-	"github.com/bsreeram08/valetkey/internal/storage/memstore"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/internal/storage/memstore"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // mockDB implements storage.DB for testing. Requests, history and folders

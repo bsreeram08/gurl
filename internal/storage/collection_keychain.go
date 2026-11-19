@@ -7,12 +7,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/bsreeram08/valetkey/internal/secrets"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/secrets"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/zalando/go-keyring"
 )
 
-// The keychain service predates the valetkey rename and is frozen, so
+// The keychain service predates the apigent rename and is frozen, so
 // passphrases cached by gurl are still found.
 const collectionPassphraseKeyringService = "gurl"
 

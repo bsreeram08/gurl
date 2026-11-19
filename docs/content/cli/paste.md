@@ -1,5 +1,5 @@
 ---
-title: "valetkey paste"
+title: "apigent paste"
 description: "Copy a request as a curl command to the clipboard"
 ---
 
@@ -9,10 +9,10 @@ Copy a saved request to the clipboard as a curl command, with literal secrets ma
 ## Synopsis
 
 ```bash
-valetkey paste <name> [--reveal]
+apigent paste <name> [--reveal]
 ```
 
-Literal secret header values, sensitive query parameters and secret auth params are masked as `*****` unless you pass `--reveal`. `paste` is refused in [agent mode]({{< relref "/ai/agent-mode" >}}) because it writes to the clipboard; use `valetkey show <name> --format curl` instead.
+Literal secret header values, sensitive query parameters and secret auth params are masked as `*****` unless you pass `--reveal`. `paste` is refused in [agent mode]({{< relref "/ai/agent-mode" >}}) because it writes to the clipboard; use `apigent show <name> --format curl` instead.
 
 ## Flags
 
@@ -30,17 +30,17 @@ Literal secret header values, sensitive query parameters and secret auth params 
 ### Copy a request to share
 
 ```bash
-valetkey paste "create-order"
+apigent paste "create-order"
 ```
 
 ### Copy with real credentials (for your own terminal only)
 
 ```bash
-valetkey paste "create-order" --reveal
+apigent paste "create-order" --reveal
 ```
 
 ## Related commands
 
-- [`valetkey codegen`]({{< relref "/cli/codegen" >}}) - Generate code in other languages
-- [`valetkey show`]({{< relref "/cli/show" >}}) - Print the request as curl (`--format curl`)
-- [`valetkey export`]({{< relref "/cli/export" >}}) - Export requests to a file
+- [`apigent codegen`]({{< relref "/cli/codegen" >}}) - Generate code in other languages
+- [`apigent show`]({{< relref "/cli/show" >}}) - Print the request as curl (`--format curl`)
+- [`apigent export`]({{< relref "/cli/export" >}}) - Export requests to a file

@@ -1,5 +1,5 @@
 ---
-title: "valetkey ws"
+title: "apigent ws"
 description: "Open a WebSocket connection"
 ---
 
@@ -9,8 +9,8 @@ Connect to a WebSocket endpoint, either interactively (stdin to the socket, mess
 ## Synopsis
 
 ```bash
-valetkey ws <url> [flags]
-valetkey ws <url> --send '<message>'
+apigent ws <url> [flags]
+apigent ws <url> --send '<message>'
 ```
 
 The URL is required. Without `--send`, the connection is interactive.
@@ -43,23 +43,23 @@ The URL is required. Without `--send`, the connection is interactive.
 ### Interactive session
 
 ```bash
-valetkey ws wss://echo.example.com/socket --pretty --timestamp
+apigent ws wss://echo.example.com/socket --pretty --timestamp
 ```
 
 ### Send one message and exit
 
 ```bash
-valetkey ws wss://api.example.com/ws --send '{"type":"ping"}'
+apigent ws wss://api.example.com/ws --send '{"type":"ping"}'
 ```
 
 ### Authenticated connection that reconnects
 
 ```bash
-valetkey ws wss://api.example.com/stream -H 'Authorization:Bearer dev-token' --reconnect --max-retries 5
+apigent ws wss://api.example.com/stream -H 'Authorization:Bearer dev-token' --reconnect --max-retries 5
 ```
 
 ## Related commands
 
-- [`valetkey sse`]({{< relref "/cli/sse" >}}) - Server-Sent Events
-- [`valetkey grpc`]({{< relref "/cli/grpc" >}}) - gRPC requests
-- [`valetkey graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries
+- [`apigent sse`]({{< relref "/cli/sse" >}}) - Server-Sent Events
+- [`apigent grpc`]({{< relref "/cli/grpc" >}}) - gRPC requests
+- [`apigent graphql`]({{< relref "/cli/graphql" >}}) - GraphQL queries

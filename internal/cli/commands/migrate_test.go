@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/brand"
+	"github.com/bsreeram08/apigent/internal/brand"
 )
 
 func TestMigrationMovesLegacyLocationsAndKeepsData(t *testing.T) {
@@ -58,15 +58,15 @@ func TestMigrationMovesLegacyLocationsAndKeepsData(t *testing.T) {
 	if !pathExists(brand.LegacyConfigDir(home)) {
 		t.Fatal("config with an existing destination must not move")
 	}
-	if !pathExists(filepath.Join(projRoot, ".valetkey")) || pathExists(legacyProj) {
-		t.Fatal("project .gurl should be renamed to .valetkey")
+	if !pathExists(filepath.Join(projRoot, ".apigent")) || pathExists(legacyProj) {
+		t.Fatal("project .gurl should be renamed to .apigent")
 	}
 }
 
 func TestMigrationIgnoresProjectAlreadyOnNewName(t *testing.T) {
-	for _, s := range planMigration(t.TempDir(), filepath.Join(t.TempDir(), ".valetkey")) {
+	for _, s := range planMigration(t.TempDir(), filepath.Join(t.TempDir(), ".apigent")) {
 		if s.What == "project" {
-			t.Fatalf("a .valetkey project needs no step, got %+v", s)
+			t.Fatalf("a .apigent project needs no step, got %+v", s)
 		}
 	}
 }

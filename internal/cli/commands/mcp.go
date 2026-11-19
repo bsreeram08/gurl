@@ -14,18 +14,18 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bsreeram08/valetkey/internal/brand"
-	"github.com/bsreeram08/valetkey/internal/env"
-	"github.com/bsreeram08/valetkey/internal/redact"
-	"github.com/bsreeram08/valetkey/internal/runner"
-	"github.com/bsreeram08/valetkey/internal/storage"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/brand"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 
 // The mcp command serves saved requests as Model Context Protocol tools
 // over stdio. Each saved request is one tool. A call runs the request
-// through `valetkey --agent run` in a child process, so it gets exactly the
+// through `apigent --agent run` in a child process, so it gets exactly the
 // agent-mode guarantees of the CLI: one resolution path, masked JSON output,
 // an execution record, and no way to reveal secrets.
 //
@@ -48,7 +48,7 @@ agent mode against the environment fixed at start (--env, else the active
 one) and return the masked JSON result. Tool arguments can only fill
 placeholders the environment and collection leave undefined.
 
-Example client config: {"command": "valetkey", "args": ["mcp", "--env", "dev"]}`,
+Example client config: {"command": "apigent", "args": ["mcp", "--env", "dev"]}`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "env", Aliases: []string{"e"}, Usage: "Environment every call runs against (default: the active one)"},
 			&cli.StringFlag{Name: "collection", Aliases: []string{"c"}, Usage: "Expose only the requests in this collection"},

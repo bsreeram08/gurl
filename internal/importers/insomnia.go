@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // InsomniaImporter handles Insomnia JSON export files
@@ -25,8 +25,8 @@ func (i *InsomniaImporter) Extensions() []string {
 
 // InsomniaExport represents an Insomnia export structure
 type InsomniaExport struct {
-	Version string       `json:"_version"`
-	XML     *InsomniaXML `json:"_xml,omitempty"`
+	Version   string             `json:"_version"`
+	XML       *InsomniaXML       `json:"_xml,omitempty"`
 	Resources []InsomniaResource `json:"resources"`
 }
 
@@ -39,23 +39,23 @@ type InsomniaXML struct {
 
 // InsomniaResource represents any resource in Insomnia
 type InsomniaResource struct {
-	ID      string `json:"_id"`
-	Type    string `json:"type"`
+	ID   string `json:"_id"`
+	Type string `json:"type"`
 
 	// Common fields
-	Name        string              `json:"name,omitempty"`
-	Description string              `json:"description,omitempty"`
-	Tags        []string            `json:"tags,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 
 	// Request/RequestGroup fields
-	URL         string                 `json:"url,omitempty"`
-	Method      string                 `json:"method,omitempty"`
-	Headers     []InsomniaHeader       `json:"headers,omitempty"`
-	Body        *InsomniaBody          `json:"body,omitempty"`
-	Parameters  []InsomniaParameter    `json:"parameters,omitempty"`
+	URL        string              `json:"url,omitempty"`
+	Method     string              `json:"method,omitempty"`
+	Headers    []InsomniaHeader    `json:"headers,omitempty"`
+	Body       *InsomniaBody       `json:"body,omitempty"`
+	Parameters []InsomniaParameter `json:"parameters,omitempty"`
 
 	// Authentication
-	Authentication *InsomniaAuth       `json:"authentication,omitempty"`
+	Authentication *InsomniaAuth `json:"authentication,omitempty"`
 
 	// For folders/collections
 	ParentID string `json:"parentId,omitempty"`
@@ -70,10 +70,10 @@ type InsomniaHeader struct {
 
 // InsomniaBody represents the request body
 type InsomniaBody struct {
-	Type        string `json:"type,omitempty"` // json, file, form-urlencoded, form-multipart, graphql
-	Text        string `json:"text,omitempty"`
-	JSON        any    `json:"json,omitempty"`
-	MimeType    string `json:"mimeType,omitempty"`
+	Type     string `json:"type,omitempty"` // json, file, form-urlencoded, form-multipart, graphql
+	Text     string `json:"text,omitempty"`
+	JSON     any    `json:"json,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
 }
 
 // InsomniaParameter represents a query parameter
@@ -85,10 +85,10 @@ type InsomniaParameter struct {
 
 // InsomniaAuth represents authentication config
 type InsomniaAuth struct {
-	Type        string            `json:"type,omitempty"`
-	Basic       *AuthBasic        `json:"basic,omitempty"`
-	Bearer      *AuthBearer       `json:"bearer,omitempty"`
-	APIKey      *AuthAPIKey       `json:"apiKey,omitempty"`
+	Type   string      `json:"type,omitempty"`
+	Basic  *AuthBasic  `json:"basic,omitempty"`
+	Bearer *AuthBearer `json:"bearer,omitempty"`
+	APIKey *AuthAPIKey `json:"apiKey,omitempty"`
 }
 
 type AuthBasic struct {
@@ -101,8 +101,8 @@ type AuthBearer struct {
 }
 
 type AuthAPIKey struct {
-	Value  string `json:"value,omitempty"`
-	Key    string `json:"key,omitempty"`
+	Value    string `json:"value,omitempty"`
+	Key      string `json:"key,omitempty"`
 	Location string `json:"location,omitempty"` // header, query
 }
 

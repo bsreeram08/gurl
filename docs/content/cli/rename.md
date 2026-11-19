@@ -1,15 +1,15 @@
 ---
-title: "valetkey rename"
+title: "apigent rename"
 description: "Rename a saved request"
 ---
 
 
-Give a saved request a new name. Scripts that call `valetkey.setNextRequest("old-name")` are not updated, so change them too.
+Give a saved request a new name. Scripts that call `apigent.setNextRequest("old-name")` are not updated, so change them too.
 
 ## Synopsis
 
 ```bash
-valetkey rename <old-name> <new-name>
+apigent rename <old-name> <new-name>
 ```
 
 ## Flags
@@ -26,18 +26,18 @@ None.
 ### Rename a request
 
 ```bash
-valetkey rename "get user" "get-user"
+apigent rename "get user" "get-user"
 ```
 
 ### Rename, then confirm
 
 ```bash
-valetkey rename "orders" "list-orders"
-valetkey show "list-orders"
+apigent rename "orders" "list-orders"
+apigent show "list-orders"
 ```
 
 ## Related commands
 
-- [`valetkey edit`]({{< relref "/cli/edit" >}}) - Change other fields
-- [`valetkey delete`]({{< relref "/cli/delete" >}}) - Remove a request
-- [`valetkey collection`]({{< relref "/cli/collection" >}}) - `collection rename` renames a collection
+- [`apigent edit`]({{< relref "/cli/edit" >}}) - Change other fields
+- [`apigent delete`]({{< relref "/cli/delete" >}}) - Remove a request
+- [`apigent collection`]({{< relref "/cli/collection" >}}) - `collection rename` renames a collection

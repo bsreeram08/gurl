@@ -1,5 +1,5 @@
 ---
-title: "valetkey collection"
+title: "apigent collection"
 description: "Manage collections, their variables, and collection runs"
 ---
 
@@ -9,7 +9,7 @@ Group related requests into a collection with its own variables and encrypted se
 ## Synopsis
 
 ```bash
-valetkey collection <subcommand> [flags] [arguments]
+apigent collection <subcommand> [flags] [arguments]
 ```
 
 Collection variables sit above environment variables in scope precedence (environment < collection < data row < CLI < runtime), and may reference environment keys (`API_URL={{BASE_URL}}/v1`).
@@ -21,7 +21,7 @@ Collection variables sit above environment variables in scope precedence (enviro
 Run every request in a collection in sequence order.
 
 ```bash
-valetkey collection run <name> [flags]
+apigent collection run <name> [flags]
 ```
 
 | Flag | Short | Default | Description |
@@ -40,7 +40,7 @@ valetkey collection run <name> [flags]
 | `--reporter-output` | `-O` | none | Output directory for reporter files |
 | `--ci` | | `false` | CI mode: treat skipped requests as failures (exit 1) |
 
-Each execution is recorded. For every failed request, the id is printed on stderr: `[FAIL] failing: HTTP 500 (id: 51be33a5) — inspect with: valetkey diag 51be33a5`. `--persist` and `--dry-run` cannot be used together.
+Each execution is recorded. For every failed request, the id is printed on stderr: `[FAIL] failing: HTTP 500 (id: 51be33a5) — inspect with: apigent diag 51be33a5`. `--persist` and `--dry-run` cannot be used together.
 
 Aliases: `r`
 
@@ -49,7 +49,7 @@ Aliases: `r`
 Show a collection's variables (secrets masked) and requests.
 
 ```bash
-valetkey collection show <name> [--json]
+apigent collection show <name> [--json]
 ```
 
 | Flag | Short | Default | Description |
@@ -63,7 +63,7 @@ Aliases: `view`, `info`
 List all collections with request and variable counts.
 
 ```bash
-valetkey collection list [--json]
+apigent collection list [--json]
 ```
 
 | Flag | Short | Default | Description |
@@ -77,7 +77,7 @@ Aliases: `ls`, `l`
 Create a collection, optionally with variables and secrets.
 
 ```bash
-valetkey collection create <name> [--var KEY=VALUE ...] [--secret KEY=VALUE ...]
+apigent collection create <name> [--var KEY=VALUE ...] [--secret KEY=VALUE ...]
 ```
 
 | Flag | Short | Default | Description |
@@ -92,7 +92,7 @@ Aliases: `add`, `new`
 Set one variable in a collection.
 
 ```bash
-valetkey collection set-var <collection> KEY=VALUE [--secret]
+apigent collection set-var <collection> KEY=VALUE [--secret]
 ```
 
 | Flag | Short | Default | Description |
@@ -106,7 +106,7 @@ Aliases: `set`
 Remove one variable from a collection.
 
 ```bash
-valetkey collection unset-var <collection> KEY
+apigent collection unset-var <collection> KEY
 ```
 
 None.
@@ -115,15 +115,15 @@ Aliases: `unset`
 
 ### migrate
 
-Move a database-backed collection into project file storage (`.valetkey/collections/<name>/`).
+Move a database-backed collection into project file storage (`.apigent/collections/<name>/`).
 
 ```bash
-valetkey collection migrate <name> [--passphrase <pass>]
+apigent collection migrate <name> [--passphrase <pass>]
 ```
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--project-dir` | | none | Project root for `.valetkey` file storage |
+| `--project-dir` | | none | Project root for `.apigent` file storage |
 | `--passphrase` | | none | Write collection secrets with passphrase-derived encryption |
 
 With `--passphrase`, secrets are written to `collection.json` with passphrase-derived encryption and no local `collection.key` is left behind; teammates unlock with the passphrase.
@@ -133,7 +133,7 @@ With `--passphrase`, secrets are written to `collection.json` with passphrase-de
 Unlock a passphrase-protected file collection after cloning. The derived key is cached in the OS keychain.
 
 ```bash
-valetkey collection unlock <name> [--passphrase <pass>]
+apigent collection unlock <name> [--passphrase <pass>]
 ```
 
 | Flag | Short | Default | Description |
@@ -145,7 +145,7 @@ valetkey collection unlock <name> [--passphrase <pass>]
 Export a collection with passphrase-encrypted secrets.
 
 ```bash
-valetkey collection export <name> --passphrase <pass> [--output <file>]
+apigent collection export <name> --passphrase <pass> [--output <file>]
 ```
 
 | Flag | Short | Default | Description |
@@ -158,24 +158,24 @@ valetkey collection export <name> --passphrase <pass> [--output <file>]
 Import a collection export, a collection directory, or `.env` variables.
 
 ```bash
-valetkey collection import <file-or-directory> [--passphrase <pass>] [--force]
-valetkey collection import <collection> --file .env
+apigent collection import <file-or-directory> [--passphrase <pass>] [--force]
+apigent collection import <collection> --file .env
 ```
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--force` | `-f` | `false` | Overwrite existing collection/request records |
 | `--file` | | none | Path to a `.env` file for collection variable import |
-| `--passphrase` | | none | Passphrase for decrypting collection secrets (or set `VALETKEY_IMPORT_PASSPHRASE`) |
+| `--passphrase` | | none | Passphrase for decrypting collection secrets (or set `APIGENT_IMPORT_PASSPHRASE`) |
 
-`.env` imports create the collection if needed and store values as plain (non-secret) variables. Without a passphrase and with `--no-input`, an encrypted import fails with `passphrase required: pass --passphrase or set VALETKEY_IMPORT_PASSPHRASE`.
+`.env` imports create the collection if needed and store values as plain (non-secret) variables. Without a passphrase and with `--no-input`, an encrypted import fails with `passphrase required: pass --passphrase or set APIGENT_IMPORT_PASSPHRASE`.
 
 ### remove
 
 Remove a collection label but keep its requests.
 
 ```bash
-valetkey collection remove <name>
+apigent collection remove <name>
 ```
 
 None.
@@ -187,7 +187,7 @@ Aliases: `rm`
 Delete a collection and all of its requests. Interactive terminals ask for confirmation; with `--no-input` (or `--json`/`--agent`) it fails unless `--force` is passed.
 
 ```bash
-valetkey collection delete <name> [--force]
+apigent collection delete <name> [--force]
 ```
 
 | Flag | Short | Default | Description |
@@ -201,7 +201,7 @@ Aliases: `del`
 Rename a collection.
 
 ```bash
-valetkey collection rename <old-name> <new-name>
+apigent collection rename <old-name> <new-name>
 ```
 
 None.
@@ -219,36 +219,36 @@ Aliases: `mv`, `ren`
 ### Create a collection with a secret and run it
 
 ```bash
-valetkey collection create payments-api \
+apigent collection create payments-api \
   --var BASE_URL=https://api.example.com \
   --secret API_KEY=sk-live-...
 
-valetkey save "list-payments" '{{BASE_URL}}/payments' \
+apigent save "list-payments" '{{BASE_URL}}/payments' \
   --collection payments-api \
   --auth bearer --auth-param token='{{API_KEY}}'
 
-valetkey collection run payments-api --env staging --bail
+apigent collection run payments-api --env staging --bail
 ```
 
 ### Preview a run, then persist what it extracts
 
 ```bash
-valetkey collection run checkout-flow --env staging --dry-run
-valetkey collection run checkout-flow --env staging --persist
+apigent collection run checkout-flow --env staging --dry-run
+apigent collection run checkout-flow --env staging --persist
 ```
 
 ### Share a collection with its secrets
 
 ```bash
-valetkey collection export payments-api --passphrase "$TEAM_SECRET" --output payments-api.gurl
-valetkey collection import payments-api.gurl --passphrase "$TEAM_SECRET"
+apigent collection export payments-api --passphrase "$TEAM_SECRET" --output payments-api.gurl
+apigent collection import payments-api.gurl --passphrase "$TEAM_SECRET"
 ```
 
 ## Related commands
 
-- [`valetkey sequence`]({{< relref "/cli/sequence" >}}) - Set execution order
-- [`valetkey init`]({{< relref "/cli/init" >}}) - Project file storage
-- [`valetkey env`]({{< relref "/cli/env" >}}) - Environment variables
-- [`valetkey diag`]({{< relref "/cli/diag" >}}) - Inspect a failed request
+- [`apigent sequence`]({{< relref "/cli/sequence" >}}) - Set execution order
+- [`apigent init`]({{< relref "/cli/init" >}}) - Project file storage
+- [`apigent env`]({{< relref "/cli/env" >}}) - Environment variables
+- [`apigent diag`]({{< relref "/cli/diag" >}}) - Inspect a failed request
 - [Collections and data-driven runs]({{< relref "/guides/collection-runner" >}}) - Guide
 - [Credential storage]({{< relref "/security/credential-storage" >}}) - How collection secrets are encrypted

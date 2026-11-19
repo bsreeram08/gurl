@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bsreeram08/valetkey/internal/client"
-	"github.com/bsreeram08/valetkey/internal/env"
-	"github.com/bsreeram08/valetkey/internal/storage"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 func TestRunCommandUsesHTTPClient(t *testing.T) {

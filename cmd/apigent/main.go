@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/bsreeram08/valetkey/internal/brand"
+	"github.com/bsreeram08/apigent/internal/brand"
 
 	"context"
 	"fmt"
@@ -10,19 +10,19 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/bsreeram08/valetkey/internal/cli/commands"
-	"github.com/bsreeram08/valetkey/internal/client"
-	"github.com/bsreeram08/valetkey/internal/cookies"
-	"github.com/bsreeram08/valetkey/internal/env"
-	"github.com/bsreeram08/valetkey/internal/plugins"
-	"github.com/bsreeram08/valetkey/internal/plugins/builtins"
-	"github.com/bsreeram08/valetkey/internal/project"
-	"github.com/bsreeram08/valetkey/internal/protocols/graphql"
-	"github.com/bsreeram08/valetkey/internal/protocols/grpc"
-	"github.com/bsreeram08/valetkey/internal/protocols/sse"
-	"github.com/bsreeram08/valetkey/internal/protocols/websocket"
-	"github.com/bsreeram08/valetkey/internal/runner"
-	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/apigent/internal/cli/commands"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/cookies"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/plugins"
+	"github.com/bsreeram08/apigent/internal/plugins/builtins"
+	"github.com/bsreeram08/apigent/internal/project"
+	"github.com/bsreeram08/apigent/internal/protocols/graphql"
+	"github.com/bsreeram08/apigent/internal/protocols/grpc"
+	"github.com/bsreeram08/apigent/internal/protocols/sse"
+	"github.com/bsreeram08/apigent/internal/protocols/websocket"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/storage"
 	"github.com/urfave/cli/v3"
 )
 
@@ -121,7 +121,7 @@ func run() error {
 	return app.Run(ctx, args)
 }
 
-// newApp builds the valetkey command tree.
+// newApp builds the apigent command tree.
 func newApp(db storage.DB, envStorage env.Store, cookieProvider commands.CookieJarProvider, runnerOpts ...runner.Option) *cli.Command {
 	return &cli.Command{
 		Name:                  brand.Name,
@@ -131,18 +131,18 @@ func newApp(db storage.DB, envStorage env.Store, cookieProvider commands.CookieJ
 		Flags: append([]cli.Flag{
 			&cli.StringFlag{
 				Name:  "project-dir",
-				Usage: "Project root containing a .valetkey (or legacy .gurl) directory",
+				Usage: "Project root containing a .apigent (or legacy .gurl) directory",
 			},
 		}, commands.GlobalFlags()...),
-		Description: `valetkey is a library of named HTTP requests for people and AI agents.
+		Description: `apigent is a library of named HTTP requests for people and AI agents.
 You save requests and keep secrets in environments; agents run them by
 name and get JSON back, but never see the keys.
 
 Quick Start:
-  valetkey save "health check" https://api.example.com/health
-  valetkey run "health check" --env dev
-  valetkey --agent run "health check" --env dev   # what an agent runs
-  valetkey mcp                                    # serve saved requests to MCP clients
+  apigent save "health check" https://api.example.com/health
+  apigent run "health check" --env dev
+  apigent --agent run "health check" --env dev   # what an agent runs
+  apigent mcp                                    # serve saved requests to MCP clients
 
 The old command name gurl, and agentgurl, still work.`,
 		Commands: []*cli.Command{
@@ -185,9 +185,9 @@ The old command name gurl, and agentgurl, still work.`,
 	}
 }
 
-// invokedAsAgent reports whether the binary was started as agentvaletkey
+// invokedAsAgent reports whether the binary was started as agentapigent
 // or the pre-rename agentgurl (with or without .exe), so
-// `ln -s "$(command -v valetkey)" ~/.local/bin/agentvaletkey` gives agents a
+// `ln -s "$(command -v apigent)" ~/.local/bin/agentapigent` gives agents a
 // binary that always runs with --agent.
 func invokedAsAgent(arg0 string) bool {
 	return brand.IsAgentBinary(arg0)

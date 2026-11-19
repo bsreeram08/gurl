@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/formatter"
-	"github.com/bsreeram08/valetkey/internal/storage/memstore"
+	"github.com/bsreeram08/apigent/internal/formatter"
+	"github.com/bsreeram08/apigent/internal/storage/memstore"
 	"github.com/urfave/cli/v3"
 )
 

@@ -1,15 +1,15 @@
 ---
-title: "valetkey history"
+title: "apigent history"
 description: "Show execution history for a request"
 ---
 
 
-List recent executions of one saved request, newest first, with the execution id you pass to `valetkey diag`.
+List recent executions of one saved request, newest first, with the execution id you pass to `apigent diag`.
 
 ## Synopsis
 
 ```bash
-valetkey history <name> [flags]
+apigent history <name> [flags]
 ```
 
 Each row shows the short id, status, duration, size and time, followed by the start of the response body. Attempts that never got a response (resolution problems, connection errors, timeouts, script errors) show `ERR` and the error instead. Execution records never contain secrets.
@@ -31,7 +31,7 @@ Each row shows the short id, status, duration, size and time, followed by the st
 ### Recent runs of a request
 
 ```bash
-valetkey history get-user --limit 5
+apigent history get-user --limit 5
 ```
 
 ```text
@@ -45,7 +45,7 @@ valetkey history get-user --limit 5
 ### JSON for scripts
 
 ```bash
-valetkey history get-user --json
+apigent history get-user --json
 ```
 
 ```json
@@ -60,12 +60,12 @@ valetkey history get-user --json
 ### Inspect one entry
 
 ```bash
-valetkey diag 3baa2a2c
+apigent diag 3baa2a2c
 ```
 
 ## Related commands
 
-- [`valetkey diag`]({{< relref "/cli/diag" >}}) - Inspect one execution
-- [`valetkey timeline`]({{< relref "/cli/timeline" >}}) - Executions across all requests
-- [`valetkey diff`]({{< relref "/cli/diff" >}}) - Compare the latest responses
+- [`apigent diag`]({{< relref "/cli/diag" >}}) - Inspect one execution
+- [`apigent timeline`]({{< relref "/cli/timeline" >}}) - Executions across all requests
+- [`apigent diff`]({{< relref "/cli/diff" >}}) - Compare the latest responses
 - [Diagnosing failures]({{< relref "/guides/diagnosing" >}}) - Guide

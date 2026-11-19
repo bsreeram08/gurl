@@ -1,11 +1,11 @@
 package commands
 
 import (
-	"github.com/bsreeram08/valetkey/internal/env"
-	"github.com/bsreeram08/valetkey/internal/redact"
-	"github.com/bsreeram08/valetkey/internal/runner"
-	"github.com/bsreeram08/valetkey/internal/storage"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // currentSecrets returns the secret values that may appear in rec's

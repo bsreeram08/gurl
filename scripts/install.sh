@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# valetkey installer
-# Usage: curl -sL https://raw.githubusercontent.com/bsreeram08/valetkey/master/scripts/install.sh | bash
+# apigent installer
+# Usage: curl -sL https://raw.githubusercontent.com/bsreeram08/apigent/master/scripts/install.sh | bash
 #
 
 set -euo pipefail
 
 # Configuration
-REPO="bsreeram08/valetkey"
-BINARY="valetkey"
-# Pre-rename name; an existing gurl from this project becomes a link to valetkey.
+REPO="bsreeram08/apigent"
+BINARY="apigent"
+# Pre-rename name; an existing gurl from this project becomes a link to apigent.
 LEGACY_BINARY="gurl"
 INSTALL_DIR="${INSTALL_DIR:-${HOME}/.local/bin}"
 VERSION="${VERSION:-latest}"
@@ -20,9 +20,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-log() { echo -e "${GREEN}[valetkey]${NC} $1"; }
-warn() { echo -e "${YELLOW}[valetkey]${NC} $1"; }
-error() { echo -e "${RED}[valetkey]${NC} $1" >&2; }
+log() { echo -e "${GREEN}[apigent]${NC} $1"; }
+warn() { echo -e "${YELLOW}[apigent]${NC} $1"; }
+error() { echo -e "${RED}[apigent]${NC} $1" >&2; }
 
 validate_release_tag() {
     [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
@@ -164,12 +164,12 @@ install() {
     fi
 }
 
-# link_legacy_binary points an existing gurl from this project at valetkey,
+# link_legacy_binary points an existing gurl from this project at apigent,
 # so scripts that call gurl run the new binary. A gurl that is some other
 # tool is left alone.
 link_legacy_binary() {
     local legacy="${INSTALL_DIR}/${LEGACY_BINARY}"
-    if [[ -e "$legacy" ]] && "$legacy" --version 2>/dev/null | grep -Eq "^(gurl|valetkey) version"; then
+    if [[ -e "$legacy" ]] && "$legacy" --version 2>/dev/null | grep -Eq "^(gurl|apigent) version"; then
         ln -sf "${BINARY}" "$legacy"
         log "Linked ${legacy} -> ${BINARY} (the old command name keeps working)"
     fi
@@ -189,7 +189,7 @@ verify() {
 
 # Main
 main() {
-    log "valetkey installer"
+    log "apigent installer"
     log "Repository: https://github.com/${REPO}"
     echo
     

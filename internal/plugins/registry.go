@@ -5,7 +5,7 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 // Registry manages plugins and provides dispatch for applying them to requests/responses.

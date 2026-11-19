@@ -1,15 +1,15 @@
 ---
-title: "valetkey edit"
+title: "apigent edit"
 description: "Edit a saved request"
 ---
 
 
-Change fields of a saved request from the command line. Only the fields you pass are changed; valetkey prints the list of changes.
+Change fields of a saved request from the command line. Only the fields you pass are changed; apigent prints the list of changes.
 
 ## Synopsis
 
 ```bash
-valetkey edit <name> [flags]
+apigent edit <name> [flags]
 ```
 
 ## Flags
@@ -41,30 +41,30 @@ valetkey edit <name> [flags]
 ### Point a request at a new URL
 
 ```bash
-valetkey edit "list-users" --url '{{BASE_URL}}/v2/users'
+apigent edit "list-users" --url '{{BASE_URL}}/v2/users'
 ```
 
 ### Add flow metadata for chaining
 
 ```bash
-valetkey edit "get-profile" \
+apigent edit "get-profile" \
   --run-if "token != ''" \
   --extract userId=jsonpath:'$.id' \
-  --post-script "valetkey.setVariable('seenProfile', 'true')"
+  --post-script "apigent.setVariable('seenProfile', 'true')"
 ```
 
 ### Replace or clear saved auth
 
 ```bash
-valetkey edit "profile" --auth bearer --auth-param token='{{token}}'
-valetkey edit "profile" --auth none
+apigent edit "profile" --auth bearer --auth-param token='{{token}}'
+apigent edit "profile" --auth none
 ```
 
 `--auth none` clears auth and cannot be combined with `--auth-param`.
 
 ## Related commands
 
-- [`valetkey show`]({{< relref "/cli/show" >}}) - See what is saved
-- [`valetkey save`]({{< relref "/cli/save" >}}) - Save a new request
-- [`valetkey extract`]({{< relref "/cli/extract" >}}) - Test extraction rules
+- [`apigent show`]({{< relref "/cli/show" >}}) - See what is saved
+- [`apigent save`]({{< relref "/cli/save" >}}) - Save a new request
+- [`apigent extract`]({{< relref "/cli/extract" >}}) - Test extraction rules
 - [Chaining and extraction]({{< relref "/guides/chaining" >}}) - Guide

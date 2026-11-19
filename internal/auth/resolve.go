@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // ResolveAuthConfig resolves the effective auth config for a request using inheritance.

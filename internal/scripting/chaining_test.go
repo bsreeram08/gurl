@@ -3,7 +3,7 @@ package scripting
 import (
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 func TestChain_SetNextRequest(t *testing.T) {

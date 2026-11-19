@@ -13,14 +13,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/env"
-	"github.com/bsreeram08/valetkey/internal/runner"
-	"github.com/bsreeram08/valetkey/internal/storage"
-	"github.com/bsreeram08/valetkey/internal/storage/memstore"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/internal/storage/memstore"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
-var failureNotice = regexp.MustCompile(`request failed: (.+) \(id: ([0-9a-f]{8})\) — inspect with: valetkey diag ([0-9a-f]{8})`)
+var failureNotice = regexp.MustCompile(`request failed: (.+) \(id: ([0-9a-f]{8})\) — inspect with: apigent diag ([0-9a-f]{8})`)
 
 // captureStreams runs fn and returns what it wrote to stdout and stderr.
 func captureStreams(t *testing.T, fn func()) (stdout, stderr string) {

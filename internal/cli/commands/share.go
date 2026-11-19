@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"github.com/bsreeram08/valetkey/internal/brand"
+	"github.com/bsreeram08/apigent/internal/brand"
 
 	"bufio"
 	"bytes"
@@ -15,10 +15,10 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/bsreeram08/valetkey/internal/redact"
-	"github.com/bsreeram08/valetkey/internal/share"
-	"github.com/bsreeram08/valetkey/internal/storage"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/share"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
@@ -63,9 +63,9 @@ func ShareCommand(db storage.DB) *cli.Command {
 			&cli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "Output file (default: stdout)"},
 			&cli.BoolFlag{Name: "with-secrets", Usage: "Include secret collection variable values"},
 			&cli.BoolFlag{Name: "binary", Usage: "Write raw age output instead of ASCII armor"},
-			&cli.StringFlag{Name: "sign", Usage: "SSH private key to sign with (default: $VALETKEY_SHARE_IDENTITY, ~/.ssh/id_ed25519, ~/.ssh/id_rsa)"},
+			&cli.StringFlag{Name: "sign", Usage: "SSH private key to sign with (default: $APIGENT_SHARE_IDENTITY, ~/.ssh/id_ed25519, ~/.ssh/id_rsa)"},
 			&cli.BoolFlag{Name: "no-sign", Usage: "Send the bundle unsigned"},
-			&cli.StringFlag{Name: "from", Usage: "Who you are, e.g. github:<you>; the receiver checks the signature against those keys (or VALETKEY_SHARE_FROM)"},
+			&cli.StringFlag{Name: "from", Usage: "Who you are, e.g. github:<you>; the receiver checks the signature against those keys (or APIGENT_SHARE_FROM)"},
 			&cli.BoolFlag{Name: "update-keys", Usage: "Accept and re-pin a recipient's changed GitHub keys"},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
@@ -224,7 +224,7 @@ func ReceiveCommand(db storage.DB) *cli.Command {
 		Usage:     "Decrypt a share bundle with your private key and import it",
 		ArgsUsage: "<path|->",
 		Flags: []cli.Flag{
-			&cli.StringSliceFlag{Name: "identity", Aliases: []string{"i"}, Usage: "Private key to decrypt with (repeatable; default: $VALETKEY_SHARE_IDENTITY, ~/.ssh/id_ed25519, ~/.ssh/id_rsa)"},
+			&cli.StringSliceFlag{Name: "identity", Aliases: []string{"i"}, Usage: "Private key to decrypt with (repeatable; default: $APIGENT_SHARE_IDENTITY, ~/.ssh/id_ed25519, ~/.ssh/id_rsa)"},
 			&cli.BoolFlag{Name: "force", Aliases: []string{"f"}, Usage: "Overwrite existing requests with the same name"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "Show the bundle's contents without importing"},
 			&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "Import without asking for confirmation"},
@@ -411,7 +411,7 @@ func printBundlePreview(b *shareBundle) {
 		fmt.Printf("  %-7s %-24s %s%s\n", printable(req.Method), printable(req.Name), printable(req.URL), note)
 	}
 	if scripted > 0 {
-		fmt.Printf("⚠ %d request(s) carry scripts; they run on your machine when you run the request. Check them with 'valetkey show' first.\n", scripted)
+		fmt.Printf("⚠ %d request(s) carry scripts; they run on your machine when you run the request. Check them with 'apigent show' first.\n", scripted)
 	}
 }
 
@@ -489,7 +489,7 @@ type signerStatus struct {
 // A signature that fails, or a key that isn't one of the claimed sender's,
 // is an error; an unsigned bundle is reported, not refused.
 func openBundle(ctx context.Context, plain []byte, pins *share.KnownKeys) (*shareBundle, signerStatus, error) {
-	notBundle := fmt.Errorf("not a valetkey share bundle")
+	notBundle := fmt.Errorf("not a apigent share bundle")
 	var env signedEnvelope
 	if err := json.Unmarshal(plain, &env); err != nil {
 		return nil, signerStatus{}, notBundle

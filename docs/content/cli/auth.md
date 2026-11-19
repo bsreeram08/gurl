@@ -1,19 +1,19 @@
 ---
-title: "valetkey auth"
+title: "apigent auth"
 description: "Discover supported authentication types"
 ---
 
 
-List the built-in auth handlers and the parameters each one accepts, so you know what to pass to `--auth` and `--auth-param` on `valetkey save` and `valetkey edit`.
+List the built-in auth handlers and the parameters each one accepts, so you know what to pass to `--auth` and `--auth-param` on `apigent save` and `apigent edit`.
 
 ## Synopsis
 
 ```bash
-valetkey auth list
-valetkey auth info <type>
+apigent auth list
+apigent auth info <type>
 ```
 
-`valetkey run` applies the auth saved on the request. Auth params may contain placeholders (`token='{{API_KEY}}'`); they are filled during request resolution, then the handler updates the outgoing request. Literal secret auth params are masked by `show`, `list --json`, `codegen` and `paste`.
+`apigent run` applies the auth saved on the request. Auth params may contain placeholders (`token='{{API_KEY}}'`); they are filled during request resolution, then the handler updates the outgoing request. Literal secret auth params are masked by `show`, `list --json`, `codegen` and `paste`.
 
 | Type | Use it for |
 |------|------------|
@@ -33,7 +33,7 @@ valetkey auth info <type>
 List the built-in auth types.
 
 ```bash
-valetkey auth list
+apigent auth list
 ```
 
 None.
@@ -43,7 +43,7 @@ None.
 Show the parameters for one auth type, marked required/optional and secret, with defaults.
 
 ```bash
-valetkey auth info <type>
+apigent auth info <type>
 ```
 
 None.
@@ -53,7 +53,7 @@ None.
 ### See what a handler needs
 
 ```bash
-valetkey auth info bearer
+apigent auth info bearer
 ```
 
 ```text
@@ -65,17 +65,17 @@ Parameters:
 ### Save bearer auth that reads a secret from the environment
 
 ```bash
-valetkey save "profile" '{{BASE_URL}}/me' \
+apigent save "profile" '{{BASE_URL}}/me' \
   --auth bearer \
   --auth-param token='{{API_KEY}}'
 
-valetkey run "profile" --env prod
+apigent run "profile" --env prod
 ```
 
 ### OAuth 2 client credentials
 
 ```bash
-valetkey save "service-token" https://api.example.com/service \
+apigent save "service-token" https://api.example.com/service \
   --auth oauth2 \
   --auth-param flow=client_credentials \
   --auth-param client_id='{{client_id}}' \
@@ -84,11 +84,11 @@ valetkey save "service-token" https://api.example.com/service \
   --auth-param scope='read:orders'
 ```
 
-To change or clear saved auth, use `valetkey edit <name> --auth ...` or `valetkey edit <name> --auth none`.
+To change or clear saved auth, use `apigent edit <name> --auth ...` or `apigent edit <name> --auth none`.
 
 ## Related commands
 
-- [`valetkey save`]({{< relref "/cli/save" >}}) - Save auth with a request
-- [`valetkey edit`]({{< relref "/cli/edit" >}}) - Update or clear saved auth
-- [`valetkey run`]({{< relref "/cli/run" >}}) - Execute a request with saved auth
+- [`apigent save`]({{< relref "/cli/save" >}}) - Save auth with a request
+- [`apigent edit`]({{< relref "/cli/edit" >}}) - Update or clear saved auth
+- [`apigent run`]({{< relref "/cli/run" >}}) - Execute a request with saved auth
 - [Credential storage]({{< relref "/security/credential-storage" >}}) - Where auth params are stored

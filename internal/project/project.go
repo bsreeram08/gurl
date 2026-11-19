@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bsreeram08/valetkey/internal/brand"
+	"github.com/bsreeram08/apigent/internal/brand"
 )
 
 const (
@@ -17,14 +17,14 @@ const (
 	EnvProjectDir = brand.EnvPrefix + "PROJECT_DIR"
 )
 
-// Project is a discovered project: Root holds Dir (.valetkey or .gurl).
+// Project is a discovered project: Root holds Dir (.apigent or .gurl).
 type Project struct {
 	Root string
 	Dir  string
 }
 
 // projectDirIn returns the project directory inside root, preferring
-// .valetkey over .gurl, or "" when root has neither.
+// .apigent over .gurl, or "" when root has neither.
 func projectDirIn(root string) string {
 	for _, name := range []string{DirName, LegacyDirName} {
 		if dir := filepath.Join(root, name); isDir(dir) {
@@ -102,7 +102,7 @@ func Init(root string) (*Project, error) {
 		return nil, err
 	}
 	// Re-running init in a project that still uses .gurl keeps using it
-	// rather than starting a second, empty .valetkey next to it.
+	// rather than starting a second, empty .apigent next to it.
 	projDir := projectDirIn(root)
 	if projDir == "" {
 		projDir = filepath.Join(root, DirName)

@@ -1,6 +1,6 @@
 package auth
 
-import "github.com/bsreeram08/valetkey/internal/client"
+import "github.com/bsreeram08/apigent/internal/client"
 
 type BearerHandler struct{}
 

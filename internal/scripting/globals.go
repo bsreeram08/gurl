@@ -16,9 +16,9 @@ func RegisterGlobals(vm *goja.Runtime, e *Engine) {
 	e.setupGurlObject(vm)
 	e.setupConsoleObject(vm)
 
-	// Scripts can use valetkey.* or the pre-rename gurl.*; both names point
+	// Scripts can use apigent.* or the pre-rename gurl.*; both names point
 	// at the same object, so scripts written for gurl keep working.
-	vm.Set("valetkey", vm.Get("gurl"))
+	vm.Set("apigent", vm.Get("gurl"))
 }
 
 func (e *Engine) setupGurlObject(vm *goja.Runtime) {

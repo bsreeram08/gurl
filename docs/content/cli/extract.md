@@ -1,5 +1,5 @@
 ---
-title: "valetkey extract"
+title: "apigent extract"
 description: "Test extraction rules against a sample response"
 ---
 
@@ -9,10 +9,10 @@ Test extraction rules against a sample response. No request is sent.
 ## Synopsis
 
 ```bash
-valetkey extract [flags] VAR=METHOD:EXPR [VAR=METHOD:EXPR...]
+apigent extract [flags] VAR=METHOD:EXPR [VAR=METHOD:EXPR...]
 ```
 
-`valetkey extract` reads a response body from `--file` or stdin and prints what each rule extracts. Use it to get a rule right before saving it on a request with `valetkey save --extract` or `valetkey edit --extract`.
+`apigent extract` reads a response body from `--file` or stdin and prints what each rule extracts. Use it to get a rule right before saving it on a request with `apigent save --extract` or `apigent edit --extract`.
 
 Rules have the form `VAR=METHOD:EXPR`:
 
@@ -37,7 +37,7 @@ JSONPath extraction keeps large numbers exact (`1000000`, not `1e+06`).
 ### JSONPath from stdin
 
 ```bash
-echo '{"data":{"id":"ord_1"}}' | valetkey extract 'orderId=jsonpath:$.data.id'
+echo '{"data":{"id":"ord_1"}}' | apigent extract 'orderId=jsonpath:$.data.id'
 ```
 
 ```text
@@ -47,7 +47,7 @@ orderId = ord_1
 ### Several rules against a file
 
 ```bash
-valetkey extract -f resp.json -H 'Location: /orders/9' \
+apigent extract -f resp.json -H 'Location: /orders/9' \
   'loc=header:Location' \
   'first=jsonpath:$.data.items[0].id' \
   'n=regex:"amount":(\d+)'
@@ -56,11 +56,11 @@ valetkey extract -f resp.json -H 'Location: /orders/9' \
 ### Save the rule once it works
 
 ```bash
-valetkey edit "create-order" --extract 'orderId=jsonpath:$.data.id'
+apigent edit "create-order" --extract 'orderId=jsonpath:$.data.id'
 ```
 
 ## Related commands
 
-- [`valetkey save`]({{< relref "/cli/save" >}}) - Save a request with `--extract` rules
-- [`valetkey edit`]({{< relref "/cli/edit" >}}) - Add or replace extraction rules
-- [`valetkey run`]({{< relref "/cli/run" >}}) - Extracted values and `--persist`
+- [`apigent save`]({{< relref "/cli/save" >}}) - Save a request with `--extract` rules
+- [`apigent edit`]({{< relref "/cli/edit" >}}) - Add or replace extraction rules
+- [`apigent run`]({{< relref "/cli/run" >}}) - Extracted values and `--persist`

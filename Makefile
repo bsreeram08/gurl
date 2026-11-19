@@ -1,7 +1,7 @@
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS := -X main.version=$(VERSION) -X 'github.com/bsreeram08/valetkey/internal/cli/commands.CurrentVersion=$(VERSION)'
-BINARY := valetkey
-CMD := ./cmd/valetkey
+LDFLAGS := -X main.version=$(VERSION) -X 'github.com/bsreeram08/apigent/internal/cli/commands.CurrentVersion=$(VERSION)'
+BINARY := apigent
+CMD := ./cmd/apigent
 
 .PHONY: build install clean test test-race
 

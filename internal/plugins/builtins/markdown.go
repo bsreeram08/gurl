@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bsreeram08/valetkey/internal/plugins"
+	"github.com/bsreeram08/apigent/internal/plugins"
 )
 
 type MarkdownOutput struct{}

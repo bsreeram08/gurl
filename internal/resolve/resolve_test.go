@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/auth"
-	"github.com/bsreeram08/valetkey/internal/client"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/auth"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 func TestVarsPrecedenceAndOrigins(t *testing.T) {

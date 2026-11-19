@@ -7,12 +7,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bsreeram08/valetkey/internal/extract"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/extract"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 
-const extractRuleUsage = "Extraction rule VAR=METHOD:EXPR. METHOD: jsonpath ($.data.id, $.items[0].id), header (Location), regex (first capture group), jq (alias of jsonpath). Try rules offline with 'valetkey extract'"
+const extractRuleUsage = "Extraction rule VAR=METHOD:EXPR. METHOD: jsonpath ($.data.id, $.items[0].id), header (Location), regex (first capture group), jq (alias of jsonpath). Try rules offline with 'apigent extract'"
 
 // ExtractCommand tests extraction rules against a sample response without sending a request.
 func ExtractCommand() *cli.Command {
@@ -23,8 +23,8 @@ func ExtractCommand() *cli.Command {
 		Description: `Reads a response body from --file or stdin and prints what each rule extracts.
 
 Examples:
-  echo '{"data":{"id":"ord_1"}}' | valetkey extract 'orderId=jsonpath:$.data.id'
-  valetkey extract -f resp.json -H 'Location: /orders/9' 'loc=header:Location' 'n=regex:"amount":(\d+)'`,
+  echo '{"data":{"id":"ord_1"}}' | apigent extract 'orderId=jsonpath:$.data.id'
+  apigent extract -f resp.json -H 'Location: /orders/9' 'loc=header:Location' 'n=regex:"amount":(\d+)'`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "file",

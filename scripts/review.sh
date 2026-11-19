@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-REPO="${GITHUB_REPOSITORY:-bsreeram08/valetkey}"
+REPO="${GITHUB_REPOSITORY:-bsreeram08/apigent}"
 BRANCH="${GITHUB_REF_NAME:-master}"
 
 # Colors

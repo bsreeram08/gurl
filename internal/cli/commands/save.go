@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bsreeram08/valetkey/internal/core/curl"
-	"github.com/bsreeram08/valetkey/internal/storage"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/core/curl"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )
@@ -21,7 +21,7 @@ var saveCollectionIsInteractive = func() bool {
 }
 
 // saveStdinIsTerminal reports whether stdin is a terminal; when it is not,
-// `valetkey save <name>` reads the curl command from it.
+// `apigent save <name>` reads the curl command from it.
 var saveStdinIsTerminal = func() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
@@ -213,7 +213,7 @@ func SaveCommand(db storage.DB) *cli.Command {
 				input := strings.TrimSpace(string(data))
 				if input == "" {
 					if args.Len() == 1 {
-						return fmt.Errorf("name and URL arguments are required (or pipe a curl command: echo 'curl ...' | valetkey save <name>)")
+						return fmt.Errorf("name and URL arguments are required (or pipe a curl command: echo 'curl ...' | apigent save <name>)")
 					}
 					return fmt.Errorf("empty stdin input")
 				}
@@ -305,7 +305,7 @@ func saveRequestWithCollectionGuard(c *cli.Command, db storage.DB, req *types.Sa
 
 func confirmCreateCollection(c *cli.Command, store storage.CollectionStore, name string) error {
 	if !canPrompt(c, saveCollectionIsInteractive) {
-		return fmt.Errorf("collection %q does not exist; create it first with 'valetkey collection create %s'", name, name)
+		return fmt.Errorf("collection %q does not exist; create it first with 'apigent collection create %s'", name, name)
 	}
 
 	fmt.Printf("Collection %q does not exist. Create it? [y/N] ", name)
@@ -380,7 +380,7 @@ func printSaveConfirmation(name string, url string) {
 func resolveSaveNameAndURL(args cli.Args, nameFlag string) (string, string, error) {
 	if nameFlag != "" {
 		if args.Len() != 1 {
-			return "", "", fmt.Errorf("URL argument is required when using --name (usage: valetkey save --name <name> <url>)")
+			return "", "", fmt.Errorf("URL argument is required when using --name (usage: apigent save --name <name> <url>)")
 		}
 		return nameFlag, args.Get(0), nil
 	}

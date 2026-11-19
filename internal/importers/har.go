@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // HARImporter handles HAR (HTTP Archive) files
@@ -30,7 +30,7 @@ type HAR struct {
 
 // HARLog represents the log section of a HAR file
 type HARLog struct {
-	Version string    `json:"version"`
+	Version string     `json:"version"`
 	Creator HARCreator `json:"creator"`
 	Browser HARBrowser `json:"browser,omitempty"`
 	Pages   []HARPage  `json:"pages,omitempty"`
@@ -51,29 +51,29 @@ type HARBrowser struct {
 
 // HARPage represents a page in the HAR
 type HARPage struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Started   string    `json:"startedDateTime"`
+	ID          string         `json:"id"`
+	Title       string         `json:"title"`
+	Started     string         `json:"startedDateTime"`
 	PageTimings HARPageTimings `json:"pageTimings,omitempty"`
 }
 
 // HARPageTimings represents page timing information
 type HARPageTimings struct {
 	OnContentLoad float64 `json:"onContentLoad,omitempty"`
-	OnLoad       float64 `json:"onLoad,omitempty"`
+	OnLoad        float64 `json:"onLoad,omitempty"`
 }
 
 // HAREntry represents a single HTTP transaction
 type HAREntry struct {
-	StartedDateTime string     `json:"startedDateTime"`
-	Time            float64    `json:"time"`
+	StartedDateTime string      `json:"startedDateTime"`
+	Time            float64     `json:"time"`
 	Request         HARRequest  `json:"request"`
 	Response        HARResponse `json:"response"`
 	Cache           HARCache    `json:"cache,omitempty"`
 	Timings         HARTimings  `json:"timings"`
-	ServerIPAddress string     `json:"serverIPAddress,omitempty"`
-	Connection      string     `json:"connection,omitempty"`
-	Comment         string     `json:"comment,omitempty"`
+	ServerIPAddress string      `json:"serverIPAddress,omitempty"`
+	Connection      string      `json:"connection,omitempty"`
+	Comment         string      `json:"comment,omitempty"`
 }
 
 // HARRequest represents the request section
@@ -96,7 +96,7 @@ type HARResponse struct {
 	HTTPVersion string      `json:"httpVersion,omitempty"`
 	Cookies     []HARCookie `json:"cookies"`
 	Headers     []HARHeader `json:"headers"`
-	Content     HARContent   `json:"content"`
+	Content     HARContent  `json:"content"`
 	RedirectURL string      `json:"redirectURL"`
 	HeadersSize int64       `json:"headersSize,omitempty"`
 	BodySize    int64       `json:"bodySize,omitempty"`

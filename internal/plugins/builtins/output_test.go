@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bsreeram08/valetkey/internal/client"
-	"github.com/bsreeram08/valetkey/internal/plugins"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/plugins"
 )
 
 func newTestResponseContext() *plugins.ResponseContext {

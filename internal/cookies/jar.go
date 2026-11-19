@@ -1,7 +1,7 @@
 package cookies
 
 import (
-	"github.com/bsreeram08/valetkey/internal/brand"
+	"github.com/bsreeram08/apigent/internal/brand"
 
 	"encoding/json"
 	"fmt"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // Generator interface for code generation
@@ -16,8 +16,8 @@ type Generator interface {
 // GenOptions controls code generation output
 type GenOptions struct {
 	IncludeComments bool
-	IncludeImports   bool
-	AsyncPython      bool // For Python: generate async httpx code instead of sync requests
+	IncludeImports  bool
+	AsyncPython     bool // For Python: generate async httpx code instead of sync requests
 }
 
 // generators holds all registered generators

@@ -1,7 +1,7 @@
 package share
 
 import (
-	"github.com/bsreeram08/valetkey/internal/brand"
+	"github.com/bsreeram08/apigent/internal/brand"
 
 	"encoding/json"
 	"errors"
@@ -26,7 +26,7 @@ type KnownKeys struct {
 	changed bool
 }
 
-// DefaultKnownKeysPath is ~/.config/valetkey/known_keys.json, or the
+// DefaultKnownKeysPath is ~/.config/apigent/known_keys.json, or the
 // ~/.config/gurl copy for an install that has not migrated.
 func DefaultKnownKeysPath() string {
 	return filepath.Join(brand.ConfigDir(os.Getenv("HOME")), "known_keys.json")

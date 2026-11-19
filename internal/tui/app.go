@@ -12,13 +12,13 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/importers"
+	"github.com/bsreeram08/apigent/internal/resolve"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/google/uuid"
-	"github.com/bsreeram08/valetkey/internal/env"
-	"github.com/bsreeram08/valetkey/internal/importers"
-	"github.com/bsreeram08/valetkey/internal/resolve"
-	"github.com/bsreeram08/valetkey/internal/runner"
-	"github.com/bsreeram08/valetkey/internal/storage"
-	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 // requestsLoadedMsg is sent when requests finish loading
@@ -244,7 +244,7 @@ func (im *ImportModal) View() tea.View {
 		lines = append(lines, "")
 	}
 
-	formats := "  Supported: .json (Insomnia/Postman/HAR), .yaml/.yml (OpenAPI), .toml (valetkey), .bru (Bruno)"
+	formats := "  Supported: .json (Insomnia/Postman/HAR), .yaml/.yml (OpenAPI), .toml (apigent), .bru (Bruno)"
 	lines = append(lines, Style.Hint.Render(formats))
 	lines = append(lines, "")
 	lines = append(lines, Style.Hint.Render("  Enter import  ·  Esc cancel"))
@@ -1412,7 +1412,7 @@ func (m *App) renderWelcome() string {
 	var sb strings.Builder
 	sb.WriteString("\n")
 	sb.WriteString("\n")
-	sb.WriteString(Style.WelcomeText.Render("  Welcome to valetkey"))
+	sb.WriteString(Style.WelcomeText.Render("  Welcome to apigent"))
 	sb.WriteString("\n")
 	sb.WriteString("\n")
 	sb.WriteString(Style.PlainText.Render("  j/k moves through saved requests in the left pane"))

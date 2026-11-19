@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bsreeram08/apigent/internal/project"
+	"github.com/bsreeram08/apigent/internal/secrets"
 	"github.com/google/uuid"
-	"github.com/bsreeram08/valetkey/internal/project"
-	"github.com/bsreeram08/valetkey/internal/secrets"
 )
 
 const activeEnvFileName = ".active-env"

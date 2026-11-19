@@ -4,15 +4,15 @@ description: "Serve saved requests as MCP tools. Agents call them by name and ne
 weight: 4
 ---
 
-`valetkey mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io) server on stdin/stdout. Every saved request becomes a tool. Calls run in [agent mode]({{< relref "/ai/agent-mode" >}}) and return the same masked JSON as `run --json`.
+`apigent mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io) server on stdin/stdout. Every saved request becomes a tool. Calls run in [agent mode]({{< relref "/ai/agent-mode" >}}) and return the same masked JSON as `run --json`.
 
 ## Set up
 
 Store the secrets yourself, once:
 
 ```bash
-valetkey env create dev --var BASE_URL=https://api.example.com --var API_KEY=- --secret API_KEY
-valetkey save get-user '{{BASE_URL}}/users/{{id}}' -H 'Authorization: Bearer {{API_KEY}}'
+apigent env create dev --var BASE_URL=https://api.example.com --var API_KEY=- --secret API_KEY
+apigent save get-user '{{BASE_URL}}/users/{{id}}' -H 'Authorization: Bearer {{API_KEY}}'
 ```
 
 Then add the server to your MCP client's configuration:
@@ -20,7 +20,7 @@ Then add the server to your MCP client's configuration:
 ```json
 {
   "mcpServers": {
-    "my-api": { "command": "valetkey", "args": ["mcp", "--env", "dev"] }
+    "my-api": { "command": "apigent", "args": ["mcp", "--env", "dev"] }
   }
 }
 ```
@@ -46,7 +46,7 @@ The result is the [`run --json` object]({{< relref "/ai/json-output" >}}), with 
 
 ## Why an agent can't redirect your secrets
 
-If a tool call could set any variable, an agent could pass `BASE_URL=https://attacker.example`. The request would then go out with your `Authorization` header to a host the agent controls. valetkey refuses any argument that the environment or collection already defines, and nothing is sent:
+If a tool call could set any variable, an agent could pass `BASE_URL=https://attacker.example`. The request would then go out with your `Authorization` header to a host the agent controls. apigent refuses any argument that the environment or collection already defines, and nothing is sent:
 
 ```text
 argument "BASE_URL" is not allowed: only placeholders the environment leaves undefined can be set (allowed: id)
@@ -56,4 +56,4 @@ So define every host in the environment or collection, never leave it as a place
 
 ## Under the hood
 
-Each call runs `valetkey --agent run <request> --env <env> --var ...` in a child process. It gets exactly the CLI's guarantees: one resolution path, masked output, an execution record you can inspect with `valetkey diag <id>`, and no way to reveal a secret. Calls are handled one at a time.
+Each call runs `apigent --agent run <request> --env <env> --var ...` in a child process. It gets exactly the CLI's guarantees: one resolution path, masked output, an execution record you can inspect with `apigent diag <id>`, and no way to reveal a secret. Calls are handled one at a time.

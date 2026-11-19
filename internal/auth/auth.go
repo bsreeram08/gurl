@@ -3,7 +3,7 @@ package auth
 import (
 	"fmt"
 
-	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 // ParamDef describes a handler-specific auth parameter.

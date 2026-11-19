@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/project"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/project"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 func TestProjectDBRoutesFileBackedCollectionsToFileStore(t *testing.T) {

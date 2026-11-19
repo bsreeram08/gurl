@@ -3,8 +3,8 @@ package builtins
 import (
 	"strings"
 
-	"github.com/bsreeram08/valetkey/internal/client"
-	"github.com/bsreeram08/valetkey/internal/plugins"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/plugins"
 )
 
 // UserAgentMiddleware sets a default User-Agent header if none is provided.
@@ -15,14 +15,14 @@ type UserAgentMiddleware struct {
 // Name returns the plugin name.
 func (u *UserAgentMiddleware) Name() string { return "user-agent" }
 
-// BeforeRequest sets the User-Agent header to "valetkey/{Version}" if not already set.
+// BeforeRequest sets the User-Agent header to "apigent/{Version}" if not already set.
 func (u *UserAgentMiddleware) BeforeRequest(ctx *plugins.RequestContext) *plugins.RequestContext {
 	if ctx == nil || ctx.Request == nil {
 		return ctx
 	}
 
 	if !hasHeader(ctx.Request.Headers, "User-Agent") {
-		userAgent := "valetkey/" + u.Version
+		userAgent := "apigent/" + u.Version
 		ctx.Request.Headers = append(ctx.Request.Headers, client.Header{
 			Key:   "User-Agent",
 			Value: userAgent,

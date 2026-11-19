@@ -1,16 +1,16 @@
 package env
 
 import (
-	"github.com/bsreeram08/valetkey/internal/brand"
+	"github.com/bsreeram08/apigent/internal/brand"
 
 	"os"
 	"path/filepath"
 	"sync"
 
-	"github.com/bsreeram08/valetkey/internal/secrets"
+	"github.com/bsreeram08/apigent/internal/secrets"
 )
 
-const keyPathDefault = "~/.local/share/valetkey/.secret-key"
+const keyPathDefault = "~/.local/share/apigent/.secret-key"
 
 var (
 	globalKey     []byte

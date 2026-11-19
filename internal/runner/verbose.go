@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 // verboseBodyLimit caps how much of a body is printed, so one large response
@@ -17,7 +17,7 @@ const verboseBodyLimit = 2048
 // redactedValue replaces the value of a sensitive header.
 const redactedValue = "<redacted>"
 
-// sensitiveHeaders are never printed in full. valetkey encrypts collection secrets
+// sensitiveHeaders are never printed in full. apigent encrypts collection secrets
 // at rest, so echoing credentials to stdout would work against that.
 var sensitiveHeaders = map[string]bool{
 	"authorization":       true,
@@ -33,7 +33,7 @@ var sensitiveHeaders = map[string]bool{
 // values are redacted and long bodies are truncated.
 //
 // Either side may be nil: a request that never reached the network still shows
-// what valetkey was about to send.
+// what apigent was about to send.
 func FormatVerboseExchange(req *client.Request, resp *client.Response) string {
 	var b strings.Builder
 	writeVerboseRequest(&b, req)

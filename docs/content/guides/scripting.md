@@ -9,11 +9,11 @@ Assertions check a response without code; scripts run JavaScript before a reques
 
 ## Assertions
 
-Pass one or more `--assert` flags to `run` (all must pass), or save them on a request with `valetkey edit --assert`:
+Pass one or more `--assert` flags to `run` (all must pass), or save them on a request with `apigent edit --assert`:
 
 ```bash
-valetkey run "get-user" --assert "status=200" --assert "body.$.email contains @"
-valetkey edit "get-user" --assert "status=200"
+apigent run "get-user" --assert "status=200" --assert "body.$.email contains @"
+apigent edit "get-user" --assert "status=200"
 ```
 
 A failed assertion makes `run` exit 1, records the execution with failure phase `assertion`, and prints the failure notice with the execution id. With `--json`, results are in `"assertions":[{"name","passed","message"}]`.
@@ -52,13 +52,13 @@ An assertion that can't be parsed (`invalid assertion format`) stops the run wit
 
 ```bash
 # Validation error is returned as expected
-valetkey run "invalid-order" --assert "status=400" --assert "body contains validation"
+apigent run "invalid-order" --assert "status=400" --assert "body contains validation"
 
 # Header present and fast enough
-valetkey run "health" --assert "headers.X-Request-Id exists" --assert "time<500"
+apigent run "health" --assert "headers.X-Request-Id exists" --assert "time<500"
 
 # Extraction worked
-valetkey run "login" --assert "extract:token != ''"
+apigent run "login" --assert "extract:token != ''"
 ```
 
 ## Scripts
@@ -66,10 +66,10 @@ valetkey run "login" --assert "extract:token != ''"
 Scripts are JavaScript (the goja runtime, ECMAScript 5.1+) saved on the request as inline source:
 
 ```bash
-valetkey save "login" '{{BASE_URL}}/login' -X POST --extract 'token=jsonpath:$.token' \
-  --post-script 'valetkey.setNextRequest("profile")'
+apigent save "login" '{{BASE_URL}}/login' -X POST --extract 'token=jsonpath:$.token' \
+  --post-script 'apigent.setNextRequest("profile")'
 
-valetkey edit "profile" --pre-script 'valetkey.request.headers.set("X-Request-Time", String(Date.now()))'
+apigent edit "profile" --pre-script 'apigent.request.headers.set("X-Request-Time", String(Date.now()))'
 ```
 
 - **Pre-request scripts** run before the request is sent: add headers, rewrite the URL or body, or skip the request.
@@ -77,47 +77,47 @@ valetkey edit "profile" --pre-script 'valetkey.request.headers.set("X-Request-Ti
 
 ### Script API
 
-Everything hangs off the global `valetkey` object:
+Everything hangs off the global `apigent` object:
 
 | API | Description |
 |-----|-------------|
-| `valetkey.request.headers.get(name)` / `.set(name, value)` / `.remove(name)` | Read or change request headers (pre-request) |
-| `valetkey.request.url`, `valetkey.request.body`, `valetkey.request.method` | Read or assign the URL, body and method |
-| `valetkey.response.status`, `.statusText`, `.time`, `.size`, `.body` | Response fields (post-response) |
-| `valetkey.response.json()`, `valetkey.response.text()` | Parsed JSON body, raw text body |
-| `valetkey.response.headers.get(name)` | Response header |
-| `valetkey.setVar(name, value)`, `valetkey.getVar(name)` | Set or read a runtime variable |
-| `valetkey.setNextRequest(name)` | Run this saved request next (with `run --chain` or in a collection run) |
-| `valetkey.skipRequest()` | Skip the current request |
-| `valetkey.test(name, fn)`, `valetkey.expect(value).to.equal(expected)` | Named checks inside a script |
+| `apigent.request.headers.get(name)` / `.set(name, value)` / `.remove(name)` | Read or change request headers (pre-request) |
+| `apigent.request.url`, `apigent.request.body`, `apigent.request.method` | Read or assign the URL, body and method |
+| `apigent.response.status`, `.statusText`, `.time`, `.size`, `.body` | Response fields (post-response) |
+| `apigent.response.json()`, `apigent.response.text()` | Parsed JSON body, raw text body |
+| `apigent.response.headers.get(name)` | Response header |
+| `apigent.setVar(name, value)`, `apigent.getVar(name)` | Set or read a runtime variable |
+| `apigent.setNextRequest(name)` | Run this saved request next (with `run --chain` or in a collection run) |
+| `apigent.skipRequest()` | Skip the current request |
+| `apigent.test(name, fn)`, `apigent.expect(value).to.equal(expected)` | Named checks inside a script |
 | `console.log`, `console.warn`, `console.error` | Logging |
 
-Variables set with `valetkey.setVar` are runtime values: the highest scope, available to later requests in the same run, and written back only with `--persist` (which refuses values containing `{{`). See [Variables & placeholders]({{< relref "/guides/variables" >}}).
+Variables set with `apigent.setVar` are runtime values: the highest scope, available to later requests in the same run, and written back only with `--persist` (which refuses values containing `{{`). See [Variables & placeholders]({{< relref "/guides/variables" >}}).
 
 ### Example: capture a value and pick the next request
 
 ```javascript
-var data = valetkey.response.json();
+var data = apigent.response.json();
 if (data.requiresProfile) {
-  valetkey.setVar("USER_ID", String(data.userId));
-  valetkey.setNextRequest("get-profile");
+  apigent.setVar("USER_ID", String(data.userId));
+  apigent.setNextRequest("get-profile");
 }
 ```
 
 ### Example: validate inside a script
 
 ```javascript
-var data = valetkey.response.json();
-valetkey.test("has users", function () {
-  valetkey.expect(data.status).to.equal("success");
+var data = apigent.response.json();
+apigent.test("has users", function () {
+  apigent.expect(data.status).to.equal("success");
 });
 ```
 
 ### Example: skip a request
 
 ```javascript
-if (valetkey.getVar("SKIP_HEALTH_CHECK") === "true") {
-  valetkey.skipRequest();
+if (apigent.getVar("SKIP_HEALTH_CHECK") === "true") {
+  apigent.skipRequest();
 }
 ```
 
@@ -126,9 +126,9 @@ if (valetkey.getVar("SKIP_HEALTH_CHECK") === "true") {
 Scripts cannot read secret variables unless explicitly allowed, and URL changes are limited to `http` and `https`. See [Security]({{< relref "/security" >}}).
 
 > [!TIP]
-> Keep scripts small. If a script grows past a few lines, the logic probably belongs in your application or test code; use [`valetkey exec`]({{< relref "/cli/exec" >}}) to hand it an environment instead.
+> Keep scripts small. If a script grows past a few lines, the logic probably belongs in your application or test code; use [`apigent exec`]({{< relref "/cli/exec" >}}) to hand it an environment instead.
 
 ## See also
 
 - [Chaining & extraction]({{< relref "/guides/chaining" >}})
-- [`valetkey run`]({{< relref "/cli/run" >}}), [`valetkey edit`]({{< relref "/cli/edit" >}})
+- [`apigent run`]({{< relref "/cli/run" >}}), [`apigent edit`]({{< relref "/cli/edit" >}})

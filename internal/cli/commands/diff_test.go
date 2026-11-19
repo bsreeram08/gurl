@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/env"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 type diffMockDB struct {

@@ -1,6 +1,6 @@
-# valetkey
+# apigent
 
-A terminal library of named HTTP requests that are run against environments and collections, with variables filled in at send time. People and AI agents run them by name; agents never see the secrets. Formerly gurl (see `docs/adr/0001-rename-to-valetkey.md`).
+A terminal library of named HTTP requests that are run against environments and collections, with variables filled in at send time. People and AI agents run them by name; agents never see the secrets. Formerly gurl (see `docs/adr/0001-rename-to-apigent.md`).
 
 ## Language
 
@@ -45,11 +45,11 @@ Writing variables extracted from a response, or set by a script, back to their v
 The mode an AI agent runs in: JSON output, no prompts, `--reveal` refused, and secrets masked in response bodies, headers and errors too.
 
 **Tool**:
-A saved request served to an MCP client by `valetkey mcp`. Its arguments are its fillable placeholders.
+A saved request served to an MCP client by `apigent mcp`. Its arguments are its fillable placeholders.
 _Avoid_: endpoint, action
 
 **Fillable placeholder**:
 A placeholder that neither the pinned environment nor the request's collection defines: the only values a tool call may supply.
 
 **Legacy location**:
-A pre-rename path or name (`gurl`, `GURL_*`, `~/.local/share/gurl`, `.gurl/`) that is still read when the valetkey one is absent. Resolved only in `internal/brand`.
+A pre-rename path or name (`gurl`, `GURL_*`, `~/.local/share/gurl`, `.gurl/`) that is still read when the apigent one is absent. Resolved only in `internal/brand`.

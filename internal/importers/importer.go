@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // Importer interface - deterministic, no if-else chains

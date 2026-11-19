@@ -1,9 +1,9 @@
 // Package brand holds the product name and the fallbacks that keep
-// installs from before the gurl -> valetkey rename working.
+// installs from before the gurl -> apigent rename working.
 //
 // Every lookup prefers the new name and falls back to the legacy one, so
 // existing data, environment variables and project directories keep
-// working without a migration step. `valetkey migrate` moves legacy data
+// working without a migration step. `apigent migrate` moves legacy data
 // to the new locations when the user is ready.
 package brand
 
@@ -15,17 +15,17 @@ import (
 
 const (
 	// Name is the product and binary name.
-	Name = "valetkey"
+	Name = "apigent"
 	// LegacyName is the name before the rename.
 	LegacyName = "gurl"
 
 	// EnvPrefix and LegacyEnvPrefix prefix every environment variable.
-	EnvPrefix       = "VALETKEY_"
+	EnvPrefix       = "APIGENT_"
 	LegacyEnvPrefix = "GURL_"
 
 	// ProjectDirName is the per-project directory; LegacyProjectDirName is
 	// still discovered when the new one is absent.
-	ProjectDirName       = ".valetkey"
+	ProjectDirName       = ".apigent"
 	LegacyProjectDirName = ".gurl"
 
 	// DBFile and CookieDBFile are the database names inside DataDir.
@@ -36,13 +36,13 @@ const (
 )
 
 // Env names the environment variable for suffix, e.g. Env("AGENT") is
-// VALETKEY_AGENT.
+// APIGENT_AGENT.
 func Env(suffix string) string { return EnvPrefix + suffix }
 
 // LegacyEnv names the pre-rename variable, e.g. GURL_AGENT.
 func LegacyEnv(suffix string) string { return LegacyEnvPrefix + suffix }
 
-// Getenv returns VALETKEY_<suffix> if set and non-empty, otherwise
+// Getenv returns APIGENT_<suffix> if set and non-empty, otherwise
 // GURL_<suffix>.
 func Getenv(suffix string) string {
 	if v := os.Getenv(Env(suffix)); v != "" {
@@ -74,7 +74,7 @@ func exists(path string) bool {
 	return err == nil
 }
 
-// DataDir is ~/.local/share/valetkey, or ~/.local/share/gurl for an install
+// DataDir is ~/.local/share/apigent, or ~/.local/share/gurl for an install
 // that has not migrated. The database, cookie store, secret key and
 // collection keys all live here, so they always resolve together.
 func DataDir(home string) string {
@@ -87,7 +87,7 @@ func LegacyDataDir(home string) string {
 	return filepath.Join(home, ".local", "share", LegacyName)
 }
 
-// DBPath is the request database inside dataDir: valetkey.db, or gurl.db
+// DBPath is the request database inside dataDir: apigent.db, or gurl.db
 // when only that exists. Resolving by file rather than by directory name
 // means a moved directory never loses its database.
 func DBPath(dataDir string) string {
@@ -99,7 +99,7 @@ func CookieDBPath(dataDir string) string {
 	return pick(filepath.Join(dataDir, CookieDBFile), filepath.Join(dataDir, LegacyCookieDBFile))
 }
 
-// ConfigDir is ~/.config/valetkey, or ~/.config/gurl when only that exists.
+// ConfigDir is ~/.config/apigent, or ~/.config/gurl when only that exists.
 func ConfigDir(home string) string {
 	return pick(NewConfigDir(home), LegacyConfigDir(home))
 }
@@ -107,7 +107,7 @@ func ConfigDir(home string) string {
 func NewConfigDir(home string) string    { return filepath.Join(home, ".config", Name) }
 func LegacyConfigDir(home string) string { return filepath.Join(home, ".config", LegacyName) }
 
-// PluginDir is ~/.valetkey/plugins, or ~/.gurl/plugins when only that exists.
+// PluginDir is ~/.apigent/plugins, or ~/.gurl/plugins when only that exists.
 func PluginDir(home string) string {
 	return pick(NewPluginDir(home), LegacyPluginDir(home))
 }

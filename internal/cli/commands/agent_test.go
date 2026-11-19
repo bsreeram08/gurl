@@ -12,12 +12,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/env"
-	"github.com/bsreeram08/valetkey/internal/resolve"
-	"github.com/bsreeram08/valetkey/internal/runner"
-	"github.com/bsreeram08/valetkey/internal/storage"
-	"github.com/bsreeram08/valetkey/internal/storage/memstore"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/env"
+	"github.com/bsreeram08/apigent/internal/resolve"
+	"github.com/bsreeram08/apigent/internal/runner"
+	"github.com/bsreeram08/apigent/internal/storage"
+	"github.com/bsreeram08/apigent/internal/storage/memstore"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 
@@ -107,13 +107,13 @@ func clearAgentEnv(t *testing.T) {
 func TestLegacyAgentEnvVarStillWorks(t *testing.T) {
 	clearAgentEnv(t)
 	t.Setenv("GURL_AGENT", "1")
-	if !AgentRequested([]string{"valetkey", "list"}) {
+	if !AgentRequested([]string{"apigent", "list"}) {
 		t.Fatal("GURL_AGENT=1 should still turn on agent mode")
 	}
 	clearAgentEnv(t)
 	t.Setenv(AgentEnvVar, "1")
-	if !AgentRequested([]string{"valetkey", "list"}) {
-		t.Fatal("VALETKEY_AGENT=1 should turn on agent mode")
+	if !AgentRequested([]string{"apigent", "list"}) {
+		t.Fatal("APIGENT_AGENT=1 should turn on agent mode")
 	}
 }
 
@@ -623,7 +623,7 @@ func TestNoInputSaveToMissingCollectionFails(t *testing.T) {
 
 	db := memstore.New()
 	err := SaveCommand(db).Run(context.Background(), []string{"save", "x", "http://example.test", "--collection", "nope"})
-	if err == nil || !strings.Contains(err.Error(), `collection "nope" does not exist; create it first with 'valetkey collection create nope'`) {
+	if err == nil || !strings.Contains(err.Error(), `collection "nope" does not exist; create it first with 'apigent collection create nope'`) {
 		t.Fatalf("want an actionable missing-collection error, got %v", err)
 	}
 	if _, err := db.GetCollectionByName("nope"); err == nil {
@@ -647,12 +647,12 @@ func TestNoInputPassphraseIsActionable(t *testing.T) {
 			return err
 		},
 	}
-	if err := cmd.Run(context.Background(), []string{"test"}); err == nil || !strings.Contains(err.Error(), "--passphrase or set VALETKEY_IMPORT_PASSPHRASE") {
+	if err := cmd.Run(context.Background(), []string{"test"}); err == nil || !strings.Contains(err.Error(), "--passphrase or set APIGENT_IMPORT_PASSPHRASE") {
 		t.Fatalf("want an actionable passphrase error, got %v", err)
 	}
 }
 
-// agentRoot is a gurl root with the global flags, as in cmd/valetkey.
+// agentRoot is a gurl root with the global flags, as in cmd/apigent.
 func agentRoot(db storage.DB, envs env.Store) *cli.Command {
 	root := &cli.Command{Name: "gurl", Flags: GlobalFlags(), Commands: []*cli.Command{RunCommand(db, envs), ListCommand(db), EnvCommand(envs), ShowCommand(db)}}
 	root.ExitErrHandler = func(context.Context, *cli.Command, error) {}

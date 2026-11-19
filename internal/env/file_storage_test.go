@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/project"
-	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/apigent/internal/project"
+	"github.com/bsreeram08/apigent/internal/storage"
 )
 
 func TestEnvStorageUsesFileStoreForProjectEnvironments(t *testing.T) {

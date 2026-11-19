@@ -1,10 +1,10 @@
 ---
 title: "Get started"
-description: "Install valetkey and run your first saved request in five minutes."
+description: "Install apigent and run your first saved request in five minutes."
 weight: 1
 ---
 
-Install valetkey, then follow the quickstart: save a request, run it, move its values into an environment, and group requests in a collection.
+Install apigent, then follow the quickstart: save a request, run it, move its values into an environment, and group requests in a collection.
 
 1. [Installation]({{< relref "/docs/installation" >}}) — Homebrew, install script, container image, binaries, or source.
 2. [Quickstart]({{< relref "/docs/quickstart" >}}) — save → run → environment → collection.

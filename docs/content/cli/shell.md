@@ -1,5 +1,5 @@
 ---
-title: "valetkey shell"
+title: "apigent shell"
 description: "Launch the typed interactive shell"
 ---
 
@@ -9,12 +9,12 @@ A line-oriented REPL for browsing, editing and sending requests, without fullscr
 ## Synopsis
 
 ```bash
-valetkey shell [--env <name>] [--request <name>] [--format <auto|json|table>]
+apigent shell [--env <name>] [--request <name>] [--format <auto|json|table>]
 ```
 
-`valetkey shell` is for humans. It refuses to start with `--no-input` or `--agent` (exit code 2): `valetkey shell is interactive and cannot run with --no-input or --agent; use valetkey run <name> instead`.
+`apigent shell` is for humans. It refuses to start with `--no-input` or `--agent` (exit code 2): `apigent shell is interactive and cannot run with --no-input or --agent; use apigent run <name> instead`.
 
-Every `send` is recorded like a `run`, so failures can be inspected with [`valetkey diag`]({{< relref "/cli/diag" >}}).
+Every `send` is recorded like a `run`, so failures can be inspected with [`apigent diag`]({{< relref "/cli/diag" >}}).
 
 ### Shell commands
 
@@ -53,27 +53,27 @@ Every `send` is recorded like a `run`, so failures can be inspected with [`valet
 ### Open a request against staging
 
 ```bash
-valetkey shell --env staging --request "create-order"
+apigent shell --env staging --request "create-order"
 ```
 
 ### Send with one-off values
 
 ```text
-valetkey> open create-order
-valetkey[create-order]> send amount=10 currency=USD
+apigent> open create-order
+apigent[create-order]> send amount=10 currency=USD
 ```
 
 ### Build and save a new request
 
 ```text
-valetkey> new health check
-valetkey[health check]> set url https://api.example.com/health
-valetkey[health check*]> send
-valetkey[health check*]> save
+apigent> new health check
+apigent[health check]> set url https://api.example.com/health
+apigent[health check*]> send
+apigent[health check*]> save
 ```
 
 ## Related commands
 
-- [`valetkey run`]({{< relref "/cli/run" >}}) - Non-interactive execution
-- [`valetkey list`]({{< relref "/cli/list" >}}) - List saved requests
-- [`valetkey env`]({{< relref "/cli/env" >}}) - Manage environments
+- [`apigent run`]({{< relref "/cli/run" >}}) - Non-interactive execution
+- [`apigent list`]({{< relref "/cli/list" >}}) - List saved requests
+- [`apigent env`]({{< relref "/cli/env" >}}) - Manage environments

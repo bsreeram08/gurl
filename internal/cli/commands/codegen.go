@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/bsreeram08/valetkey/internal/codegen"
-	"github.com/bsreeram08/valetkey/internal/redact"
-	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/apigent/internal/codegen"
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/internal/storage"
 	"github.com/urfave/cli/v3"
 )
 

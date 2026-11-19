@@ -1,4 +1,4 @@
-# 1. Rename gurl to valetkey and position it as an API tool for AI agents
+# 1. Rename gurl to apigent and position it as an API tool for AI agents
 
 Date: 2026-11-19
 Status: Accepted
@@ -20,18 +20,19 @@ No tool combined a git-friendly library of saved requests with an agent contract
 
 ## Decision
 
-1. **Name: valetkey.** A valet key lets someone drive your car without opening the trunk or glovebox, which is what an agent gets here. "Valet Key" is also a known cloud design pattern for scoped, limited access.
-   - We checked candidates against domains, USPTO marks (classes 9 and 42) and GitHub. For valetkey, valetkey.sh was available, no live USPTO mark was found, and there were only 11 small repos. That search is not a legal clearance.
-   - Rejected: reqd (shorter, but the meaning is unclear) and ushr (a live USHER mark for access-gateway software).
-   - Several dictionary words had their main domains taken: wicket (which also has live software marks), errand, tollgate, postern, lanyard and tessera.
+1. **Name: apigent** (API + agent). It says what the tool is: APIs, run by agents.
+   - The first choice, valetkey, was dropped before release. It is one letter from VALKEY, a registered class 9 software mark (the Linux Foundation's Redis fork) in the same developer-tools space, and "valet" is already Laravel Valet.
+   - We checked candidates against USPTO marks (classes 9 and 42) and GitHub. apigent had no live software mark (the nearest is AIGENT, customer-service software) and only a dozen small repos. That search is not a legal clearance.
+   - Rejected: apiary (Oracle's APIARY mark for API design software), agentapi (Coder's AgentAPI), apiai (Google's former API.AI), steward and writ (live software marks), courier, porter, envoy and vouch (existing API or proxy tools), reqd (meaning unclear) and ushr (a live USHER mark for access-gateway software).
+   - Domains don't constrain the name: the docs live on GitHub Pages or a subdomain we own.
    - Avoid "agent gateway", "agent vault" and "harness": other products already use them.
 2. **Positioning:** "Saved API requests your AI agents can run without ever seeing the keys." Insomnia/Postman for agents, local-first. The saved request is the unit of permission.
 3. **Staged roadmap.**
-   - Now: repositioning, the rename with a compatibility layer, and `valetkey mcp`.
+   - Now: repositioning, the rename with a compatibility layer, and `apigent mcp`.
    - Later: a local gateway or proxy mode, with per-environment host allowlists, approval prompts for chosen requests, rate limits, and an audit log built from execution records.
 4. **Compatibility.** The compatibility rules live in `internal/brand`, the only place that knows both names.
    - Every lookup prefers the new name and falls back to the old one: environment variables, data/config/plugin directories, the project directory, rc files, binary names and the script global.
-   - `valetkey migrate` renames the old locations atomically and never overwrites an existing destination.
+   - `apigent migrate` renames the old locations atomically and never overwrites an existing destination.
    - Release assets and the container image are published under both names during the transition.
    - Homebrew moves users with `formula_renames.json`.
 5. **Frozen identifiers.** Changing these would break data or bundles that already exist, so they keep their gurl names: the `gurlenc:v1:` secret prefix, the `gurl-share` bundle kind and SSH signature namespace, the `gurl` keychain service, and the `.gurl` export format.
@@ -39,8 +40,8 @@ No tool combined a git-friendly library of saved requests with an agent contract
 
 ## Consequences
 
-- The Go module path changes to `github.com/bsreeram08/valetkey`. Nothing imports it from outside, so only this repository is affected.
-- The maintainer must rename the GitHub repository to `bsreeram08/valetkey` **before the first valetkey release**. The new self-updater, installer, Homebrew job and image tags all point there. GitHub redirects the old repo URLs, but not the Pages docs site, so `bsreeram08.github.io/gurl` links will break.
-- After `valetkey migrate`, releases from before the rename no longer see the data. `valetkey` keeps reading the old locations until then, so migration is optional.
-- Docker users who mount `/home/gurl/...` must switch to `/home/valetkey/...`.
+- The Go module path changes to `github.com/bsreeram08/apigent`. Nothing imports it from outside, so only this repository is affected.
+- The maintainer must rename the GitHub repository to `bsreeram08/apigent` **before the first apigent release**. The new self-updater, installer, Homebrew job and image tags all point there. GitHub redirects the old repo URLs, but not the Pages docs site, so `bsreeram08.github.io/gurl` links will break.
+- After `apigent migrate`, releases from before the rename no longer see the data. `apigent` keeps reading the old locations until then, so migration is optional.
+- Docker users who mount `/home/gurl/...` must switch to `/home/apigent/...`.
 - The frozen identifiers will keep the old name visible in a few places, by design.

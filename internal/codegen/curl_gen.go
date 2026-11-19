@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // CurlGenerator generates curl commands

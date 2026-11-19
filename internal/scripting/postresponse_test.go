@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 func TestPostResponse_ReadStatus(t *testing.T) {

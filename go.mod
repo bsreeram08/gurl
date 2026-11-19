@@ -1,4 +1,4 @@
-module github.com/bsreeram08/valetkey
+module github.com/bsreeram08/apigent
 
 go 1.25.0
 

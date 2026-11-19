@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/secrets"
-	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/apigent/internal/secrets"
+	"github.com/bsreeram08/apigent/internal/storage"
 )
 
 // persistTestStore records what PersistVariables saves; the rest of Store

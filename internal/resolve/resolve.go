@@ -23,10 +23,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bsreeram08/valetkey/internal/auth"
-	"github.com/bsreeram08/valetkey/internal/client"
-	"github.com/bsreeram08/valetkey/internal/core/template"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/auth"
+	"github.com/bsreeram08/apigent/internal/client"
+	"github.com/bsreeram08/apigent/internal/core/template"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // Origin is the scope a variable's final value came from.

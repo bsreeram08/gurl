@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bsreeram08/valetkey/internal/config"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/config"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // slowHandler returns a handler that sleeps for a specified duration.

@@ -22,22 +22,22 @@ Dry runs are not recorded. Records store the method, URL, headers, body, variabl
 A failed `run` prints it on stderr:
 
 ```text
-request failed: HTTP 500 (id: 078b9896) — inspect with: valetkey diag 078b9896
+request failed: HTTP 500 (id: 078b9896) — inspect with: apigent diag 078b9896
 ```
 
 Other ways to find it:
 
 ```bash
-valetkey history "health"                 # newest first, with short ids and errors
-valetkey history "health" --json          # [{"id","short_id","request","time","ok","status",...}]
-valetkey timeline --since 1h              # across all requests
-valetkey run "health" --json | jq -r .short_id
+apigent history "health"                 # newest first, with short ids and errors
+apigent history "health" --json          # [{"id","short_id","request","time","ok","status",...}]
+apigent timeline --since 1h              # across all requests
+apigent run "health" --json | jq -r .short_id
 ```
 
 ## 2. Inspect it
 
 ```bash
-valetkey diag 078b9896        # any unique prefix works; or: valetkey diag --id 078b9896
+apigent diag 078b9896        # any unique prefix works; or: apigent diag --id 078b9896
 ```
 
 `diag` shows:
@@ -55,18 +55,18 @@ valetkey diag 078b9896        # any unique prefix works; or: valetkey diag --id 
 
 | Phase | Usually means | Next step |
 |-------|---------------|-----------|
-| `request_build` | A placeholder couldn't be filled | Check the problems list; `valetkey run <name> --dry-run` |
+| `request_build` | A placeholder couldn't be filled | Check the problems list; `apigent run <name> --dry-run` |
 | `http` | Connection error or timeout | Host, network, `--timeout` |
 | `status` | Non-2xx response | Response body in `diag`; compare with last success |
 | `assertion` | An `--assert` failed | Assertion messages in `diag` |
-| `extraction` | An `--extract` rule found nothing | Test the rule with [`valetkey extract`]({{< relref "/cli/extract" >}}) on the stored body |
+| `extraction` | An `--extract` rule found nothing | Test the rule with [`apigent extract`]({{< relref "/cli/extract" >}}) on the stored body |
 | `pre_request_script` / `post_response_script` | A script threw | Script error in `diag` |
 
 ## Compare the latest responses
 
 ```bash
-valetkey diff "health"                 # last two responses
-valetkey diff "health" --json          # structured RFC 6902 changes, or a text diff
+apigent diff "health"                 # last two responses
+apigent diff "health" --json          # structured RFC 6902 changes, or a text diff
 ```
 
 ## Secrets in records
@@ -75,4 +75,4 @@ Records never contain secrets: secret and credential-looking values are masked b
 
 ## See also
 
-- [`valetkey diag`]({{< relref "/cli/diag" >}}), [`valetkey history`]({{< relref "/cli/history" >}}), [`valetkey timeline`]({{< relref "/cli/timeline" >}}), [`valetkey diff`]({{< relref "/cli/diff" >}})
+- [`apigent diag`]({{< relref "/cli/diag" >}}), [`apigent history`]({{< relref "/cli/history" >}}), [`apigent timeline`]({{< relref "/cli/timeline" >}}), [`apigent diff`]({{< relref "/cli/diff" >}})

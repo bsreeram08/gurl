@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bsreeram08/valetkey/internal/formatter"
+	"github.com/bsreeram08/apigent/internal/formatter"
 )
 
 type Reporter interface {

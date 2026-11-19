@@ -15,21 +15,21 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
-    -ldflags="-s -w -X main.version=${VERSION} -X github.com/bsreeram08/valetkey/internal/cli/commands.CurrentVersion=${VERSION}" \
-    -o /out/valetkey ./cmd/valetkey
+    -ldflags="-s -w -X main.version=${VERSION} -X github.com/bsreeram08/apigent/internal/cli/commands.CurrentVersion=${VERSION}" \
+    -o /out/apigent ./cmd/apigent
 
 FROM alpine:3.22
 
 RUN apk add --no-cache ca-certificates \
-    && addgroup -S valetkey \
-    && adduser -S valetkey -G valetkey
+    && addgroup -S apigent \
+    && adduser -S apigent -G apigent
 
-COPY --from=build /out/valetkey /usr/local/bin/valetkey
+COPY --from=build /out/apigent /usr/local/bin/apigent
 # The pre-rename command name keeps working inside the image.
-RUN ln -s valetkey /usr/local/bin/gurl
+RUN ln -s apigent /usr/local/bin/gurl
 
-USER valetkey
+USER apigent
 WORKDIR /work
 
-ENTRYPOINT ["valetkey"]
+ENTRYPOINT ["apigent"]
 CMD ["--help"]

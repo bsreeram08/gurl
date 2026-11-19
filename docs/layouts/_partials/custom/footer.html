@@ -1,5 +1,5 @@
 {{- /* Versioned-docs selector. The docs workflow publishes each release under
-       /valetkey/<version>/ plus /valetkey/latest/, and lists versions in /valetkey/versions.json. */ -}}
+       /apigent/<version>/ plus /apigent/latest/, and lists versions in /apigent/versions.json. */ -}}
 {{ with site.Params.gurl_version }}
 <div class="gurl-version-selector" id="gurlVersionSelector" hidden>
   <label for="gurlVersionSelect">Version</label>
@@ -9,12 +9,12 @@
 <script>
 (function () {
   var current = {{ . | jsonify }};
-  var base = "https://bsreeram08.github.io/valetkey/";
+  var base = "https://bsreeram08.github.io/apigent/";
 
   // Path after the version prefix, so switching keeps the current page.
-  // e.g. /valetkey/v0.7.0/cli/run/ -> cli/run/
+  // e.g. /apigent/v0.7.0/cli/run/ -> cli/run/
   function currentRelPath() {
-    var m = window.location.pathname.match(/^\/valetkey\/[^/]+\/(.*)/);
+    var m = window.location.pathname.match(/^\/apigent\/[^/]+\/(.*)/);
     return m ? m[1] : "";
   }
 

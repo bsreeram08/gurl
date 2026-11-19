@@ -3,7 +3,7 @@ package commands
 import (
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/apigent/internal/env"
 	"github.com/urfave/cli/v3"
 )
 

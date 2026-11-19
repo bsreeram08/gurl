@@ -60,7 +60,7 @@ func TestDiscoverUsesEnvOverride(t *testing.T) {
 	}
 }
 
-func TestDiscoverFindsLegacyGurlDirAndPrefersValetkey(t *testing.T) {
+func TestDiscoverFindsLegacyGurlDirAndPrefersApigent(t *testing.T) {
 	t.Setenv(EnvProjectDir, "")
 	t.Setenv("GURL_PROJECT_DIR", "")
 	root := t.TempDir()
@@ -76,6 +76,6 @@ func TestDiscoverFindsLegacyGurlDirAndPrefersValetkey(t *testing.T) {
 	}
 	proj, err = Discover(root, "")
 	if err != nil || proj == nil || proj.Dir != filepath.Join(root, DirName) {
-		t.Fatalf("want .valetkey to win, got %+v, %v", proj, err)
+		t.Fatalf("want .apigent to win, got %+v, %v", proj, err)
 	}
 }

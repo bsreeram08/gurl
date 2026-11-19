@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/auth"
-	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/apigent/internal/auth"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 // --- Test Middleware Implementations ---

@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // PostmanImporter handles Postman collection v2.1 files
@@ -24,10 +24,10 @@ func (p *PostmanImporter) Extensions() []string {
 
 // PostmanCollection represents a Postman collection v2.1
 type PostmanCollection struct {
-	Info      PostmanInfo   `json:"info"`
-	Item      []PostmanItem `json:"item"`
-	Variable  []PostmanVar  `json:"variable,omitempty"`
-	Auth      *PostmanAuth  `json:"auth,omitempty"`
+	Info     PostmanInfo   `json:"info"`
+	Item     []PostmanItem `json:"item"`
+	Variable []PostmanVar  `json:"variable,omitempty"`
+	Auth     *PostmanAuth  `json:"auth,omitempty"`
 }
 
 // PostmanInfo contains collection metadata
@@ -39,44 +39,44 @@ type PostmanInfo struct {
 
 // PostmanItem represents a request or folder in a collection
 type PostmanItem struct {
-	Name        string          `json:"name,omitempty"`
-	Item        []PostmanItem   `json:"item,omitempty"` // Nested items (folders)
-	Request     *PostmanRequest  `json:"request,omitempty"`
-	Response    []any           `json:"response,omitempty"` // Ignore responses
+	Name     string          `json:"name,omitempty"`
+	Item     []PostmanItem   `json:"item,omitempty"` // Nested items (folders)
+	Request  *PostmanRequest `json:"request,omitempty"`
+	Response []any           `json:"response,omitempty"` // Ignore responses
 }
 
 // PostmanRequest represents a request in Postman
 type PostmanRequest struct {
-	Method   string              `json:"method,omitempty"`
-	Header   []PostmanHeader     `json:"header,omitempty"`
-	URL      interface{}         `json:"url,omitempty"` // Can be string or object
-	Body     *PostmanBody         `json:"body,omitempty"`
-	Auth     *PostmanAuth        `json:"auth,omitempty"`
+	Method string          `json:"method,omitempty"`
+	Header []PostmanHeader `json:"header,omitempty"`
+	URL    interface{}     `json:"url,omitempty"` // Can be string or object
+	Body   *PostmanBody    `json:"body,omitempty"`
+	Auth   *PostmanAuth    `json:"auth,omitempty"`
 }
 
 // PostmanHeader represents a header
 type PostmanHeader struct {
-	Key        string `json:"key"`
-	Value      string `json:"value"`
-	Disabled   bool   `json:"disabled,omitempty"`
+	Key         string `json:"key"`
+	Value       string `json:"value"`
+	Disabled    bool   `json:"disabled,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
 // PostmanBody represents the request body
 type PostmanBody struct {
-	Mode       string `json:"mode,omitempty"` // raw, formdata, urlencoded, binary, graphql
-	Raw        string `json:"raw,omitempty"`
+	Mode       string             `json:"mode,omitempty"` // raw, formdata, urlencoded, binary, graphql
+	Raw        string             `json:"raw,omitempty"`
 	FormData   []PostmanFormParam `json:"formdata,omitempty"`
 	URLEncoded []PostmanFormParam `json:"urlencoded,omitempty"`
-	GraphQL    *PostmanGraphQL   `json:"graphql,omitempty"`
+	GraphQL    *PostmanGraphQL    `json:"graphql,omitempty"`
 }
 
 // PostmanFormParam represents a form parameter
 type PostmanFormParam struct {
-	Key    string `json:"key"`
-	Value  string `json:"value"`
-	Type   string `json:"type,omitempty"`
-	Disabled bool `json:"disabled,omitempty"`
+	Key      string `json:"key"`
+	Value    string `json:"value"`
+	Type     string `json:"type,omitempty"`
+	Disabled bool   `json:"disabled,omitempty"`
 }
 
 // PostmanGraphQL represents GraphQL body
@@ -87,11 +87,11 @@ type PostmanGraphQL struct {
 
 // PostmanAuth represents authentication
 type PostmanAuth struct {
-	Type        string                 `json:"type,omitempty"`
-	Bearer      []PostmanAuthParam     `json:"bearer,omitempty"`
-	Basic       []PostmanAuthParam     `json:"basic,omitempty"`
-	APIKey      []PostmanAuthParam     `json:"apikey,omitempty"`
-	Digest      []PostmanAuthParam     `json:"digest,omitempty"`
+	Type   string             `json:"type,omitempty"`
+	Bearer []PostmanAuthParam `json:"bearer,omitempty"`
+	Basic  []PostmanAuthParam `json:"basic,omitempty"`
+	APIKey []PostmanAuthParam `json:"apikey,omitempty"`
+	Digest []PostmanAuthParam `json:"digest,omitempty"`
 }
 
 // PostmanAuthParam represents an auth parameter
@@ -108,9 +108,9 @@ type PostmanVar struct {
 
 // PostmanURL represents a URL object
 type PostmanURL struct {
-	Raw   string `json:"raw,omitempty"`
-	Host  []string `json:"host,omitempty"`
-	Path  []string `json:"path,omitempty"`
+	Raw   string              `json:"raw,omitempty"`
+	Host  []string            `json:"host,omitempty"`
+	Path  []string            `json:"path,omitempty"`
 	Query []PostmanQueryParam `json:"query,omitempty"`
 }
 

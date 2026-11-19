@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bsreeram08/valetkey/internal/project"
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/internal/project"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 func TestFileStoreSavesCollectionAndRequests(t *testing.T) {

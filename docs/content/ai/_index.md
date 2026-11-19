@@ -4,10 +4,10 @@ description: "Let an AI agent call your APIs by name, with JSON output and witho
 weight: 3
 ---
 
-An agent that calls an API directly has to hold the credential, which puts it in the model's context window, its logs and its history. With valetkey, the agent runs a saved request by name; valetkey fills in the secrets at send time and masks them in everything it prints.
+An agent that calls an API directly has to hold the credential, which puts it in the model's context window, its logs and its history. With apigent, the agent runs a saved request by name; apigent fills in the secrets at send time and masks them in everything it prints.
 
 ```bash
-agentvaletkey run "get-user" --env staging
+agentapigent run "get-user" --env staging
 ```
 
 ```json
@@ -16,32 +16,32 @@ agentvaletkey run "get-user" --env staging
 
 ## Start here
 
-1. **[Agent mode]({{< relref "/ai/agent-mode" >}})** — turn on JSON output, no prompts and strict masking with `--agent`, `VALETKEY_AGENT=1` or an `agentvaletkey` symlink. Run `valetkey docs` first.
+1. **[Agent mode]({{< relref "/ai/agent-mode" >}})** — turn on JSON output, no prompts and strict masking with `--agent`, `APIGENT_AGENT=1` or an `agentapigent` symlink. Run `apigent docs` first.
 2. **[JSON output]({{< relref "/ai/json-output" >}})** — the `run --json` object, dry runs, errors, history, diff and exit codes.
-3. **[MCP server]({{< relref "/ai/mcp" >}})**: serve saved requests as tools to Claude, Cursor or any MCP client with `valetkey mcp`.
-4. **[Memory safety]({{< relref "/ai/memory-safety" >}})** — why credentials must stay out of context windows, and what valetkey does about it.
+3. **[MCP server]({{< relref "/ai/mcp" >}})**: serve saved requests as tools to Claude, Cursor or any MCP client with `apigent mcp`.
+4. **[Memory safety]({{< relref "/ai/memory-safety" >}})** — why credentials must stay out of context windows, and what apigent does about it.
 
 ## Set up once, as a human
 
 The agent should only ever see names. Store secrets yourself, once:
 
 ```bash
-valetkey collection create "payments-api" --var BASE_URL=https://api.example.com --secret API_KEY=sk-live-...
-valetkey save "list-payments" '{{BASE_URL}}/payments' --collection payments-api \
+apigent collection create "payments-api" --var BASE_URL=https://api.example.com --secret API_KEY=sk-live-...
+apigent save "list-payments" '{{BASE_URL}}/payments' --collection payments-api \
   --auth bearer --auth-param token='{{API_KEY}}'
 
 # The agent only needs:
-agentvaletkey run "list-payments"
+agentapigent run "list-payments"
 ```
 
-For environments, read the secret from stdin so it never lands in shell history: `valetkey env set prod API_KEY=- --secret API_KEY`.
+For environments, read the secret from stdin so it never lands in shell history: `apigent env set prod API_KEY=- --secret API_KEY`.
 
 ## What the agent sees, and what it doesn't
 
-| | Direct curl | valetkey in agent mode |
+| | Direct curl | apigent in agent mode |
 |---|---|---|
 | API key in the command | yes | no — only a request name and environment name |
 | Credential headers in output | yes | `*****` |
 | Secrets echoed back in the response body | yes | `*****` |
 | Secrets in error messages | yes | `*****` |
-| Record of what happened | no | every run recorded with secrets masked; `valetkey diag <id>` |
+| Record of what happened | no | every run recorded with secrets masked; `apigent diag <id>` |

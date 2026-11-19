@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/apigent/internal/client"
 )
 
 type cachedToken struct {
@@ -26,8 +26,10 @@ type OAuth2Handler struct {
 	client *http.Client
 }
 
-func (h *OAuth2Handler) Name() string        { return "oauth2" }
-func (h *OAuth2Handler) Description() string { return "OAuth 2.0 token-based authentication (RFC 6749)" }
+func (h *OAuth2Handler) Name() string { return "oauth2" }
+func (h *OAuth2Handler) Description() string {
+	return "OAuth 2.0 token-based authentication (RFC 6749)"
+}
 
 func (h *OAuth2Handler) Params() []ParamDef {
 	return []ParamDef{

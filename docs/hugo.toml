@@ -1,6 +1,6 @@
-baseURL = 'https://bsreeram08.github.io/valetkey/'
+baseURL = 'https://bsreeram08.github.io/apigent/'
 locale = 'en-us'
-title = 'valetkey'
+title = 'apigent'
 theme = 'hextra'
 enableRobotsTXT = true
 
@@ -58,7 +58,7 @@ display = "hover"
 
 [params.editURL]
 enable = true
-base = "https://github.com/bsreeram08/valetkey/edit/master/docs/content"
+base = "https://github.com/bsreeram08/apigent/edit/master/docs/content"
 
 # Navbar. The sidebar is built from the content tree (sections ordered by
 # `weight` in each _index.md), because the home page has `type: docs`.
@@ -84,7 +84,7 @@ type = "search"
 [[menus.main]]
 name = "GitHub"
 weight = 4
-url = "https://github.com/bsreeram08/valetkey"
+url = "https://github.com/bsreeram08/apigent"
 [menus.main.params]
 icon = "github"
 

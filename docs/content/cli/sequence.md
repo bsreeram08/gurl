@@ -1,15 +1,15 @@
 ---
-title: "valetkey sequence"
+title: "apigent sequence"
 description: "Manage request execution order in a collection"
 ---
 
 
-Set the order in which `valetkey collection run` executes a collection's requests.
+Set the order in which `apigent collection run` executes a collection's requests.
 
 ## Synopsis
 
 ```bash
-valetkey sequence <subcommand> [arguments]
+apigent sequence <subcommand> [arguments]
 ```
 
 ## Subcommands
@@ -19,7 +19,7 @@ valetkey sequence <subcommand> [arguments]
 Set the execution order number for a request (`0` or higher; `0` means automatic).
 
 ```bash
-valetkey sequence set <request> <order>
+apigent sequence set <request> <order>
 ```
 
 None.
@@ -31,7 +31,7 @@ Aliases: `s`
 List a collection's requests in execution order.
 
 ```bash
-valetkey sequence list <collection>
+apigent sequence list <collection>
 ```
 
 None.
@@ -47,15 +47,15 @@ Aliases: `ls`, `l`
 ### Order a checkout flow
 
 ```bash
-valetkey sequence set create-order 1
-valetkey sequence set capture-payment 2
-valetkey sequence set get-receipt 3
+apigent sequence set create-order 1
+apigent sequence set capture-payment 2
+apigent sequence set get-receipt 3
 ```
 
 ### Check the order
 
 ```bash
-valetkey sequence list checkout-flow
+apigent sequence list checkout-flow
 ```
 
 ```text
@@ -71,10 +71,10 @@ valetkey sequence list checkout-flow
 ### Run the flow in that order
 
 ```bash
-valetkey collection run checkout-flow --env staging
+apigent collection run checkout-flow --env staging
 ```
 
 ## Related commands
 
-- [`valetkey collection`]({{< relref "/cli/collection" >}}) - `collection run`
+- [`apigent collection`]({{< relref "/cli/collection" >}}) - `collection run`
 - [Collections and data-driven runs]({{< relref "/guides/collection-runner" >}}) - Guide

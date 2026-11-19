@@ -8,7 +8,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/apigent/internal/env"
 )
 
 // EnvSwitcherMode represents the current mode of the env switcher

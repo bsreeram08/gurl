@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/bsreeram08/valetkey/pkg/types"
+	"github.com/bsreeram08/apigent/pkg/types"
 )
 
 // DefaultConfig returns the default configuration

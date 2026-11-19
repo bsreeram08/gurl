@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bsreeram08/apigent/internal/redact"
+	"github.com/bsreeram08/apigent/pkg/types"
 	"github.com/kballard/go-shellquote"
-	"github.com/bsreeram08/valetkey/internal/redact"
-	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 func TestShowCommandMasksSecrets(t *testing.T) {
