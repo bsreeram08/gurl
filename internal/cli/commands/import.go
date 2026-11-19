@@ -42,6 +42,15 @@ func ImportCommand(db storage.DB) *cli.Command {
 				Name:  "passphrase",
 				Usage: "Passphrase for decrypting native collection exports",
 			},
+			&cli.StringFlag{
+				Name:  "base-url",
+				Usage: "OpenAPI: use this instead of the spec's server URL, e.g. '{{BASE_URL}}' to switch hosts per environment",
+			},
+			&cli.StringFlag{
+				Name:    "collection",
+				Aliases: []string{"c"},
+				Usage:   "Put the imported requests in this collection (created if missing; in a .gurl/ project it is created there)",
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			// List supported formats
@@ -82,7 +91,10 @@ func ImportCommand(db storage.DB) *cli.Command {
 			}
 
 			// Import requests
-			requests, err := importers.ImportAs(path, c.String("format"))
+			requests, err := importers.ImportWithOptions(path, importers.Options{
+				Format:  c.String("format"),
+				BaseURL: c.String("base-url"),
+			})
 			if err != nil {
 				return fmt.Errorf("import failed: %w", err)
 			}
@@ -90,6 +102,15 @@ func ImportCommand(db storage.DB) *cli.Command {
 			if len(requests) == 0 {
 				fmt.Println("No requests found to import")
 				return nil
+			}
+
+			if name := strings.TrimSpace(c.String("collection")); name != "" {
+				if err := ensureImportCollection(db, name); err != nil {
+					return err
+				}
+				for _, req := range requests {
+					req.Collection = name
+				}
 			}
 
 			// Save imported requests
@@ -118,6 +139,21 @@ func ImportCommand(db storage.DB) *cli.Command {
 			return nil
 		},
 	}
+}
+
+// ensureImportCollection creates the target collection of an import when it
+// does not exist yet. Inside a .gurl/ project a new collection is created in
+// the project, so the imported requests are written there as files.
+func ensureImportCollection(db storage.DB, name string) error {
+	if existing, err := db.GetCollectionByName(name); err == nil && existing != nil {
+		return nil
+	} else if storage.IsCollectionLocked(err) {
+		return err
+	}
+	if err := db.SaveCollection(types.NewCollection(name)); err != nil {
+		return fmt.Errorf("failed to create collection %q: %w", name, err)
+	}
+	return nil
 }
 
 type collectionExportProbe struct {

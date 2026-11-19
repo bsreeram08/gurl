@@ -193,3 +193,44 @@ func TestImportCommandKeepsNativeRequestExportPath(t *testing.T) {
 		t.Fatalf("expected native request export to import via request importer, got %+v", req)
 	}
 }
+
+func TestImportOpenAPIIntoCollectionWithBaseURL(t *testing.T) {
+	db := newMockDB()
+	path := filepath.Join(t.TempDir(), "spec.json")
+	spec := `{"openapi":"3.1.0","info":{"title":"Pets"},"servers":[{"url":"https://prod.example.com"}],` +
+		`"paths":{"/pets/{petId}":{"get":{"operationId":"getPet"}}}}`
+	if err := os.WriteFile(path, []byte(spec), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := ImportCommand(db)
+	if err := cmd.Run(context.Background(), []string{"import", "--collection", "pets-api", "--base-url", "{{BASE_URL}}", path}); err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+
+	req, err := db.GetRequestByName("getPet")
+	if err != nil {
+		t.Fatalf("imported request not found: %v", err)
+	}
+	if req.URL != "{{BASE_URL}}/pets/{{petId}}" {
+		t.Errorf("URL = %q, want the base URL placeholder instead of the spec server", req.URL)
+	}
+	if req.Collection != "pets-api" {
+		t.Errorf("collection = %q, want pets-api", req.Collection)
+	}
+	if _, err := db.GetCollectionByName("pets-api"); err != nil {
+		t.Errorf("expected the collection to be created: %v", err)
+	}
+}
+
+func TestImportBaseURLRejectsNonOpenAPI(t *testing.T) {
+	db := newMockDB()
+	path := filepath.Join(t.TempDir(), "postman.json")
+	if err := os.WriteFile(path, []byte(`{"info":{"name":"x"},"item":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := ImportCommand(db)
+	if err := cmd.Run(context.Background(), []string{"import", "--base-url", "{{BASE_URL}}", path}); err == nil {
+		t.Fatal("expected --base-url to be refused for a Postman collection")
+	}
+}
