@@ -279,7 +279,21 @@ func (s *FileStore) SaveRequest(req *types.SavedRequest) error {
 
 	now := time.Now().Unix()
 	if req.ID == "" {
-		req.ID = uuid.New().String()
+		// Like the LevelDB store: a save without an ID replaces the request
+		// of the same name in this collection instead of adding a second one.
+		records, err := s.readRequestRecordsInDir(collectionDir)
+		if err != nil {
+			return err
+		}
+		for _, record := range records {
+			if record.request.Name == req.Name && record.request.ID != "" {
+				req.ID = record.request.ID
+				break
+			}
+		}
+		if req.ID == "" {
+			req.ID = uuid.New().String()
+		}
 	}
 	existing, oldPath, err := s.findRequestByID(req.ID)
 	if err != nil && !errors.Is(err, errFileRequestNotFound) {

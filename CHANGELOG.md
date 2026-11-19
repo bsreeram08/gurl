@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- In a `.gurl/` project, saving a request without an ID (as `import --force` does) replaces the request of the same name in its collection, as the database store does. Before, each re-import wrote a second file per request, so a collection imported twice listed every request twice.
+
 ## [v0.8.1] - 2026-10-26
 
 ### Fixed
