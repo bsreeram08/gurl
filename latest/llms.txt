@@ -80,5 +80,5 @@ Synopsis apigent …
 
 
 ---
-Generated on 2026-11-19 08:53:54 UTC
+Generated on 2026-11-19 08:58:10 UTC
 Site: https://bsreeram08.github.io/apigent/latest/
