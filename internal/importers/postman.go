@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 // PostmanImporter handles Postman collection v2.1 files

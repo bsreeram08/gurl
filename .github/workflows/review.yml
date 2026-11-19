@@ -87,7 +87,7 @@ jobs:
           fi
 
           # --- Build ---
-          if ! BUILD_OUTPUT=$(go build -o /dev/null ./cmd/gurl 2>&1); then
+          if ! BUILD_OUTPUT=$(go build -o /dev/null ./cmd/valetkey 2>&1); then
             ISSUES_FOUND=true
             add "❌ **Build Failed:**"
             fence "$BUILD_OUTPUT"

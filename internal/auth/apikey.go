@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/valetkey/internal/client"
 )
 
 type APIKeyHandler struct{}

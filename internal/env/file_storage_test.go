@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/project"
-	"github.com/sreeram/gurl/internal/storage"
+	"github.com/bsreeram08/valetkey/internal/project"
+	"github.com/bsreeram08/valetkey/internal/storage"
 )
 
 func TestEnvStorageUsesFileStoreForProjectEnvironments(t *testing.T) {

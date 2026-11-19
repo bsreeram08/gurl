@@ -1,7 +1,7 @@
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS := -X main.version=$(VERSION) -X 'github.com/sreeram/gurl/internal/cli/commands.CurrentVersion=$(VERSION)'
+LDFLAGS := -X main.version=$(VERSION) -X 'github.com/bsreeram08/valetkey/internal/cli/commands.CurrentVersion=$(VERSION)'
 BINARY := gurl
-CMD := ./cmd/gurl
+CMD := ./cmd/valetkey
 
 .PHONY: build install clean test test-race
 

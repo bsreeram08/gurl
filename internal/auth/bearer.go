@@ -1,6 +1,6 @@
 package auth
 
-import "github.com/sreeram/gurl/internal/client"
+import "github.com/bsreeram08/valetkey/internal/client"
 
 type BearerHandler struct{}
 

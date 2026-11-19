@@ -13,11 +13,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/internal/storage/memstore"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/valetkey/internal/runner"
+	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/valetkey/internal/storage/memstore"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 var failureNotice = regexp.MustCompile(`request failed: (.+) \(id: ([0-9a-f]{8})\) — inspect with: gurl diag ([0-9a-f]{8})`)

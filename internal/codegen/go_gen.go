@@ -9,7 +9,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 // GoGenerator generates Go net/http code

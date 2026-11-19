@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/extract"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/extract"
+	"github.com/bsreeram08/valetkey/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 

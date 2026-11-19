@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/valetkey/internal/client"
 )
 
 func TestAPIKeyHandler_Name(t *testing.T) {

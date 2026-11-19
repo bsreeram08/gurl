@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/redact"
+	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/valetkey/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 

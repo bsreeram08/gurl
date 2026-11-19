@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sreeram/gurl/internal/project"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/project"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 const collectionFileName = "collection.json"

@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 var (

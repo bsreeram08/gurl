@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
-	"github.com/sreeram/gurl/internal/storage"
+	"github.com/bsreeram08/valetkey/internal/storage"
 )
 
 // RenameCommand creates the rename command

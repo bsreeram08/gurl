@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 // BrunoImporter handles Bruno .bru files

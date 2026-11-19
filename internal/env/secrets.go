@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/sreeram/gurl/internal/secrets"
+	"github.com/bsreeram08/valetkey/internal/secrets"
 )
 
 const keyPathDefault = "~/.local/share/gurl/.secret-key"

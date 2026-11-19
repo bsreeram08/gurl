@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/dop251/goja"
-	"github.com/sreeram/gurl/internal/env"
+	"github.com/bsreeram08/valetkey/internal/env"
 )
 
 type EngineOption func(*Engine)

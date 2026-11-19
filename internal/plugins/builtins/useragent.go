@@ -3,8 +3,8 @@ package builtins
 import (
 	"strings"
 
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/plugins"
+	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/valetkey/internal/plugins"
 )
 
 // UserAgentMiddleware sets a default User-Agent header if none is provided.

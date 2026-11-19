@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/valetkey/internal/client"
 )
 
 type cachedToken struct {

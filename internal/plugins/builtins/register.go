@@ -1,6 +1,6 @@
 package builtins
 
-import "github.com/sreeram/gurl/internal/plugins"
+import "github.com/bsreeram08/valetkey/internal/plugins"
 
 // RegisterBuiltins registers all built-in plugins with the given registry.
 // Order matters for middleware: timing first, user-agent second, retry third, logging last.

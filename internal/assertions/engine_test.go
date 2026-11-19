@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 func newTestResponse(statusCode int, body string, headers http.Header, duration time.Duration, size int64) *client.Response {

@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/resolve"
-	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/valetkey/internal/resolve"
+	"github.com/bsreeram08/valetkey/internal/runner"
+	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/valetkey/pkg/types"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )

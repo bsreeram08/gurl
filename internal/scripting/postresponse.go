@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/dop251/goja"
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/valetkey/internal/client"
 )
 
 type PostResponseResult struct {

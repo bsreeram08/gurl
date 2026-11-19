@@ -68,7 +68,7 @@ Requires Go 1.25 or newer.
 
 ```bash
 git clone https://github.com/bsreeram08/gurl.git && cd gurl
-go build -o gurl ./cmd/gurl
+go build -o gurl ./cmd/valetkey
 ```
 
 ### Upgrade

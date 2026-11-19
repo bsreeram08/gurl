@@ -1,8 +1,8 @@
 package plugins
 
 import (
-	"github.com/sreeram/gurl/internal/auth"
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/valetkey/internal/auth"
+	"github.com/bsreeram08/valetkey/internal/client"
 )
 
 // RequestContext holds the request and environment before a plugin's BeforeRequest runs.

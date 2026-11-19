@@ -6,10 +6,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/formatter"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/valetkey/internal/formatter"
+	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/valetkey/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 

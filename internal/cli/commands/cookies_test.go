@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/cookies"
-	"github.com/sreeram/gurl/internal/redact"
+	"github.com/bsreeram08/valetkey/internal/cookies"
+	"github.com/bsreeram08/valetkey/internal/redact"
 	"github.com/urfave/cli/v3"
 )
 

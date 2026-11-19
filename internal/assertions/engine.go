@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/formatter"
+	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/valetkey/internal/formatter"
 )
 
 // Assertion represents a declarative assertion to evaluate against a response.

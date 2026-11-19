@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	authpkg "github.com/sreeram/gurl/internal/auth"
+	authpkg "github.com/bsreeram08/valetkey/internal/auth"
 	"github.com/urfave/cli/v3"
 )
 

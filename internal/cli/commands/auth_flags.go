@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	authpkg "github.com/sreeram/gurl/internal/auth"
-	"github.com/sreeram/gurl/pkg/types"
+	authpkg "github.com/bsreeram08/valetkey/internal/auth"
+	"github.com/bsreeram08/valetkey/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 

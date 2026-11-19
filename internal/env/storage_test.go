@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/secrets"
-	"github.com/sreeram/gurl/internal/storage"
+	"github.com/bsreeram08/valetkey/internal/secrets"
+	"github.com/bsreeram08/valetkey/internal/storage"
 )
 
 // persistTestStore records what PersistVariables saves; the rest of Store

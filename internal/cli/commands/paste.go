@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/storage"
+	"github.com/bsreeram08/valetkey/internal/redact"
+	"github.com/bsreeram08/valetkey/internal/storage"
 	"github.com/urfave/cli/v3"
 )
 

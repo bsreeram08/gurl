@@ -10,9 +10,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/resolve"
+	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/valetkey/internal/redact"
+	"github.com/bsreeram08/valetkey/internal/resolve"
 	"github.com/urfave/cli/v3"
 )
 

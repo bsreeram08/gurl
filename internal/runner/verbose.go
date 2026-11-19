@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/valetkey/internal/client"
 )
 
 // verboseBodyLimit caps how much of a body is printed, so one large response

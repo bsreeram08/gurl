@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 func TestCollectionLockLifecycle(t *testing.T) {

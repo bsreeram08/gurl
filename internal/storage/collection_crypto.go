@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sreeram/gurl/internal/secrets"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/secrets"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 const (

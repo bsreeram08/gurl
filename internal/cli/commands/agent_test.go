@@ -12,12 +12,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/resolve"
-	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/internal/storage/memstore"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/valetkey/internal/resolve"
+	"github.com/bsreeram08/valetkey/internal/runner"
+	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/valetkey/internal/storage/memstore"
+	"github.com/bsreeram08/valetkey/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 
@@ -638,7 +638,7 @@ func TestNoInputPassphraseIsActionable(t *testing.T) {
 	}
 }
 
-// agentRoot is a gurl root with the global flags, as in cmd/gurl.
+// agentRoot is a gurl root with the global flags, as in cmd/valetkey.
 func agentRoot(db storage.DB, envs env.Store) *cli.Command {
 	root := &cli.Command{Name: "gurl", Flags: GlobalFlags(), Commands: []*cli.Command{RunCommand(db, envs), ListCommand(db), EnvCommand(envs), ShowCommand(db)}}
 	root.ExitErrHandler = func(context.Context, *cli.Command, error) {}

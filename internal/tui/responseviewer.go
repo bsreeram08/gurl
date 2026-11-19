@@ -15,10 +15,10 @@ import (
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/formatter"
-	"github.com/sreeram/gurl/internal/protocols/sse"
-	"github.com/sreeram/gurl/internal/protocols/websocket"
+	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/valetkey/internal/formatter"
+	"github.com/bsreeram08/valetkey/internal/protocols/sse"
+	"github.com/bsreeram08/valetkey/internal/protocols/websocket"
 )
 
 // ResponseTab represents the active tab in the response viewer

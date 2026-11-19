@@ -12,7 +12,7 @@ Thanks for helping. This guide covers building, testing, how the code fits toget
 
 ```bash
 git clone https://github.com/bsreeram08/gurl.git && cd gurl
-go build -o gurl ./cmd/gurl         # dev build; `make build` stamps the version from git
+go build -o gurl ./cmd/valetkey         # dev build; `make build` stamps the version from git
 ./gurl --help
 
 go test ./...                        # what CI runs (also: make test)
@@ -26,7 +26,7 @@ To try a change without touching your real data, point gurl at a scratch databas
 ## Project layout
 
 ```text
-cmd/gurl/               entry point: wires storage, env store and plugins into the command tree (newApp)
+cmd/valetkey/               entry point: wires storage, env store and plugins into the command tree (newApp)
 internal/cli/commands/  one file per command (run.go, env.go, diag.go, docs.go, agent.go, ...)
 internal/resolve/       request resolution: saved request + scopes -> exact request, or resolution problems
 internal/redact/        masking rules for everything gurl prints or stores
@@ -54,12 +54,12 @@ scripts/                install and release scripts
 
 ## Testing conventions
 
-- Test through public entry points: the command constructors (`commands.RunCommand(db, envStore)`, ...) or `newApp` in `cmd/gurl`.
+- Test through public entry points: the command constructors (`commands.RunCommand(db, envStore)`, ...) or `newApp` in `cmd/valetkey`.
 - Use the in-memory fakes, not the real database: `memstore.New()` for `storage.DB` and `env.NewMemoryStore()` for `env.Store`.
-- Capture output with the existing helpers instead of writing new ones, for example `captureStdout` / `captureStreams` in `internal/cli/commands` and `runWithArgs` in `cmd/gurl`.
+- Capture output with the existing helpers instead of writing new ones, for example `captureStdout` / `captureStreams` in `internal/cli/commands` and `runWithArgs` in `cmd/valetkey`.
 - Use `httptest.NewServer` for HTTP. Tests must not reach the network.
 - Fixtures contain no real secrets: use obvious fakes like `sk-test-123`. When you test masking, assert that the fake value does **not** appear in the output.
-- `gurl docs --json` must stay under 32KB, and every visible command must appear in it (`cmd/gurl/agent_test.go`).
+- `gurl docs --json` must stay under 32KB, and every visible command must appear in it (`cmd/valetkey/agent_test.go`).
 
 ## Security rules
 

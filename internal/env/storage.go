@@ -6,9 +6,9 @@ import (
 	"sort"
 
 	"github.com/google/uuid"
-	"github.com/sreeram/gurl/internal/project"
-	"github.com/sreeram/gurl/internal/secrets"
-	"github.com/sreeram/gurl/internal/storage"
+	"github.com/bsreeram08/valetkey/internal/project"
+	"github.com/bsreeram08/valetkey/internal/secrets"
+	"github.com/bsreeram08/valetkey/internal/storage"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 

@@ -120,7 +120,7 @@ On startup, Gurl discovers shared objects at `~/.config/gurl/plugins/<name>/<nam
 // plugin.go
 package main
 
-import "github.com/sreeram/gurl/..."
+import "github.com/bsreeram08/valetkey/..."
 
 var Plugin = MyMiddlewarePlugin{}
 ```
@@ -144,8 +144,8 @@ Minimal middleware plugin:
 package main
 
 import (
-    "github.com/sreeram/gurl/internal/client"
-    "github.com/sreeram/gurl/internal/plugins"
+    "github.com/bsreeram08/valetkey/internal/client"
+    "github.com/bsreeram08/valetkey/internal/plugins"
 )
 
 type HeaderPlugin struct{}

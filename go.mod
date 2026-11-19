@@ -1,4 +1,4 @@
-module github.com/sreeram/gurl
+module github.com/bsreeram08/valetkey
 
 go 1.25.0
 

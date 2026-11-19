@@ -85,7 +85,7 @@ Requires Go 1.25.0+.
 ```bash
 git clone https://github.com/bsreeram08/gurl.git
 cd gurl
-go build -o gurl ./cmd/gurl
+go build -o gurl ./cmd/valetkey
 sudo mv gurl /usr/local/bin/gurl
 ```
 
@@ -147,7 +147,7 @@ json_pretty = true
 | Homebrew | `brew upgrade gurl` |
 | Install script or pre-built binary | `gurl update` |
 | Container image | `docker pull ghcr.io/bsreeram08/gurl:latest` (or bump your pinned tag) |
-| Source | `git pull && go build -o gurl ./cmd/gurl` |
+| Source | `git pull && go build -o gurl ./cmd/valetkey` |
 
 `gurl update` checks the latest release metadata and replaces the binary with the matching macOS or Linux asset for your CPU architecture. See [`gurl update`]({{< relref "/cli/update" >}}).
 

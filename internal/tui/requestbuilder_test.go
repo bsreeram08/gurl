@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/resolve"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/resolve"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 func TestRequestBuilderCollectVarAwareRequestAppliesAPIKeyQueryAuth(t *testing.T) {

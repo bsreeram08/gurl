@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/redact"
+	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/valetkey/internal/redact"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )

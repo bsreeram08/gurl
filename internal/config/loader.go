@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/pelletier/go-toml/v2"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 // Loader handles loading configuration from TOML files

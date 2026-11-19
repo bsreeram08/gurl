@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/valetkey/internal/client"
 )
 
 // TestAWSv4Handler tests the AWS Signature Version 4 handler.

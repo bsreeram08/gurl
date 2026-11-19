@@ -2,14 +2,14 @@
 
 This guide is for AI coding agents working **on** the gurl repository. If you want to **use** gurl, run `gurl docs` instead.
 
-gurl is a Go CLI: a terminal library of named HTTP requests, run against environments and collections. Module: `github.com/sreeram/gurl`. CLI framework: `urfave/cli/v3`. Storage: goleveldb plus optional `.gurl/` project files.
+gurl is a Go CLI: a terminal library of named HTTP requests, run against environments and collections. Module: `github.com/bsreeram08/valetkey`. CLI framework: `urfave/cli/v3`. Storage: goleveldb plus optional `.gurl/` project files.
 
 Read [CONTEXT.md](CONTEXT.md) first. It defines the terms used everywhere: saved request, placeholder, scope, variable origin, request resolution, resolution problem, alias, dry run, persist. Use those words, not "template" or "substitution".
 
 ## Commands
 
 ```bash
-go build -o gurl ./cmd/gurl
+go build -o gurl ./cmd/valetkey
 go test ./...
 go test -race ./internal/<pkg>/...      # on every package you touched
 go vet ./...
@@ -20,7 +20,7 @@ GURL_DB_PATH=/tmp/g.db GURL_COOKIE_DB_PATH=/tmp/gc.db ./gurl ...   # manual runs
 
 | Path | Owns |
 |------|------|
-| `cmd/gurl/main.go` | `newApp`: the command tree; agent-mode detection (`agentgurl`) |
+| `cmd/valetkey/main.go` | `newApp`: the command tree; agent-mode detection (`agentgurl`) |
 | `internal/cli/commands/` | One file per command; `agent.go` (JSON / no-input / reveal rules); `docs.go`, `docs_sections.go` (`gurl docs`) |
 | `internal/resolve/` | Request resolution, the only place placeholders are filled |
 | `internal/redact/` | Masking rules for everything printed or stored |
@@ -41,10 +41,10 @@ GURL_DB_PATH=/tmp/g.db GURL_COOKIE_DB_PATH=/tmp/gc.db ./gurl ...   # manual runs
 ## Adding a command
 
 1. Create `internal/cli/commands/<name>.go` with a `func <Name>Command(db storage.DB, ...) *cli.Command` constructor. Give it `Usage`, `ArgsUsage` if it takes arguments, and a clear `Usage` on every flag.
-2. Register it in `newApp` in `cmd/gurl/main.go`.
+2. Register it in `newApp` in `cmd/valetkey/main.go`.
 3. If it prints data, add `--json` (`-j`) and honor `jsonOutput(c)`. If it can prompt, gate the prompt with `canPrompt`. If it can show secrets, call `rejectReveal`.
 4. `gurl docs` is generated from the command tree, so a visible command and its flags appear automatically. Only add to `docs_sections.go` for a concept the flags can't describe, and keep it short.
-5. Keep `gurl docs --json` under the **32KB budget**. `TestDocsJSONListsEveryCommandCompactly` in `cmd/gurl/agent_test.go` enforces it and checks that every visible command is listed. Hidden commands (`Hidden: true`) are left out.
+5. Keep `gurl docs --json` under the **32KB budget**. `TestDocsJSONListsEveryCommandCompactly` in `cmd/valetkey/agent_test.go` enforces it and checks that every visible command is listed. Hidden commands (`Hidden: true`) are left out.
 6. Add tests, an entry under `## [Unreleased]` in `CHANGELOG.md`, and README updates if users will notice the change.
 
 ## Commits

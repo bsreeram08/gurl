@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sreeram/gurl/internal/client"
+	"github.com/bsreeram08/valetkey/internal/client"
 )
 
 func TestPostResponse_ReadStatus(t *testing.T) {

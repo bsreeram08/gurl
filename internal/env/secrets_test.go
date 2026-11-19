@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/secrets"
+	"github.com/bsreeram08/valetkey/internal/secrets"
 )
 
 func TestEncryptDecryptRoundTrip(t *testing.T) {

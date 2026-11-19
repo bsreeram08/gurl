@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sreeram/gurl/internal/project"
+	"github.com/bsreeram08/valetkey/internal/project"
 	"github.com/urfave/cli/v3"
 )
 

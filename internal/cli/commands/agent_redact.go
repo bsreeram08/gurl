@@ -1,11 +1,11 @@
 package commands
 
 import (
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/valetkey/internal/redact"
+	"github.com/bsreeram08/valetkey/internal/runner"
+	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 // currentSecrets returns the secret values that may appear in rec's

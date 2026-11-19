@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 func TestCollectionRunRecordsEveryRequest(t *testing.T) {

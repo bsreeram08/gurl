@@ -15,8 +15,8 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
-    -ldflags="-s -w -X main.version=${VERSION} -X github.com/sreeram/gurl/internal/cli/commands.CurrentVersion=${VERSION}" \
-    -o /out/gurl ./cmd/gurl
+    -ldflags="-s -w -X main.version=${VERSION} -X github.com/bsreeram08/valetkey/internal/cli/commands.CurrentVersion=${VERSION}" \
+    -o /out/gurl ./cmd/valetkey
 
 FROM alpine:3.22
 

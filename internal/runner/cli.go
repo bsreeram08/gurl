@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/reporters"
-	"github.com/sreeram/gurl/internal/storage"
+	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/valetkey/internal/reporters"
+	"github.com/bsreeram08/valetkey/internal/storage"
 	"github.com/urfave/cli/v3"
 )
 

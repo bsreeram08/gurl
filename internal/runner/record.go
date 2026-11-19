@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/internal/assertions"
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/resolve"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/assertions"
+	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/valetkey/internal/redact"
+	"github.com/bsreeram08/valetkey/internal/resolve"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 // Attempt is one attempt to run a saved request, as recorded in its

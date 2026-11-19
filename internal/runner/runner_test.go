@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sreeram/gurl/internal/assertions"
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/project"
-	"github.com/sreeram/gurl/internal/storage"
-	"github.com/sreeram/gurl/internal/storage/memstore"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/assertions"
+	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/valetkey/internal/project"
+	"github.com/bsreeram08/valetkey/internal/storage"
+	"github.com/bsreeram08/valetkey/internal/storage/memstore"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 // mockDB keeps requests and history in maps tests inspect directly;

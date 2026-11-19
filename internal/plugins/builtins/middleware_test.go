@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sreeram/gurl/internal/client"
-	"github.com/sreeram/gurl/internal/plugins"
+	"github.com/bsreeram08/valetkey/internal/client"
+	"github.com/bsreeram08/valetkey/internal/plugins"
 )
 
 // newTestRequestContext creates a RequestContext with a GET request for testing.

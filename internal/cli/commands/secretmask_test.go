@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/kballard/go-shellquote"
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/redact"
+	"github.com/bsreeram08/valetkey/pkg/types"
 )
 
 func TestShowCommandMasksSecrets(t *testing.T) {

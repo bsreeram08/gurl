@@ -60,7 +60,7 @@ jobs:
             *) os_name="${{ matrix.os }}" ;;
           esac
           name="gurl-${os_name}-${{ matrix.arch }}${ext}"
-          CGO_ENABLED=0 GOOS="$os_name" GOARCH="${{ matrix.arch }}" go build -ldflags="-s -w -X main.version=${VERSION} -X github.com/sreeram/gurl/internal/cli/commands.CurrentVersion=${VERSION}" -o "$name" ./cmd/gurl
+          CGO_ENABLED=0 GOOS="$os_name" GOARCH="${{ matrix.arch }}" go build -ldflags="-s -w -X main.version=${VERSION} -X github.com/bsreeram08/valetkey/internal/cli/commands.CurrentVersion=${VERSION}" -o "$name" ./cmd/valetkey
 
       - name: Checksum
         run: |

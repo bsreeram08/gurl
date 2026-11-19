@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sreeram/gurl/internal/formatter"
+	"github.com/bsreeram08/valetkey/internal/formatter"
 )
 
 type Reporter interface {

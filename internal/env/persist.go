@@ -3,7 +3,7 @@ package env
 import (
 	"fmt"
 
-	"github.com/sreeram/gurl/internal/secrets"
+	"github.com/bsreeram08/valetkey/internal/secrets"
 )
 
 func ResolvePersistEnvironmentName(store Store, explicitName string) (string, error) {

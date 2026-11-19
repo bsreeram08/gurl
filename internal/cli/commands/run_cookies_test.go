@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sreeram/gurl/internal/cookies"
-	"github.com/sreeram/gurl/internal/env"
-	"github.com/sreeram/gurl/internal/redact"
-	"github.com/sreeram/gurl/internal/runner"
-	"github.com/sreeram/gurl/pkg/types"
+	"github.com/bsreeram08/valetkey/internal/cookies"
+	"github.com/bsreeram08/valetkey/internal/env"
+	"github.com/bsreeram08/valetkey/internal/redact"
+	"github.com/bsreeram08/valetkey/internal/runner"
+	"github.com/bsreeram08/valetkey/pkg/types"
 	"github.com/urfave/cli/v3"
 )
 

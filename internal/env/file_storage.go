@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sreeram/gurl/internal/project"
-	"github.com/sreeram/gurl/internal/secrets"
+	"github.com/bsreeram08/valetkey/internal/project"
+	"github.com/bsreeram08/valetkey/internal/secrets"
 )
 
 const activeEnvFileName = ".active-env"
