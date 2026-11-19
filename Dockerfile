@@ -16,18 +16,20 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
     -ldflags="-s -w -X main.version=${VERSION} -X github.com/bsreeram08/valetkey/internal/cli/commands.CurrentVersion=${VERSION}" \
-    -o /out/gurl ./cmd/valetkey
+    -o /out/valetkey ./cmd/valetkey
 
 FROM alpine:3.22
 
 RUN apk add --no-cache ca-certificates \
-    && addgroup -S gurl \
-    && adduser -S gurl -G gurl
+    && addgroup -S valetkey \
+    && adduser -S valetkey -G valetkey
 
-USER gurl
+COPY --from=build /out/valetkey /usr/local/bin/valetkey
+# The pre-rename command name keeps working inside the image.
+RUN ln -s valetkey /usr/local/bin/gurl
+
+USER valetkey
 WORKDIR /work
 
-COPY --from=build /out/gurl /usr/local/bin/gurl
-
-ENTRYPOINT ["gurl"]
+ENTRYPOINT ["valetkey"]
 CMD ["--help"]

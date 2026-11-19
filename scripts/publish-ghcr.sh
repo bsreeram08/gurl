@@ -2,7 +2,7 @@
 set -euo pipefail
 
 VERSION=${1:-}
-IMAGE=${IMAGE:-ghcr.io/bsreeram08/gurl}
+IMAGE=${IMAGE:-ghcr.io/bsreeram08/valetkey}
 PLATFORMS=${PLATFORMS:-linux/amd64,linux/arm64}
 
 if [[ -z "$VERSION" ]]; then
@@ -29,7 +29,7 @@ echo "Publishing ${IMAGE}:${VERSION} and ${IMAGE}:latest for ${PLATFORMS}"
 docker buildx build \
     --platform "$PLATFORMS" \
     --build-arg "VERSION=$VERSION" \
-    --label "org.opencontainers.image.source=https://github.com/bsreeram08/gurl" \
+    --label "org.opencontainers.image.source=https://github.com/bsreeram08/valetkey" \
     --label "org.opencontainers.image.version=$VERSION" \
     --label "org.opencontainers.image.description=Smart curl saver and API companion for the terminal" \
     --tag "${IMAGE}:${VERSION}" \

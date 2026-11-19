@@ -1,6 +1,6 @@
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -X main.version=$(VERSION) -X 'github.com/bsreeram08/valetkey/internal/cli/commands.CurrentVersion=$(VERSION)'
-BINARY := gurl
+BINARY := valetkey
 CMD := ./cmd/valetkey
 
 .PHONY: build install clean test test-race
@@ -9,7 +9,7 @@ build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
 
 install: build
-	cp $(BINARY) $(shell which gurl 2>/dev/null || echo "$(shell go env GOPATH)/bin/$(BINARY)")
+	cp $(BINARY) $(shell which $(BINARY) 2>/dev/null || echo "$(shell go env GOPATH)/bin/$(BINARY)")
 
 clean:
 	rm -f $(BINARY)

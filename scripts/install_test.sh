@@ -35,15 +35,18 @@ assert_not_contains() {
     fi
 }
 
+TEST_TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/valetkey-install-tests.XXXXXX")"
+trap 'rm -rf "$TEST_TMP_ROOT"' EXIT
+
 make_temp_install_dir() {
-    local tmp_root="/tmp/opencode/gurl-install-tests"
+    local tmp_root="${TEST_TMP_ROOT}"
     mkdir -p "$tmp_root"
     mktemp -d "$tmp_root/install-XXXXXX"
 }
 
 test_install_honors_install_dir_environment_override() {
     local workspace home_dir install_dir bin_dir default_dir
-    workspace="$(mktemp -d /tmp/opencode/gurl-install-tests/full-run-XXXXXX)"
+    workspace="$(mktemp -d ${TEST_TMP_ROOT}/full-run-XXXXXX)"
     home_dir="$workspace/home"
     install_dir="$workspace/custom-bin"
     default_dir="$home_dir/.local/bin"
@@ -71,7 +74,7 @@ done
 cat >"$output" <<'BIN'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--version" ]]; then
-  echo "gurl version v0.3.0"
+  echo "valetkey version v0.3.0"
   exit 0
 fi
 exit 0
@@ -92,12 +95,12 @@ EOF
         printf 'FAIL: installer exited %s with INSTALL_DIR override\n' "$status" >&2
         exit 1
     fi
-    if [[ ! -x "$install_dir/gurl" ]]; then
-        printf 'FAIL: expected installer to write to override dir %s\n' "$install_dir/gurl" >&2
+    if [[ ! -x "$install_dir/valetkey" ]]; then
+        printf 'FAIL: expected installer to write to override dir %s\n' "$install_dir/valetkey" >&2
         exit 1
     fi
-    if [[ -e "$default_dir/gurl" ]]; then
-        printf 'FAIL: expected installer not to use default dir %s\n' "$default_dir/gurl" >&2
+    if [[ -e "$default_dir/valetkey" ]]; then
+        printf 'FAIL: expected installer not to use default dir %s\n' "$default_dir/valetkey" >&2
         exit 1
     fi
 }
@@ -120,11 +123,11 @@ test_get_latest_version_falls_back_to_public_redirect() {
         done
 
         case "$url" in
-            *api.github.com/repos/bsreeram08/gurl/releases/latest)
+            *api.github.com/repos/bsreeram08/valetkey/releases/latest)
                 printf '%s' '{"tag_name":""}'
                 ;;
-            *github.com/bsreeram08/gurl/releases/latest)
-                printf '%s' 'https://github.com/bsreeram08/gurl/releases/tag/v0.3.0'
+            *github.com/bsreeram08/valetkey/releases/latest)
+                printf '%s' 'https://github.com/bsreeram08/valetkey/releases/tag/v0.3.0'
                 ;;
             *)
                 printf 'unexpected curl url: %s\n' "$url" >&2
@@ -153,11 +156,11 @@ test_get_latest_version_rejects_bare_v_from_redirect() {
         done
 
         case "$url" in
-            *api.github.com/repos/bsreeram08/gurl/releases/latest)
+            *api.github.com/repos/bsreeram08/valetkey/releases/latest)
                 printf '%s' '{"message":"rate limited"}'
                 ;;
-            *github.com/bsreeram08/gurl/releases/latest)
-                printf '%s' 'https://github.com/bsreeram08/gurl/releases/tag/v'
+            *github.com/bsreeram08/valetkey/releases/latest)
+                printf '%s' 'https://github.com/bsreeram08/valetkey/releases/tag/v'
                 ;;
             *)
                 printf 'unexpected curl url: %s\n' "$url" >&2
@@ -205,7 +208,7 @@ test_install_normalizes_explicit_versions() {
             cat >"$output" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--version" ]]; then
-  echo "gurl version v0.3.0"
+  echo "valetkey version v0.3.0"
   exit 0
 fi
 exit 0
@@ -216,7 +219,7 @@ EOF
         VERSION="$version" INSTALL_DIR="$install_dir" \
         install
 
-        assert_contains "$download_url" "/releases/download/v0.3.0/gurl-" "explicit version $version should normalize to v0.3.0"
+        assert_contains "$download_url" "/releases/download/v0.3.0/valetkey-" "explicit version $version should normalize to v0.3.0"
         if [[ ! -x "$output_path" ]]; then
             printf 'FAIL: expected installed binary to be executable for version %s\n' "$version" >&2
             exit 1
@@ -308,7 +311,7 @@ test_install_fails_fast_on_download_errors() {
         cat >"$output" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--version" ]]; then
-  echo "gurl version v0.3.0"
+  echo "valetkey version v0.3.0"
   exit 0
 fi
 exit 0
@@ -329,6 +332,28 @@ EOF
     assert_contains "$download_args" "-f" "curl should fail fast on download errors"
 }
 
+test_link_legacy_binary_only_relinks_our_gurl() {
+    local dir
+    dir="$(make_temp_install_dir)"
+    printf '#!/bin/sh\necho "valetkey version v1.0.0"\n' >"$dir/valetkey"
+    printf '#!/bin/sh\necho "gurl version v0.8.1"\n' >"$dir/gurl"
+    chmod +x "$dir/valetkey" "$dir/gurl"
+
+    INSTALL_DIR="$dir" link_legacy_binary >/dev/null
+    assert_eq "valetkey" "$(readlink "$dir/gurl")" "an old gurl from this project should become a link to valetkey"
+
+    dir="$(make_temp_install_dir)"
+    printf '#!/bin/sh\necho "valetkey version v1.0.0"\n' >"$dir/valetkey"
+    printf '#!/bin/sh\necho "some other gurl 2.0"\n' >"$dir/gurl"
+    chmod +x "$dir/valetkey" "$dir/gurl"
+
+    INSTALL_DIR="$dir" link_legacy_binary >/dev/null
+    if [[ -L "$dir/gurl" ]]; then
+        printf 'FAIL: an unrelated gurl must not be replaced\n' >&2
+        exit 1
+    fi
+}
+
 main() {
     test_install_honors_install_dir_environment_override
     test_get_latest_version_falls_back_to_public_redirect
@@ -336,6 +361,7 @@ main() {
     test_install_normalizes_explicit_versions
     test_install_rejects_bare_v_before_download
     test_install_fails_fast_on_download_errors
+    test_link_legacy_binary_only_relinks_our_gurl
     printf 'install.sh tests passed\n'
 }
 

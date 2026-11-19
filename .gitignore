@@ -16,3 +16,6 @@ vendor/
 *.prof
 cover.out
 ```
+# Local builds
+/valetkey
+/gurl
