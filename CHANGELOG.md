@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.9.0] - 2026-11-19
 
 gurl is now **apigent**: saved API requests your AI agents can run without ever seeing the keys. See `docs/adr/0001-rename-to-apigent.md`.
 
