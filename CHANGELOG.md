@@ -2,10 +2,25 @@
 
 ## [Unreleased]
 
+### Added
+
+- `import --base-url <url>` replaces an OpenAPI spec's server URL, for example `--base-url '{{BASE_URL}}'` so the imported requests follow the environment.
+- `import --collection <name>` puts the imported requests in that collection and creates it if needed; inside a `.gurl/` project it is created there, so the requests are written as files you can commit.
+
 ### Fixed
 
+- `import` detects the format of a `.json` file from its content. OpenAPI, Postman, Insomnia, HAR and Yaak all use `.json`, and every `.json` file went to the importer registered last (Yaak), so an OpenAPI or Postman `.json` imported nothing ("No requests found to import"). A `.json` file of unknown shape now fails and asks for `--format`.
+- OpenAPI imports produce requests that run as imported:
+  - OpenAPI 3.1 specs with list types (`"type": ["string", "null"]`) import; they failed to parse.
+  - Example bodies are valid JSON: string examples are quoted, `$ref`, `allOf`, `anyOf`/`oneOf` and `const` are followed, placeholder values respect `minimum`, `exclusiveMinimum`, `minLength` and `maxLength`, keys are sorted, and the request gets the `Content-Type` of the media type the body was built from (JSON first).
+  - Path parameters become `{{name}}` placeholders. `{name}` was sent literally by `run`.
+  - A required query or header parameter without an example becomes a `{{name}}` placeholder; an optional one without an example or default is left out instead of being sent empty.
+  - Bearer and basic security schemes become an auth config with `{{token}}` or `{{username}}`/`{{password}}`, and an API key a `{{apiKey}}` header or query parameter, instead of the literal `Bearer <token>`. An operation with `security: []` (public) gets no auth.
+  - The first tag becomes the request's folder, and requests are imported in path order with a stable sort order.
+- `import --format` is honored (it was accepted and ignored) and takes an importer name: `openapi`, `postman`, `insomnia`, `har`, `bruno`, `yaak`, `gurl`.
 - `collection run` and `run --chain`: a request that asserts its status (`status=402`, `status=404`) passes or fails on its assertions when the response is not 2xx. Before, every non-2xx response failed the request before its assertions ran, so a test could not expect an error status. The execution record (`history`, `diag`, the `[FAIL]` line) treats such an expected status as a success.
 - Assertion fields and values fill `{{placeholders}}` from the run's variables, including values extracted by earlier requests: `body.data.id={{itemId}}` compares against the extracted `itemId` instead of the literal text, and `body.data.items.{{itemId}}.name` looks up the extracted key.
+
 
 ## [v0.8.1] - 2026-10-26
 
