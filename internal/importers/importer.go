@@ -66,12 +66,39 @@ func Import(path string) ([]*types.SavedRequest, error) {
 // ImportAs parses path with the named importer, skipping detection. An empty
 // format behaves like Import.
 func ImportAs(path, format string) ([]*types.SavedRequest, error) {
-	if strings.TrimSpace(format) == "" {
-		return Import(path)
+	return ImportWithOptions(path, Options{Format: format})
+}
+
+// Options adjust an import.
+type Options struct {
+	// Format names the importer to use; empty means detect it.
+	Format string
+	// BaseURL replaces the server URL of an OpenAPI spec (only OpenAPI
+	// imports have one), for example "{{BASE_URL}}".
+	BaseURL string
+}
+
+// ImportWithOptions parses path with the importer picked by opts.Format or
+// detected from the file, applying opts.
+func ImportWithOptions(path string, opts Options) ([]*types.SavedRequest, error) {
+	var importer Importer
+	if strings.TrimSpace(opts.Format) != "" {
+		importer = GetByName(opts.Format)
+		if importer == nil {
+			return nil, fmt.Errorf("unknown import format %q (supported: %s)", opts.Format, strings.Join(Names(), ", "))
+		}
+	} else {
+		detected, err := Detect(path)
+		if err != nil {
+			return nil, err
+		}
+		importer = detected
 	}
-	importer := GetByName(format)
-	if importer == nil {
-		return nil, fmt.Errorf("unknown import format %q (supported: %s)", format, strings.Join(Names(), ", "))
+	if opts.BaseURL != "" {
+		if _, ok := importer.(*OpenAPIImporter); !ok {
+			return nil, fmt.Errorf("--base-url applies to OpenAPI imports only, not %s", importer.Name())
+		}
+		importer = &OpenAPIImporter{BaseURL: opts.BaseURL}
 	}
 	return importer.Parse(path)
 }
