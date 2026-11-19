@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.9.1] - 2026-11-19
+
+### Fixed
+
+- `apigent mcp` lists its tools in under a second. It opened the database twice per saved request, so a library of a few hundred requests took several seconds and MCP clients timed out fetching the tool list.
+
 ## [v0.9.0] - 2026-11-19
 
 gurl is now **apigent**: saved API requests your AI agents can run without ever seeing the keys. See `docs/adr/0001-rename-to-apigent.md`.
