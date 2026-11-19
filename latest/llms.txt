@@ -79,5 +79,5 @@ Synopsis gurl update …
 
 
 ---
-Generated on 2026-11-19 08:39:05 UTC
+Generated on 2026-11-19 08:39:12 UTC
 Site: https://bsreeram08.github.io/gurl/latest/
