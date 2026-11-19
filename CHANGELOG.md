@@ -18,7 +18,10 @@
   - Bearer and basic security schemes become an auth config with `{{token}}` or `{{username}}`/`{{password}}`, and an API key a `{{apiKey}}` header or query parameter, instead of the literal `Bearer <token>`. An operation with `security: []` (public) gets no auth.
   - The first tag becomes the request's folder, and requests are imported in path order with a stable sort order.
 - `import --format` is honored (it was accepted and ignored) and takes an importer name: `openapi`, `postman`, `insomnia`, `har`, `bruno`, `yaak`, `gurl`.
+- `collection run` and `run --chain`: a request that asserts its status (`status=402`, `status=404`) passes or fails on its assertions when the response is not 2xx. Before, every non-2xx response failed the request before its assertions ran, so a test could not expect an error status. The execution record (`history`, `diag`, the `[FAIL]` line) treats such an expected status as a success.
+- Assertion fields and values fill `{{placeholders}}` from the run's variables, including values extracted by earlier requests: `body.data.id={{itemId}}` compares against the extracted `itemId` instead of the literal text, and `body.data.items.{{itemId}}.name` looks up the extracted key.
 - In a `.gurl/` project, saving a request without an ID (as `import --force` does) replaces the request of the same name in its collection, as the database store does. Before, each re-import wrote a second file per request, so a collection imported twice listed every request twice.
+
 
 
 ## [v0.8.1] - 2026-10-26
